@@ -1,0 +1,23 @@
+apiVersion: otelplan.io/v1alpha1
+kind: InstrumentationPlan
+
+backend:
+  name: otelc
+  version: "PIN_EXACT_OTELC_VERSION"
+
+defaults:
+  context:
+    mode: require
+  errors:
+    record: true
+  attributes:
+    arguments: false
+    results: false
+
+rules:
+  - id: payment
+    match:
+      packages:
+        - "github.com/acme/shop/internal/payment"
+      exported: true
+      hasContext: true

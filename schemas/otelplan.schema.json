@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://otelplan.io/schemas/otelplan-v1alpha1.json",
+  "title": "OTelPlan InstrumentationPlan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "backend",
+    "rules"
+  ],
+  "properties": {
+    "apiVersion": {
+      "const": "otelplan.io/v1alpha1"
+    },
+    "kind": {
+      "const": "InstrumentationPlan"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "includeTests": {
+          "type": "boolean",
+          "default": false
+        },
+        "includeDependencies": {
+          "type": "boolean",
+          "default": false
+        },
+        "buildTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "const": "otelc"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "spanName": {
+          "type": "string"
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "enum": [
+                "require",
+                "root"
+              ]
+            }
+          }
+        },
+        "errors": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "record": {
+              "type": "boolean"
+            }
+          }
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "arguments": {
+              "const": false
+            },
+            "results": {
+              "const": false
+            }
+          }
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/rule"
+      }
+    },
+    "exclusions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/exclusion"
+      }
+    }
+  },
+  "$defs": {
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "symbols": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "functions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "receivers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "methods": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "implements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exported": {
+          "type": "boolean"
+        },
+        "hasContext": {
+          "type": "boolean"
+        },
+        "returnsError": {
+          "type": "boolean"
+        },
+        "ownership": {
+          "enum": [
+            "application",
+            "dependency",
+            "any"
+          ]
+        }
+      },
+      "minProperties": 1
+    },
+    "attribute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "from"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "maxProperties": 1,
+          "properties": {
+            "argument": {
+              "type": "string"
+            },
+            "result": {
+              "type": "string"
+            },
+            "constant": {}
+          }
+        },
+        "safety": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "classification": {
+              "enum": [
+                "public",
+                "internal",
+                "pii",
+                "secret"
+              ]
+            },
+            "allow": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "match"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "match": {
+          "$ref": "#/$defs/match"
+        },
+        "exclude": {
+          "$ref": "#/$defs/match"
+        },
+        "span": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "internal"
+            }
+          }
+        },
+        "errors": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "record": {
+              "type": "boolean"
+            }
+          }
+        },
+        "attributes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/attribute"
+          }
+        }
+      }
+    },
+    "exclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "match"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "match": {
+          "$ref": "#/$defs/match"
+        }
+      }
+    }
+  }
+}

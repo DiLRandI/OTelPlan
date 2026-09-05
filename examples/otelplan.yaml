@@ -1,0 +1,60 @@
+apiVersion: otelplan.io/v1alpha1
+kind: InstrumentationPlan
+
+project:
+  packages:
+    - "./..."
+  includeTests: false
+  includeDependencies: false
+  buildTags: []
+
+backend:
+  name: otelc
+  version: "PIN_EXACT_OTELC_VERSION"
+
+defaults:
+  spanName: "{{package}}.{{receiver}}.{{method}}"
+  context:
+    mode: require
+  errors:
+    record: true
+  attributes:
+    arguments: false
+    results: false
+
+rules:
+  - id: checkout-package
+    description: Trace exported checkout operations.
+    match:
+      packages:
+        - "github.com/acme/shop/internal/checkout"
+      exported: true
+      hasContext: true
+    exclude:
+      methods:
+        - "Health"
+        - "Ready"
+
+  - id: payment-port
+    description: Trace concrete implementations of the payment port.
+    match:
+      implements:
+        - "github.com/acme/shop/internal/ports.PaymentGateway"
+      hasContext: true
+
+  - id: exact-order-submit
+    description: Explicitly trace one important operation.
+    match:
+      symbols:
+        - "github.com/acme/shop/internal/order.(*Order).Submit"
+    attributes:
+      - key: "order.type"
+        from:
+          argument: "order.Type"
+
+exclusions:
+  - id: generated
+    match:
+      files:
+        - "**/*.gen.go"
+        - "**/mock_*.go"

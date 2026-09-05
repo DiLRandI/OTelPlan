@@ -1,0 +1,12 @@
+# OTelPlan build state
+.otelplan/
+
+# Go
+bin/
+*.test
+*.out
+
+# Editors
+.idea/
+.vscode/
+.DS_Store

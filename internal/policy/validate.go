@@ -3,6 +3,7 @@ package policy
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
@@ -11,6 +12,22 @@ var ruleIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
 func Validate(p *model.Policy) model.DiagnosticList {
 	var diags model.DiagnosticList
+
+	if p == nil {
+		return model.DiagnosticList{{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, Message: "policy is required"}}
+	}
+	if p.Defaults.Attributes.Arguments || p.Defaults.Attributes.Results {
+		diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeCaptureNotAllowed, Message: "blanket argument/result capture is prohibited; use explicit attribute rules"})
+	}
+	if p.Defaults.Context.Mode != "" && p.Defaults.Context.Mode != model.ContextModeRequire && p.Defaults.Context.Mode != model.ContextModeRoot {
+		diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, Message: "unsupported default context mode"})
+	}
+	if err := ValidateTemplate(p.Defaults.SpanName); err != nil {
+		diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeUnknownTemplateVar, Message: "defaults.spanName: " + err.Error()})
+	}
+	if p.Backend.Name != "" && p.Backend.Name != model.BackendNameOTelC {
+		diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, Message: "unsupported backend"})
+	}
 
 	if p.APIVersion != model.APIVersionV1Alpha1 {
 		diags = append(diags, model.Diagnostic{
@@ -51,6 +68,10 @@ func Validate(p *model.Policy) model.DiagnosticList {
 	seen := make(map[string]bool, len(p.Rules))
 	for i := range p.Rules {
 		diags = append(diags, validateRule(&p.Rules[i])...)
+		diags = append(diags, validateMatch(p.Rules[i].ID, p.Rules[i].Match)...)
+		if p.Rules[i].Exclude != nil {
+			diags = append(diags, validateMatch(p.Rules[i].ID, *p.Rules[i].Exclude)...)
+		}
 		id := p.Rules[i].ID
 		if id == "" {
 			diags = append(diags, model.Diagnostic{
@@ -79,6 +100,11 @@ func Validate(p *model.Policy) model.DiagnosticList {
 
 	for i := range p.Exclusions {
 		e := &p.Exclusions[i]
+		diags = append(diags, validateMatch(e.ID, e.Match)...)
+		if seen[e.ID] || (e.ID != "" && !ruleIDPattern.MatchString(e.ID)) {
+			diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, RuleID: e.ID, Message: "exclusion ID must be valid and unique across rules and exclusions"})
+		}
+		seen[e.ID] = true
 		if e.ID == "" {
 			diags = append(diags, model.Diagnostic{
 				Severity: model.SeverityError,
@@ -131,7 +157,12 @@ func validateRule(r *model.Rule) model.DiagnosticList {
 			})
 		}
 	}
+	keys := map[string]bool{}
 	for i := range r.Attributes {
+		if keys[r.Attributes[i].Key] {
+			diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, RuleID: r.ID, Message: "duplicate attribute key"})
+		}
+		keys[r.Attributes[i].Key] = true
 		diags = append(diags, validateAttribute(r.ID, i, &r.Attributes[i])...)
 	}
 
@@ -194,5 +225,20 @@ func validateAttribute(ruleID string, idx int, attr *model.AttributeRule) model.
 }
 
 func hasReservedPrefix(key string) bool {
-	return len(key) >= 5 && (key[:5] == "otel." || key[:5] == "OTEL.")
+	return strings.HasPrefix(strings.ToLower(key), "otel.")
+}
+
+func validateMatch(ruleID string, match model.Match) model.DiagnosticList {
+	var diags model.DiagnosticList
+	if match.Ownership != "" && match.Ownership != model.OwnershipApplication && match.Ownership != model.OwnershipDependency && match.Ownership != model.OwnershipAny {
+		diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeInvalidSelector, RuleID: ruleID, Message: "unknown ownership selector"})
+	}
+	for _, list := range [][]string{match.Packages, match.Files, match.Symbols, match.Functions, match.Receivers, match.Methods, match.Implements} {
+		for _, item := range list {
+			if strings.TrimSpace(item) == "" {
+				diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeInvalidSelector, RuleID: ruleID, Message: "selector values must not be empty"})
+			}
+		}
+	}
+	return diags
 }

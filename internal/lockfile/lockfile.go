@@ -30,7 +30,7 @@ func Create(p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan, bac
 	if !validDigest(moduleGraphDigest) {
 		return lock, fmt.Errorf("module graph digest is required")
 	}
-	policyData, err := json.Marshal(p)
+	policyData, err := json.Marshal(canonicalPolicy(*p))
 	if err != nil {
 		return lock, fmt.Errorf("encode policy: %w", err)
 	}

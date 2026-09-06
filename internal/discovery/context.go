@@ -49,6 +49,9 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 		return nil, nil, fmt.Errorf("decode Go build environment: %w", err)
 	}
 	opts.GOOS, opts.GOARCH, opts.goVersion = build.GOOS, build.GOARCH, build.GOVERSION
+	if build.GOWORK != "off" {
+		opts.workspaceFile = build.GOWORK
+	}
 	vendorRoot := root
 	if build.GOWORK != "" && build.GOWORK != "off" {
 		vendorRoot = filepath.Dir(build.GOWORK)

@@ -21,6 +21,7 @@ type Options struct {
 	Env                 []string
 	Offline             bool
 	goVersion           string
+	workspaceFile       string
 }
 
 func (o *Options) applyDefaults() {

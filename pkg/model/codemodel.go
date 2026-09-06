@@ -62,6 +62,7 @@ type TypeInfo struct {
 type CodeModel struct {
 	GoVersion        string              `json:"goVersion"`
 	ModuleRoot       string              `json:"moduleRoot"`
+	WorkspaceFile    string              `json:"workspaceFile,omitempty"`
 	Modules          []ModuleInfo        `json:"modules"`
 	Packages         []PackageInfo       `json:"packages"`
 	Symbols          []Symbol            `json:"symbols"`

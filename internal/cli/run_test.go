@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -107,5 +108,20 @@ func TestCLIOutputFailure(t *testing.T) {
 	var stderr bytes.Buffer
 	if code := Run([]string{"version", "--format=json"}, failingWriter{}, &stderr); code != 1 {
 		t.Fatalf("output failure exit=%d", code)
+	}
+}
+
+func TestInspectRejectsUnsafeCaptureWithoutPrintingConstant(t *testing.T) {
+	root, files := cliFixture(t)
+	contents := files["otelplan.yaml"] + "  attributes:\n  - key: password\n    from:\n      constant: do-not-print-this-secret\n"
+	if err := os.WriteFile(filepath.Join(root, "otelplan.yaml"), []byte(contents), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errout bytes.Buffer
+	if code := Run([]string{"inspect", "--root", root, "--format=json"}, &out, &errout); code != 5 {
+		t.Fatalf("unsafe inspection exit=%d output=%s", code, &out)
+	}
+	if strings.Contains(out.String(), "do-not-print-this-secret") {
+		t.Fatal("unsafe constant printed")
 	}
 }

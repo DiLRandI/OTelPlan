@@ -12,6 +12,7 @@ import (
 	"github.com/DiLRandI/OTelPlan/internal/discovery"
 	"github.com/DiLRandI/OTelPlan/internal/policy"
 	"github.com/DiLRandI/OTelPlan/internal/resolve"
+	"github.com/DiLRandI/OTelPlan/internal/validate"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
@@ -97,13 +98,13 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			return fail(4, model.CodeUnresolvedSymbol, err.Error())
 		}
 		result := resolve.Resolve(p, inventory)
-		output.Diagnostics = result.Diagnostics
+		output.Diagnostics = append(result.Diagnostics, validate.Safety(inventory, result.Plan, validate.Options{})...)
 		if output.Diagnostics == nil {
 			output.Diagnostics = model.DiagnosticList{}
 		}
 		output.OK = !output.Diagnostics.HasErrors()
 		if command == "inspect" {
-			output.Data = result.Plan
+			output.Data = previewPlan(result.Plan)
 		} else {
 			for _, explanation := range result.Explanations {
 				if string(explanation.SymbolID) == rest[0] {
@@ -232,4 +233,18 @@ func emit(out io.Writer, opts options, reply response) error {
 	}
 	_, err := io.WriteString(out, text.String())
 	return err
+}
+
+func previewPlan(plan model.ResolvedPlan) model.ResolvedPlan {
+	plan.Targets = append([]model.ResolvedTarget{}, plan.Targets...)
+	for i := range plan.Targets {
+		plan.Targets[i].Attributes = append([]model.AttributePlan(nil), plan.Targets[i].Attributes...)
+		for j := range plan.Targets[i].Attributes {
+			attr := &plan.Targets[i].Attributes[j]
+			if attr.From.Constant != nil {
+				attr.From.Constant = "[redacted]"
+			}
+		}
+	}
+	return plan
 }

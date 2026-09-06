@@ -22,6 +22,8 @@ type Options struct {
 	Offline             bool
 	goVersion           string
 	workspaceFile       string
+	effectiveBuild      model.BuildEnvironment
+	cleanup             func()
 }
 
 func (o *Options) applyDefaults() {
@@ -40,6 +42,7 @@ func LoadContext(ctx context.Context, opts Options) (*model.CodeModel, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer opts.cleanup()
 	cfg := &packages.Config{
 		Context: ctx,
 		Mode:    packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports | packages.NeedModule | packages.NeedDeps | packages.NeedCompiledGoFiles,

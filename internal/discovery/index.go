@@ -31,11 +31,12 @@ func buildModel(pkgs, all []*packages.Package, opts Options) *model.CodeModel {
 		fileFlags: map[string]fileFlags{},
 	}
 	m := &model.CodeModel{
-		GoVersion:     opts.goVersion,
-		ModuleRoot:    opts.Root,
-		WorkspaceFile: opts.workspaceFile,
-		GOOS:          opts.GOOS,
-		GOARCH:        opts.GOARCH,
+		GoVersion:      opts.goVersion,
+		ModuleRoot:     opts.Root,
+		WorkspaceFile:  opts.workspaceFile,
+		GOOS:           opts.GOOS,
+		GOARCH:         opts.GOARCH,
+		EffectiveBuild: opts.effectiveBuild,
 	}
 	if len(opts.BuildTags) > 0 {
 		m.BuildTags = append([]string(nil), opts.BuildTags...)

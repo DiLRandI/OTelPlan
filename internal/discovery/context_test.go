@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -88,5 +90,47 @@ func TestLoadWorkspaceRoot(t *testing.T) {
 	}
 	if _, ok := code.Symbol("example.com/b.B"); !ok {
 		t.Fatal("module b missing")
+	}
+}
+
+func TestExplicitModuleModes(t *testing.T) {
+	for _, mode := range []string{"mod", "readonly", "vendor"} {
+		t.Run(mode, func(t *testing.T) {
+			root := fixture(t, map[string]string{"app.go": "package shop\nfunc Run() {}\n", "vendor/modules.txt": ""})
+			opts := Options{Root: root, Env: []string{"GOWORK=off", "GOFLAGS=-mod=" + mode}}
+			_, flags, err := prepare(t.Context(), &opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer opts.cleanup()
+			if flags[0] != "-mod="+mode || opts.effectiveBuild.ModuleMode != mode {
+				t.Fatalf("explicit mode overwritten: %v %+v", flags, opts.effectiveBuild)
+			}
+		})
+	}
+}
+
+func TestGOFLAGSPrecedenceAndQuoting(t *testing.T) {
+	for _, tc := range []struct {
+		raw, mode   string
+		tags, flags []string
+	}{
+		{raw: "--mod=mod -mod=readonly", mode: "readonly"},
+		{raw: "-tags=old '-tags=new,other'", tags: []string{"new", "other"}},
+		{raw: "-race -race=false", flags: []string{"-race=false"}},
+		{raw: `'-modfile=C:\project\alternate.mod'`},
+	} {
+		got, err := parseGOFLAGS(tc.raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.moduleMode != tc.mode || !slices.Equal(got.tags, tc.tags) || !slices.Equal(got.semantic, tc.flags) {
+			t.Fatalf("parse %q: %+v", tc.raw, got)
+		}
+	}
+	for _, raw := range []string{"-mod mod", "'-tags=broken", "-overlay=private-path", "-toolexec=private-command"} {
+		if _, err := parseGOFLAGS(raw); err == nil || strings.Contains(err.Error(), "private-") {
+			t.Fatalf("invalid flags not safely rejected: %v", err)
+		}
 	}
 }

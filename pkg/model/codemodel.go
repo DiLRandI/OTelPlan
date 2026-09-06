@@ -59,6 +59,39 @@ type TypeInfo struct {
 	Fields  []TypeField `json:"fields,omitempty"`
 }
 
+// BuildEnvironment describes the Go inputs that can change package selection
+// or type checking. Lock fingerprints use normalized manifest contents rather
+// than the paths retained here for reading the effective manifests.
+type BuildEnvironment struct {
+	GoVersion     string   `json:"goVersion"`
+	GOOS          string   `json:"goos"`
+	GOARCH        string   `json:"goarch"`
+	BuildTags     []string `json:"buildTags,omitempty"`
+	ModuleMode    string   `json:"moduleMode"`
+	ModFile       string   `json:"modFile,omitempty"`
+	Workspace     bool     `json:"workspace"`
+	CGOEnabled    string   `json:"cgoEnabled,omitempty"`
+	GOEXPERIMENT  string   `json:"goexperiment,omitempty"`
+	GOFIPS140     string   `json:"gofips140,omitempty"`
+	GOAMD64       string   `json:"goamd64,omitempty"`
+	GOARM         string   `json:"goarm,omitempty"`
+	GOARM64       string   `json:"goarm64,omitempty"`
+	GO386         string   `json:"go386,omitempty"`
+	GOMIPS        string   `json:"gomips,omitempty"`
+	GOMIPS64      string   `json:"gomips64,omitempty"`
+	GOPPC64       string   `json:"goppc64,omitempty"`
+	GORISCV64     string   `json:"goriscv64,omitempty"`
+	GOWASM        string   `json:"gowasm,omitempty"`
+	CGOCFLAGS     string   `json:"cgoCFlags,omitempty"`
+	CGOCPPFLAGS   string   `json:"cgoCPPFlags,omitempty"`
+	CGOLDFLAGS    string   `json:"cgoLDFlags,omitempty"`
+	CGOFFLAGS     string   `json:"cgoFFlags,omitempty"`
+	CC            string   `json:"cc,omitempty"`
+	CXX           string   `json:"cxx,omitempty"`
+	CGOCXXFLAGS   string   `json:"cgoCXXFlags,omitempty"`
+	SemanticFlags []string `json:"semanticFlags,omitempty"`
+}
+
 type CodeModel struct {
 	GoVersion        string              `json:"goVersion"`
 	ModuleRoot       string              `json:"moduleRoot"`
@@ -73,6 +106,7 @@ type CodeModel struct {
 	BuildTags        []string            `json:"buildTags,omitempty"`
 	GOOS             string              `json:"goos,omitempty"`
 	GOARCH           string              `json:"goarch,omitempty"`
+	EffectiveBuild   BuildEnvironment    `json:"effectiveBuild"`
 }
 
 func (m *CodeModel) Symbol(id SymbolID) (*Symbol, bool) {

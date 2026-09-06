@@ -17,7 +17,7 @@ func cliFixture(t *testing.T) (string, map[string]string) {
 	files := map[string]string{
 		"go.mod":        "module example.com/app\n\ngo 1.27\n",
 		"app.go":        "package app\nimport \"context\"\nfunc Run(ctx context.Context) error { return nil }\n",
-		"otelplan.yaml": "apiVersion: otelplan.io/v1alpha1\nkind: InstrumentationPlan\nbackend: {name: otelc, version: v0.1.0}\nrules:\n- id: operation\n  match:\n    functions: [Run]\n",
+		"otelplan.yaml": "apiVersion: otelplan.io/v1alpha1\nkind: InstrumentationPlan\nbackend: {name: otelc, version: v1.1.0}\nrules:\n- id: operation\n  match:\n    functions: [Run]\n",
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0644); err != nil {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -16,7 +17,7 @@ func cliFixture(t *testing.T) (string, map[string]string) {
 	files := map[string]string{
 		"go.mod":        "module example.com/app\n\ngo 1.27\n",
 		"app.go":        "package app\nimport \"context\"\nfunc Run(ctx context.Context) error { return nil }\n",
-		"otelplan.yaml": "apiVersion: otelplan.io/v1alpha1\nkind: InstrumentationPlan\nbackend: {name: otelc, version: v0.1.0}\nrules:\n- id: operation\n  match:\n    functions: [Run]\n",
+		"otelplan.yaml": "apiVersion: otelplan.io/v1alpha1\nkind: InstrumentationPlan\nbackend: {name: otelc, version: v1.1.0}\nrules:\n- id: operation\n  match:\n    functions: [Run]\n",
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0644); err != nil {
@@ -107,5 +108,20 @@ func TestCLIOutputFailure(t *testing.T) {
 	var stderr bytes.Buffer
 	if code := Run([]string{"version", "--format=json"}, failingWriter{}, &stderr); code != 1 {
 		t.Fatalf("output failure exit=%d", code)
+	}
+}
+
+func TestInspectRejectsUnsafeCaptureWithoutPrintingConstant(t *testing.T) {
+	root, files := cliFixture(t)
+	contents := files["otelplan.yaml"] + "  attributes:\n  - key: password\n    from:\n      constant: do-not-print-this-secret\n"
+	if err := os.WriteFile(filepath.Join(root, "otelplan.yaml"), []byte(contents), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errout bytes.Buffer
+	if code := Run([]string{"inspect", "--root", root, "--format=json"}, &out, &errout); code != 5 {
+		t.Fatalf("unsafe inspection exit=%d output=%s", code, &out)
+	}
+	if strings.Contains(out.String(), "do-not-print-this-secret") {
+		t.Fatal("unsafe constant printed")
 	}
 }

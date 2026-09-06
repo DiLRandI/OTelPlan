@@ -1,9 +1,8 @@
 package discovery
 
 import (
+	"context"
 	"fmt"
-	"os"
-	"runtime"
 	"sort"
 	"strings"
 
@@ -19,6 +18,12 @@ type Options struct {
 	IncludeDependencies bool
 	GOOS                string
 	GOARCH              string
+	Env                 []string
+	Offline             bool
+	goVersion           string
+	workspaceFile       string
+	effectiveBuild      model.BuildEnvironment
+	cleanup             func()
 }
 
 func (o *Options) applyDefaults() {
@@ -30,29 +35,18 @@ func (o *Options) applyDefaults() {
 	}
 }
 
-func Load(opts Options) (*model.CodeModel, error) {
-	opts.applyDefaults()
-	if opts.GOOS == "" {
-		opts.GOOS = runtime.GOOS
-	}
-	if opts.GOARCH == "" {
-		opts.GOARCH = runtime.GOARCH
-	}
+func Load(opts Options) (*model.CodeModel, error) { return LoadContext(context.Background(), opts) }
 
+func LoadContext(ctx context.Context, opts Options) (*model.CodeModel, error) {
+	env, flags, err := prepare(ctx, &opts)
+	if err != nil {
+		return nil, err
+	}
+	defer opts.cleanup()
 	cfg := &packages.Config{
-		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax |
-			packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports |
-			packages.NeedModule | packages.NeedDeps | packages.NeedCompiledGoFiles,
-		Dir:        opts.Root,
-		Tests:      opts.IncludeTests,
-		BuildFlags: append([]string{"-mod=readonly"}, buildFlags(opts.BuildTags)...),
-		Env:        os.Environ(),
-	}
-	if opts.GOOS != "" {
-		cfg.Env = append(cfg.Env, "GOOS="+opts.GOOS)
-	}
-	if opts.GOARCH != "" {
-		cfg.Env = append(cfg.Env, "GOARCH="+opts.GOARCH)
+		Context: ctx,
+		Mode:    packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports | packages.NeedModule | packages.NeedDeps | packages.NeedCompiledGoFiles,
+		Dir:     opts.Root, Tests: opts.IncludeTests, BuildFlags: flags, Env: env,
 	}
 
 	pkgs, err := packages.Load(cfg, opts.Patterns...)
@@ -63,9 +57,10 @@ func Load(opts Options) (*model.CodeModel, error) {
 		return nil, err
 	}
 
-	var selected []*packages.Package
+	var selected, all []*packages.Package
 	seen := map[string]*packages.Package{}
 	packages.Visit(pkgs, func(p *packages.Package) bool {
+		all = append(all, p)
 		if (opts.IncludeDependencies || (p.Module != nil && p.Module.Main)) && !strings.HasSuffix(p.PkgPath, ".test") {
 			if previous := seen[p.PkgPath]; previous == nil || len(p.Syntax) > len(previous.Syntax) {
 				seen[p.PkgPath] = p
@@ -77,7 +72,7 @@ func Load(opts Options) (*model.CodeModel, error) {
 		selected = append(selected, p)
 	}
 	sort.Slice(selected, func(i, j int) bool { return selected[i].PkgPath < selected[j].PkgPath })
-	return buildModel(selected, opts), nil
+	return buildModel(selected, all, opts), nil
 }
 
 func buildFlags(tags []string) []string {
@@ -94,6 +89,7 @@ func reportErrors(pkgs []*packages.Package) error {
 			errs = append(errs, e.Error())
 		}
 	})
+	sort.Strings(errs)
 	if len(errs) > 0 {
 		return fmt.Errorf("package analysis failed: %s", strings.Join(errs, "; "))
 	}

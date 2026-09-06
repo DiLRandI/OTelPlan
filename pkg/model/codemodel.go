@@ -31,17 +31,25 @@ type CallRelation struct {
 	Callee SymbolID `json:"callee"`
 }
 
+type InterfaceMethod struct {
+	InterfaceID SymbolID `json:"interfaceID"`
+	ConcreteID  SymbolID `json:"concreteID"`
+	Pointer     bool     `json:"pointer"`
+	SymbolID    SymbolID `json:"symbol"`
+}
+
 type CodeModel struct {
-	GoVersion  string              `json:"goVersion"`
-	ModuleRoot string              `json:"moduleRoot"`
-	Modules    []ModuleInfo        `json:"modules"`
-	Packages   []PackageInfo       `json:"packages"`
-	Symbols    []Symbol            `json:"symbols"`
-	Implements []InterfaceRelation `json:"implements,omitempty"`
-	CallEdges  []CallRelation      `json:"callEdges,omitempty"`
-	BuildTags  []string            `json:"buildTags,omitempty"`
-	GOOS       string              `json:"goos,omitempty"`
-	GOARCH     string              `json:"goarch,omitempty"`
+	GoVersion        string              `json:"goVersion"`
+	ModuleRoot       string              `json:"moduleRoot"`
+	Modules          []ModuleInfo        `json:"modules"`
+	Packages         []PackageInfo       `json:"packages"`
+	Symbols          []Symbol            `json:"symbols"`
+	Implements       []InterfaceRelation `json:"implements,omitempty"`
+	InterfaceMethods []InterfaceMethod   `json:"interfaceMethods,omitempty"`
+	CallEdges        []CallRelation      `json:"callEdges,omitempty"`
+	BuildTags        []string            `json:"buildTags,omitempty"`
+	GOOS             string              `json:"goos,omitempty"`
+	GOARCH           string              `json:"goarch,omitempty"`
 }
 
 func (m *CodeModel) Symbol(id SymbolID) (*Symbol, bool) {

@@ -5,102 +5,80 @@ import (
 	"sort"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
-	"golang.org/x/tools/go/packages"
 )
 
 func (b *builder) collectInterfaceRelations(m *model.CodeModel) {
-	type ifaceKey struct {
-		pkg  string
-		name string
+	type interfaceInfo struct {
+		id        model.SymbolID
+		pkg, name string
+		typ       *types.Interface
 	}
-	var ifaces []ifaceKey
+	var interfaces []interfaceInfo
 	for _, p := range b.packages {
-		scope := p.Types.Scope()
-		for _, name := range scope.Names() {
-			obj := scope.Lookup(name)
-			tn, ok := obj.(*types.TypeName)
+		for _, name := range p.Types.Scope().Names() {
+			obj, ok := p.Types.Scope().Lookup(name).(*types.TypeName)
 			if !ok {
 				continue
 			}
-			if _, ok := tn.Type().Underlying().(*types.Interface); ok {
-				ifaces = append(ifaces, ifaceKey{pkg: p.PkgPath, name: name})
+			iface, ok := obj.Type().Underlying().(*types.Interface)
+			if !ok || !iface.IsMethodSet() {
+				continue
 			}
+			interfaces = append(interfaces, interfaceInfo{id: model.SymbolID(p.PkgPath + "." + name), pkg: p.PkgPath, name: name, typ: iface.Complete()})
 		}
 	}
-	sort.Slice(ifaces, func(i, j int) bool {
-		if ifaces[i].pkg != ifaces[j].pkg {
-			return ifaces[i].pkg < ifaces[j].pkg
-		}
-		return ifaces[i].name < ifaces[j].name
-	})
-
-	seen := map[model.InterfaceRelation]bool{}
+	sort.Slice(interfaces, func(i, j int) bool { return interfaces[i].id < interfaces[j].id })
 	for _, p := range b.packages {
-		if p.Module == nil || !p.Module.Main {
-			continue
-		}
-		scope := p.Types.Scope()
-		for _, name := range scope.Names() {
-			obj := scope.Lookup(name)
-			tn, ok := obj.(*types.TypeName)
+		for _, name := range p.Types.Scope().Names() {
+			obj, ok := p.Types.Scope().Lookup(name).(*types.TypeName)
+			if !ok || obj.IsAlias() {
+				continue
+			}
+			named, ok := obj.Type().(*types.Named)
 			if !ok {
 				continue
 			}
-			named, ok := tn.Type().(*types.Named)
-			if !ok {
+			if _, ok := named.Underlying().(*types.Interface); ok {
 				continue
 			}
-			if _, isIface := named.Underlying().(*types.Interface); isIface {
-				continue
-			}
-			for _, iface := range ifaces {
-				if iface.pkg == p.PkgPath && iface.name == name {
-					continue
-				}
-				var ifaceType types.Type
-				for _, q := range b.packages {
-					if q.PkgPath == iface.pkg {
-						iscope := q.Types.Scope()
-						iObj := iscope.Lookup(iface.name)
-						if iObj != nil {
-							ifaceType = iObj.Type()
+			for _, iface := range interfaces {
+				for _, pointer := range []bool{false, true} {
+					var concrete types.Type = named
+					if pointer {
+						concrete = types.NewPointer(named)
+					}
+					if !types.Implements(concrete, iface.typ) {
+						continue
+					}
+					concreteID := model.SymbolID(p.PkgPath + "." + name)
+					m.Implements = append(m.Implements, model.InterfaceRelation{InterfaceID: iface.id, InterfacePkg: iface.pkg, Interface: iface.name, ConcreteID: concreteID, Pointer: pointer})
+					methods := types.NewMethodSet(concrete)
+					for i := 0; i < iface.typ.NumMethods(); i++ {
+						method := iface.typ.Method(i)
+						selection := methods.Lookup(method.Pkg(), method.Name())
+						if selection == nil {
+							continue
 						}
-						break
+						fn, ok := selection.Obj().(*types.Func)
+						if !ok {
+							continue
+						}
+						signature := fn.Type().(*types.Signature)
+						receiver := signature.Recv().Type()
+						receiverPointer := false
+						if ptr, ok := receiver.(*types.Pointer); ok {
+							receiver = ptr.Elem()
+							receiverPointer = true
+						}
+						receiverNamed, ok := receiver.(*types.Named)
+						if !ok {
+							continue
+						}
+						id := model.MethodID(fn.Pkg().Path(), model.Receiver{Type: receiverNamed.Obj().Name(), Pointer: receiverPointer}, fn.Name())
+						m.InterfaceMethods = append(m.InterfaceMethods, model.InterfaceMethod{InterfaceID: iface.id, ConcreteID: concreteID, Pointer: pointer, SymbolID: id})
 					}
 				}
-				if ifaceType == nil {
-					continue
-				}
-				if types.Implements(named, ifaceTypeUnderlying(ifaceType)) {
-					b.addRelation(m, seen, p, named, iface, false)
-				}
-				pointer := types.NewPointer(named)
-				if types.Implements(pointer, ifaceTypeUnderlying(ifaceType)) {
-					b.addRelation(m, seen, p, named, iface, true)
-				}
 			}
 		}
 	}
-}
-
-func ifaceTypeUnderlying(t types.Type) *types.Interface {
-	if iface, ok := t.Underlying().(*types.Interface); ok {
-		return iface
-	}
-	return nil
-}
-
-func (b *builder) addRelation(m *model.CodeModel, seen map[model.InterfaceRelation]bool, p *packages.Package, named *types.Named, iface struct{ pkg, name string }, pointer bool) {
-	rel := model.InterfaceRelation{
-		InterfaceID:  model.SymbolID(iface.pkg + "." + iface.name),
-		InterfacePkg: iface.pkg,
-		Interface:    iface.name,
-		ConcreteID:   model.SymbolID(p.PkgPath + "." + named.Obj().Name()),
-		Pointer:      pointer,
-	}
-	if seen[rel] {
-		return
-	}
-	seen[rel] = true
-	m.Implements = append(m.Implements, rel)
 }

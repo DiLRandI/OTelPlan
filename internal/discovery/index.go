@@ -13,6 +13,7 @@ import (
 )
 
 type builder struct {
+	types     map[string]model.TypeInfo
 	modules   map[string]*model.ModuleInfo
 	packages  []*packages.Package
 	fileFlags map[string]fileFlags
@@ -25,6 +26,7 @@ type fileFlags struct {
 
 func buildModel(pkgs []*packages.Package, opts Options) *model.CodeModel {
 	b := &builder{
+		types:     map[string]model.TypeInfo{},
 		modules:   map[string]*model.ModuleInfo{},
 		packages:  pkgs,
 		fileFlags: map[string]fileFlags{},
@@ -48,6 +50,10 @@ func buildModel(pkgs []*packages.Package, opts Options) *model.CodeModel {
 		b.collectSymbols(m, p)
 	}
 	b.collectInterfaceRelations(m)
+	for _, info := range b.types {
+		m.Types = append(m.Types, info)
+	}
+	sort.Slice(m.Types, func(i, j int) bool { return m.Types[i].Type < m.Types[j].Type })
 	sort.Slice(m.Symbols, func(i, j int) bool { return m.Symbols[i].ID < m.Symbols[j].ID })
 	return m
 }
@@ -171,7 +177,7 @@ func (b *builder) symbolFromDecl(p *packages.Package, fn *ast.FuncDecl) *model.S
 		pv := params.At(i)
 		sym.Parameters = append(sym.Parameters, model.Parameter{
 			Name: pv.Name(),
-			Type: types.TypeString(pv.Type(), relativeTo(p)),
+			Type: b.collectType(pv.Type()),
 		})
 		if isContextType(pv.Type()) {
 			sym.ContextIndexes = append(sym.ContextIndexes, i)
@@ -182,7 +188,7 @@ func (b *builder) symbolFromDecl(p *packages.Package, fn *ast.FuncDecl) *model.S
 		rv := results.At(i)
 		sym.Results = append(sym.Results, model.Result{
 			Name: rv.Name(),
-			Type: types.TypeString(rv.Type(), relativeTo(p)),
+			Type: b.collectType(rv.Type()),
 		})
 		if types.Identical(types.Unalias(rv.Type()), errorType) {
 			sym.ErrorIndexes = append(sym.ErrorIndexes, i)
@@ -249,15 +255,6 @@ func relFile(p *packages.Package, file string) string {
 		}
 	}
 	return filepath.ToSlash(file)
-}
-
-func relativeTo(p *packages.Package) types.Qualifier {
-	return func(pkg *types.Package) string {
-		if pkg == p.Types {
-			return ""
-		}
-		return pkg.Path()
-	}
 }
 
 func ownership(p *packages.Package) model.Ownership {

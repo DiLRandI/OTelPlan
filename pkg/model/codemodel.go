@@ -38,12 +38,27 @@ type InterfaceMethod struct {
 	SymbolID    SymbolID `json:"symbol"`
 }
 
+type TypeField struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Exported bool   `json:"exported"`
+	Embedded bool   `json:"embedded"`
+}
+
+type TypeInfo struct {
+	Type    string      `json:"type"`
+	Kind    string      `json:"kind"`
+	Element string      `json:"element,omitempty"`
+	Fields  []TypeField `json:"fields,omitempty"`
+}
+
 type CodeModel struct {
 	GoVersion        string              `json:"goVersion"`
 	ModuleRoot       string              `json:"moduleRoot"`
 	Modules          []ModuleInfo        `json:"modules"`
 	Packages         []PackageInfo       `json:"packages"`
 	Symbols          []Symbol            `json:"symbols"`
+	Types            []TypeInfo          `json:"types,omitempty"`
 	Implements       []InterfaceRelation `json:"implements,omitempty"`
 	InterfaceMethods []InterfaceMethod   `json:"interfaceMethods,omitempty"`
 	CallEdges        []CallRelation      `json:"callEdges,omitempty"`

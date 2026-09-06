@@ -136,6 +136,7 @@ func (b *builder) symbolFromDecl(p *packages.Package, fn *ast.FuncDecl) *model.S
 		PackageImportPath: p.PkgPath,
 		PackageName:       p.Name,
 		Name:              fn.Name.Name,
+		HasBody:           fn.Body != nil,
 		Location: model.SourceLocation{
 			File:   relFile(p, pos.Filename),
 			Line:   pos.Line,
@@ -155,6 +156,7 @@ func (b *builder) symbolFromDecl(p *packages.Package, fn *ast.FuncDecl) *model.S
 		return nil
 	}
 	sym.Signature = sig.String()
+	sym.Variadic = sig.Variadic()
 	for _, params := range []*types.TypeParamList{sig.TypeParams(), sig.RecvTypeParams()} {
 		for i := 0; i < params.Len(); i++ {
 			if sym.Generics == nil {

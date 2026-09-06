@@ -80,6 +80,8 @@ type Symbol struct {
 	TestFile          bool           `json:"testFile"`
 	Ownership         Ownership      `json:"ownership"`
 	Signature         string         `json:"signature"`
+	HasBody           bool           `json:"hasBody"`
+	Variadic          bool           `json:"variadic"`
 }
 
 func FunctionID(importPath, name string) SymbolID {

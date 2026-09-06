@@ -4,7 +4,6 @@ import (
 	"go/ast"
 	"go/types"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 
@@ -24,7 +23,7 @@ type fileFlags struct {
 	test      bool
 }
 
-func buildModel(pkgs []*packages.Package, opts Options) *model.CodeModel {
+func buildModel(pkgs, all []*packages.Package, opts Options) *model.CodeModel {
 	b := &builder{
 		types:     map[string]model.TypeInfo{},
 		modules:   map[string]*model.ModuleInfo{},
@@ -32,7 +31,7 @@ func buildModel(pkgs []*packages.Package, opts Options) *model.CodeModel {
 		fileFlags: map[string]fileFlags{},
 	}
 	m := &model.CodeModel{
-		GoVersion:  runtime.Version(),
+		GoVersion:  opts.goVersion,
 		ModuleRoot: opts.Root,
 		GOOS:       opts.GOOS,
 		GOARCH:     opts.GOARCH,
@@ -40,7 +39,7 @@ func buildModel(pkgs []*packages.Package, opts Options) *model.CodeModel {
 	if len(opts.BuildTags) > 0 {
 		m.BuildTags = append([]string(nil), opts.BuildTags...)
 	}
-	for _, p := range pkgs {
+	for _, p := range all {
 		b.collectModule(m, p)
 	}
 	for _, p := range pkgs {
@@ -49,6 +48,8 @@ func buildModel(pkgs []*packages.Package, opts Options) *model.CodeModel {
 	for _, p := range pkgs {
 		b.collectSymbols(m, p)
 	}
+	sort.Slice(m.Modules, func(i, j int) bool { return m.Modules[i].Path < m.Modules[j].Path })
+	sort.Strings(m.BuildTags)
 	b.collectInterfaceRelations(m)
 	for _, info := range b.types {
 		m.Types = append(m.Types, info)
@@ -74,6 +75,9 @@ func (b *builder) collectModule(m *model.CodeModel, p *packages.Package) {
 	}
 	if !p.Module.Main {
 		info.Ownership = model.OwnershipDependency
+	}
+	if replacement := p.Module.Replace; replacement != nil {
+		info.Replace = &model.ModuleReplacement{Path: replacement.Path, Version: replacement.Version, Dir: replacement.Dir}
 	}
 	b.modules[p.Module.Path] = info
 	m.Modules = append(m.Modules, *info)

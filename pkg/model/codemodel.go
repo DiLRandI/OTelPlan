@@ -1,11 +1,18 @@
 package model
 
 type ModuleInfo struct {
-	Path      string    `json:"path"`
-	Version   string    `json:"version,omitempty"`
-	Dir       string    `json:"dir,omitempty"`
-	Main      bool      `json:"main"`
-	Ownership Ownership `json:"ownership"`
+	Path      string             `json:"path"`
+	Version   string             `json:"version,omitempty"`
+	Dir       string             `json:"dir,omitempty"`
+	Main      bool               `json:"main"`
+	Ownership Ownership          `json:"ownership"`
+	Replace   *ModuleReplacement `json:"replace,omitempty"`
+}
+
+type ModuleReplacement struct {
+	Path    string `json:"path"`
+	Version string `json:"version,omitempty"`
+	Dir     string `json:"dir,omitempty"`
 }
 
 type PackageInfo struct {

@@ -58,7 +58,7 @@ func lockCommand(command string, opts options, p *model.Policy, code *model.Code
 		return summary, 0, nil
 	case "diff":
 		if opts.check && !diff.Empty() {
-			return diff, 6, nil
+			return diff, 6, model.DiagnosticList{{Severity: model.SeverityError, Code: model.CodeStaleLockfile, Message: "lockfile is missing or differs from current resolved state"}}
 		}
 		return diff, 0, nil
 	case "lock":

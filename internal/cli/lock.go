@@ -48,7 +48,7 @@ func lockCommand(command string, opts options, p *model.Policy, code *model.Code
 			previous = model.Lockfile{}
 		}
 	}
-	diff := lockfile.Diff(previous, current)
+	diff := lockfile.ResolutionDiff(previous, current)
 	summary := lockSummary{Path: filename, Targets: len(plan.Targets), Changed: !diff.Empty(), DryRun: opts.dryRun}
 	switch command {
 	case "validate":
@@ -67,6 +67,10 @@ func lockCommand(command string, opts options, p *model.Policy, code *model.Code
 				return diff, 6, model.DiagnosticList{{Severity: model.SeverityError, Code: model.CodeStaleLockfile, Message: "lockfile is missing or stale"}}
 			}
 			return summary, 0, nil
+		}
+		current, err = lockfile.RefreshResolution(previous, current)
+		if err != nil {
+			return fail(6, err.Error())
 		}
 		if !opts.dryRun {
 			if err := lockfile.Write(filename, current); err != nil {

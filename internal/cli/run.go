@@ -58,7 +58,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		output.OK = false
 		output.Diagnostics = append(output.Diagnostics, model.Diagnostic{Severity: model.SeverityError, Code: code, Message: message})
 		if err := emit(stdout, opts, output); err != nil {
-			fmt.Fprintln(stderr, err)
+			_, _ = fmt.Fprintln(stderr, err)
 			return 1
 		}
 		return exit
@@ -119,7 +119,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		if output.Diagnostics.HasErrors() {
 			output.OK = false
 			if err := emit(stdout, opts, output); err != nil {
-				fmt.Fprintln(stderr, err)
+				_, _ = fmt.Fprintln(stderr, err)
 				return 1
 			}
 			return 3
@@ -135,7 +135,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		}
 		backendDiags := otelc.Check(p.Backend.Version, inventory, result.Plan)
 		output.Diagnostics = append(output.Diagnostics, backendDiags...)
-		output.OK = !output.Diagnostics.HasErrors() && !(opts.strict && len(output.Diagnostics.Warnings()) > 0)
+		output.OK = !output.Diagnostics.HasErrors() && (!opts.strict || len(output.Diagnostics.Warnings()) == 0)
 		if !output.OK {
 			exitCode = 5
 		}
@@ -164,7 +164,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return fail(2, model.CodeInvalidPolicy, "unknown command: "+command)
 	}
 	if err := emit(stdout, opts, output); err != nil {
-		fmt.Fprintln(stderr, err)
+		_, _ = fmt.Fprintln(stderr, err)
 		return 1
 	}
 	return exitCode
@@ -212,7 +212,7 @@ func parse(args []string) (options, []string, error) {
 		}
 		flagArgs = append(flagArgs, arg)
 		boolean, ok := option.Value.(interface{ IsBoolFlag() bool })
-		if !hasValue && !(ok && boolean.IsBoolFlag()) {
+		if !hasValue && (!ok || !boolean.IsBoolFlag()) {
 			i++
 			if i == len(args) {
 				if usageErr == nil {
@@ -247,12 +247,14 @@ func parse(args []string) (options, []string, error) {
 
 func usageError(opts options, command, message string, stdout, stderr io.Writer) int {
 	if opts.format != "json" {
-		fmt.Fprintln(stderr, message)
+		if _, err := fmt.Fprintln(stderr, message); err != nil {
+			return 1
+		}
 		return 2
 	}
 	reply := response{APIVersion: APIVersion, Command: command, OK: false, Diagnostics: model.DiagnosticList{{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, Message: message}}}
 	if err := emit(stdout, opts, reply); err != nil {
-		fmt.Fprintln(stderr, err)
+		_, _ = fmt.Fprintln(stderr, err)
 		return 1
 	}
 	return 2

@@ -102,3 +102,9 @@ Then give Codex `docs/CODEX_IMPLEMENTATION_PROMPT.md`.
 The specification targets **Go 1.27.x** and should be implemented and tested with the latest patch version available in that line. At the time this specification was prepared, Go 1.27.1 was the latest stable patch release.
 
 The `otelc` version must be explicitly pinned by the project. Do not use `@latest` in reproducible CI builds.
+
+## Development checks
+
+Install [golangci-lint v2.13.2](https://github.com/golangci/golangci-lint/releases/tag/v2.13.2) and run `make check`. This runs unit tests, race tests, vet, the pinned standard lint checks, and regressions for the quality gate itself. A missing tool, unexpected version, or lint failure fails the check. To use a binary outside PATH, run `make check GOLANGCI_LINT=/path/to/golangci-lint`.
+
+GitHub Actions runs the same `make check` command on pull requests and main. Its linter download is pinned and checked against the release checksums.

@@ -108,9 +108,9 @@ func Write(path string, lock model.Lockfile) error {
 	if err != nil {
 		return fmt.Errorf("create lockfile: %w", err)
 	}
-	defer os.Remove(file.Name())
+	defer func() { _ = os.Remove(file.Name()) }()
 	if _, err := file.Write(data); err != nil {
-		file.Close()
+		_ = file.Close()
 		return fmt.Errorf("write lockfile: %w", err)
 	}
 	if err := file.Close(); err != nil {

@@ -95,7 +95,7 @@ func VerifyExecutable(ctx context.Context, executable, version string) (model.Lo
 	if err != nil {
 		return identity, fmt.Errorf("open otelc executable: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	hash := sha256.New()
 	if _, err := io.Copy(hash, file); err != nil {
 		return identity, fmt.Errorf("digest otelc executable: %w", err)

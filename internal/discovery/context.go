@@ -142,26 +142,26 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 		}
 		tmpName := tmp.Name()
 		if _, writeErr := tmp.Write(data); writeErr != nil {
-			tmp.Close()
-			os.Remove(tmpName)
+			_ = tmp.Close()
+			_ = os.Remove(tmpName)
 			return nil, nil, fmt.Errorf("write isolated module manifest: %w", writeErr)
 		}
 		if closeErr := tmp.Close(); closeErr != nil {
-			os.Remove(tmpName)
+			_ = os.Remove(tmpName)
 			return nil, nil, fmt.Errorf("close isolated module manifest: %w", closeErr)
 		}
 		if sum, sumErr := os.ReadFile(companionSum(original)); sumErr == nil {
 			if writeErr := os.WriteFile(strings.TrimSuffix(tmpName, ".mod")+".sum", sum, 0600); writeErr != nil {
-				os.Remove(tmpName)
+				_ = os.Remove(tmpName)
 				return nil, nil, fmt.Errorf("write isolated module checksums: %w", writeErr)
 			}
 		} else if !os.IsNotExist(sumErr) {
-			os.Remove(tmpName)
+			_ = os.Remove(tmpName)
 			return nil, nil, fmt.Errorf("read effective module checksums: %w", sumErr)
 		}
 		opts.cleanup = func() {
-			os.Remove(tmpName)
-			os.Remove(strings.TrimSuffix(tmpName, ".mod") + ".sum")
+			_ = os.Remove(tmpName)
+			_ = os.Remove(strings.TrimSuffix(tmpName, ".mod") + ".sum")
 		}
 		parsed.modFile = tmpName
 	}
@@ -255,7 +255,7 @@ func parseGOFLAGS(raw string) (goFlags, error) {
 			if !hasValue {
 				value = "true"
 			}
-			if value != "true" && value != "false" && !(name == "-buildvcs" && value == "auto") {
+			if value != "true" && value != "false" && (name != "-buildvcs" || value != "auto") {
 				return goFlags{}, fmt.Errorf("invalid GOFLAGS: boolean option %s", name)
 			}
 			out.semanticBy[name] = value

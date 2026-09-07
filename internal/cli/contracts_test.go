@@ -88,3 +88,10 @@ func TestDiffCheckTextDiagnostic(t *testing.T) {
 		t.Fatalf("missing stale diagnostic: %s", &out)
 	}
 }
+
+func TestUsageTextOutputFailure(t *testing.T) {
+	var stdout bytes.Buffer
+	if got := Run([]string{"--unknown"}, &stdout, failingWriter{}); got != 1 {
+		t.Fatalf("diagnostic write failure exit=%d", got)
+	}
+}

@@ -40,7 +40,7 @@ func isolateWorkspace(filename string) (string, func(), error) {
 	if err != nil {
 		return "", nil, err
 	}
-	cleanup := func() { os.RemoveAll(dir) }
+	cleanup := func() { _ = os.RemoveAll(dir) }
 	fail := func(err error) (string, func(), error) { cleanup(); return "", nil, err }
 	target := filepath.Join(dir, "go.work")
 	if err := os.WriteFile(target, modfile.Format(work.Syntax), 0600); err != nil {

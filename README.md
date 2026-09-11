@@ -107,4 +107,12 @@ The `otelc` version must be explicitly pinned by the project. Do not use `@lates
 
 Install [golangci-lint v2.13.2](https://github.com/golangci/golangci-lint/releases/tag/v2.13.2) and run `make check`. This runs unit tests, race tests, vet, the pinned standard lint checks, and regressions for the quality gate itself. A missing tool, unexpected version, or lint failure fails the check. To use a binary outside PATH, run `make check GOLANGCI_LINT=/path/to/golangci-lint`.
 
-GitHub Actions runs the same `make check` command on pull requests and main. Its linter download is pinned and checked against the release checksums.
+GitHub Actions runs the same `make check` command on pull requests and main. Its linter download is pinned and checked against the release checksums. CI also builds otelc v1.1.0 from commit `449ee08a682586adb177e4402845ed404565879f` and sets `OTELPLAN_OTELC`, so the real-backend trace tests run in both the normal and race suites. A missing or incompatible backend fails these tests.
+
+To run those tests locally, build that pinned otelc checkout with:
+
+```bash
+go build -mod=readonly -trimpath -ldflags '-X go.opentelemetry.io/otelc/tool/util.Version=v1.1.0' -o /tmp/otelplan-otelc ./tool/cmd/otelc
+```
+
+Then, from OTelPlan, run `OTELPLAN_OTELC=/tmp/otelplan-otelc make check`. Without this variable, local checks skip the real-backend tests.

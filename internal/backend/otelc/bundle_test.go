@@ -88,7 +88,7 @@ func TestBundleWithoutTargets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 3 {
+	if len(files) != 5 {
 		t.Fatalf("unexpected empty bundle: %+v", files)
 	}
 	for _, file := range files {

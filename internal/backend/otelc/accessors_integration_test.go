@@ -62,24 +62,29 @@ func TestPrivateAccessorsWithPinnedBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, err := RenderBundle(backend, "test", code, plan, "example.com/probe")
+	files, err := RenderBundle(backend, "test", code, plan, "example.com/generated")
 	if err != nil {
 		t.Fatal(err)
 	}
+	generated := filepath.Join(root, "generated")
 	for _, file := range files {
-		filename := filepath.Join(root, filepath.FromSlash(file.Path))
+		filename := filepath.Join(generated, filepath.FromSlash(file.Path))
 		if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filename, file.Data, 0600); err != nil {
 			t.Fatal(err)
 		}
-		original[file.Path] = file.Data
+		original["generated/"+file.Path] = file.Data
+	}
+	workspace := filepath.Join(root, "go.work")
+	if err := os.WriteFile(workspace, []byte("go 1.27\n\nuse (\n.\n./generated\n)\n"), 0600); err != nil {
+		t.Fatal(err)
 	}
 	binary := filepath.Join(root, "probe")
-	build := exec.CommandContext(t.Context(), executable, "--rules", filepath.Join(root, "rules"), "go", "build", "-race", "-o", binary, ".")
+	build := exec.CommandContext(t.Context(), executable, "--rules", filepath.Join(generated, "rules"), "go", "build", "-race", "-o", binary, ".")
 	build.Dir = root
-	build.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=", "OTELC_BUILD_FLAGS=", "OTELC_WORK_DIR="+root, "OTELC_RULES="+filepath.Join(root, "rules"))
+	build.Env = append(os.Environ(), "GOWORK="+workspace, "GOFLAGS=", "OTELC_BUILD_FLAGS=", "OTELC_WORK_DIR="+root, "OTELC_RULES="+filepath.Join(generated, "rules"))
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("real backend build failed: %v\n%s", err, output)
 	}

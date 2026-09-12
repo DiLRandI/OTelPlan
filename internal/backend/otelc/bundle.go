@@ -63,6 +63,11 @@ func RenderBundle(backend model.LockBackend, runtimeVersion string, code *model.
 			files = append(files, GeneratedFile{Path: "accessors/" + helper.Name, Data: helper.Source})
 		}
 	}
+	moduleFiles, err := renderRuntimeModule(modulePath)
+	if err != nil {
+		return nil, err
+	}
+	files = append(files, moduleFiles...)
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	manifest := BundleManifest{APIVersion: "otelplan.io/artifacts/v1alpha1", Backend: backend, RuntimeVersion: runtimeVersion, ModulePath: modulePath, Files: make([]model.ArtifactFile, 0, len(files))}
 	for _, file := range files {

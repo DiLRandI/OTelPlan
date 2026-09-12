@@ -58,37 +58,28 @@ func TestPrivateAccessorsWithPinnedBackend(t *testing.T) {
 		ContextStrategy: model.ContextStrategy{Strategy: model.ContextStrategyArgument, Index: 0},
 		Attributes:      []model.AttributePlan{{Key: "quantity", From: model.AttributeSource{Argument: "1"}}},
 	})
-	rules, _, err := RenderRules(SupportedVersion, code, plan, "example.com/probe/hooks")
+	backend, err := VerifyExecutable(t.Context(), executable, SupportedVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
-	accessorRules, helpers, err := RenderAccessorRules(SupportedVersion, code, plan, "example.com/probe/accessors")
+	files, err := RenderBundle(backend, "test", code, plan, "example.com/probe")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, helper := range helpers {
-		if err := os.WriteFile(filepath.Join(root, "accessors", helper.Name), helper.Source, 0600); err != nil {
+	for _, file := range files {
+		filename := filepath.Join(root, filepath.FromSlash(file.Path))
+		if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
 			t.Fatal(err)
 		}
-		original["accessors/"+helper.Name] = helper.Source
+		if err := os.WriteFile(filename, file.Data, 0600); err != nil {
+			t.Fatal(err)
+		}
+		original[file.Path] = file.Data
 	}
-	rules = append(rules, accessorRules...)
-	if err := os.WriteFile(filepath.Join(root, "rules.yaml"), rules, 0600); err != nil {
-		t.Fatal(err)
-	}
-	hookFile := filepath.Join(root, "hooks", "hooks.go")
-	hooks, err := RenderHooks(SupportedVersion, "test", code, plan, "example.com/probe/hooks")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(hookFile, hooks, 0600); err != nil {
-		t.Fatal(err)
-	}
-	original["hooks/hooks.go"] = hooks
 	binary := filepath.Join(root, "probe")
-	build := exec.CommandContext(t.Context(), executable, "--rules", filepath.Join(root, "rules.yaml"), "go", "build", "-race", "-o", binary, ".")
+	build := exec.CommandContext(t.Context(), executable, "--rules", filepath.Join(root, "rules"), "go", "build", "-race", "-o", binary, ".")
 	build.Dir = root
-	build.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=", "OTELC_BUILD_FLAGS=", "OTELC_WORK_DIR="+root, "OTELC_RULES="+filepath.Join(root, "rules.yaml"))
+	build.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=", "OTELC_BUILD_FLAGS=", "OTELC_WORK_DIR="+root, "OTELC_RULES="+filepath.Join(root, "rules"))
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("real backend build failed: %v\n%s", err, output)
 	}
@@ -198,7 +189,7 @@ func snapshotApplicationFiles(t *testing.T, root string) fileSnapshot {
 			return nil
 		}
 		switch filepath.Ext(path) {
-		case ".go", ".mod", ".sum":
+		case ".go", ".mod", ".sum", ".json", ".yaml":
 		default:
 			return nil
 		}

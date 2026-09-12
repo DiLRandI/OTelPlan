@@ -24,13 +24,18 @@ func RenderHooks(version, runtimeVersion string, code *model.CodeModel, plan mod
 	}
 	targets := make(map[model.SymbolID]model.ResolvedTarget, len(plan.Targets))
 	recordErrors := false
+	accessors := map[model.SymbolID][]AccessorBinding{}
 	for _, target := range plan.Targets {
 		symbol, _ := code.Symbol(target.SymbolID)
 		if strings.TrimSpace(target.SpanName) == "" {
 			return nil, fmt.Errorf("hook generation requires a span name")
 		}
 		if len(target.Attributes) != 0 {
-			return nil, fmt.Errorf("attribute hooks require typed accessor generation")
+			_, attributes, err := RenderAccessors(code, target)
+			if err != nil {
+				return nil, err
+			}
+			accessors[target.SymbolID] = attributes
 		}
 		if symbol.Variadic {
 			return nil, fmt.Errorf("variadic hooks require typed signature generation")
@@ -50,6 +55,9 @@ func RenderHooks(version, runtimeVersion string, code *model.CodeModel, plan mod
 	if recordErrors {
 		source.WriteString("\"go.opentelemetry.io/otel/codes\"\n")
 	}
+	if len(accessors) > 0 {
+		source.WriteString("\"go.opentelemetry.io/otel/attribute\"\n_ \"unsafe\"\n")
+	}
 	source.WriteString(")\n")
 	for _, binding := range bindings {
 		target := targets[binding.Symbol]
@@ -59,6 +67,10 @@ func RenderHooks(version, runtimeVersion string, code *model.CodeModel, plan mod
 		if symbol.Receiver != nil {
 			parameters++
 			offset = 1
+		}
+		for _, accessor := range accessors[binding.Symbol] {
+			resultType, _ := scalarType(accessor.Kind)
+			fmt.Fprintf(&source, "\n//go:linkname read_%s %s.%s\nfunc read_%s(any) (%s, bool)\n", accessor.Function, symbol.PackageImportPath, accessor.Function, accessor.Function, resultType)
 		}
 		fmt.Fprintf(&source, "\nfunc %s(h hook.HookContext%s) {\n", binding.Before, strings.Repeat(", _ any", parameters))
 		if target.ContextStrategy.Strategy == model.ContextStrategyArgument {
@@ -74,11 +86,13 @@ func RenderHooks(version, runtimeVersion string, code *model.CodeModel, plan mod
 		if target.ContextStrategy.Strategy == model.ContextStrategyArgument {
 			fmt.Fprintf(&source, "h.SetParam(%d, child)\n", target.ContextStrategy.Index+offset)
 		}
+		writeHookAttributes(&source, accessors[binding.Symbol], false, offset)
 		source.WriteString("}\n")
 		fmt.Fprintf(&source, "\nfunc %s(h hook.HookContext%s) {\nspan, ok := h.GetData().(trace.Span)\nif !ok { return }\ndefer span.End()\nh.SetData(nil)\n", binding.After, strings.Repeat(", _ any", len(symbol.Results)))
 		for _, index := range target.ErrorStrategy.Indexes {
 			fmt.Fprintf(&source, "if err, ok := h.GetReturnVal(%d).(error); ok && err != nil {\nspan.RecordError(err)\nspan.SetStatus(codes.Error, \"operation failed\")\n}\n", index)
 		}
+		writeHookAttributes(&source, accessors[binding.Symbol], true, offset)
 		source.WriteString("}\n")
 	}
 	data, err := format.Source(source.Bytes())
@@ -86,4 +100,29 @@ func RenderHooks(version, runtimeVersion string, code *model.CodeModel, plan mod
 		return nil, fmt.Errorf("format generated hooks: %w", err)
 	}
 	return data, nil
+}
+
+func writeHookAttributes(source *bytes.Buffer, bindings []AccessorBinding, results bool, receiverOffset int) {
+	opened := false
+	for _, binding := range bindings {
+		if (binding.Source == "result") != results {
+			continue
+		}
+		if !opened {
+			source.WriteString("if span.IsRecording() {\n")
+			opened = true
+		}
+		input := "nil"
+		switch binding.Source {
+		case "argument":
+			input = fmt.Sprintf("h.GetParam(%d)", binding.Index+receiverOffset)
+		case "result":
+			input = fmt.Sprintf("h.GetReturnVal(%d)", binding.Index)
+		}
+		constructor := map[string]string{"string": "String", "bool": "Bool", "integer": "Int64", "float": "Float64"}[binding.Kind]
+		fmt.Fprintf(source, "if value, ok := read_%s(%s); ok { span.SetAttributes(attribute.%s(%q, value)) }\n", binding.Function, input, constructor, binding.Key)
+	}
+	if opened {
+		source.WriteString("}\n")
+	}
 }

@@ -16,8 +16,13 @@ func main() {
 	provider := trace.NewTracerProvider(trace.WithSyncer(exporter))
 	otel.SetTracerProvider(provider)
 	ctx, root := provider.Tracer("probe").Start(context.Background(), "root")
-	errors := []string{errorText(ops.Handle(ctx, ops.NewRequest("approved-id", "top-secret")))}
-	errors = append(errors, errorText(ops.Handle(ctx, nil)))
+	worker := &ops.Worker{}
+	size, err := worker.Handle(ctx, ops.NewRequest("approved-id", "top-secret"))
+	errors := []string{errorText(err)}
+	sizes := []int{size}
+	size, err = worker.Handle(ctx, nil)
+	errors = append(errors, errorText(err))
+	sizes = append(sizes, size)
 	root.End()
 	type span struct {
 		Name       string
@@ -38,8 +43,9 @@ func main() {
 	}
 	if err := json.NewEncoder(os.Stdout).Encode(struct {
 		Errors []string
+		Sizes  []int
 		Spans  []span
-	}{errors, spans}); err != nil {
+	}{errors, sizes, spans}); err != nil {
 		panic(err)
 	}
 }

@@ -156,7 +156,7 @@ func TestRenderHooksRejectsUnsupportedPlansWithoutPartialOutput(t *testing.T) {
 		blankRuntimeVersion bool
 		wantError           string
 	}{
-		{name: "attributes", change: func(_ *model.CodeModel, p *model.ResolvedPlan) {
+		{name: "invalid attribute source", change: func(_ *model.CodeModel, p *model.ResolvedPlan) {
 			p.Targets[0].Attributes = []model.AttributePlan{{Key: "request.id", From: model.AttributeSource{Argument: "request.ID"}}}
 		}},
 		{name: "variadic", change: func(c *model.CodeModel, _ *model.ResolvedPlan) { c.Symbols[0].Variadic = true }},

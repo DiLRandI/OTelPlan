@@ -3,11 +3,11 @@ package otelc
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/DiLRandI/OTelPlan/internal/discovery"
@@ -27,11 +27,11 @@ func TestPrivateAccessorsWithPinnedBackend(t *testing.T) {
 		t.Fatal(err)
 	}
 	original := snapshotApplicationFiles(t, root)
-	code, err := discovery.LoadContext(t.Context(), discovery.Options{Root: root, Patterns: []string{"./ops"}, Env: []string{"GOWORK=off", "GOFLAGS="}})
+	code, err := discovery.LoadContext(t.Context(), discovery.Options{Root: root, Patterns: []string{"./ops", "./unused"}, Env: []string{"GOWORK=off", "GOFLAGS="}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	symbol, ok := code.Symbol(model.SymbolID("example.com/probe/ops.Handle"))
+	symbol, ok := code.Symbol(model.SymbolID("example.com/probe/ops.(*Worker).Handle"))
 	if !ok {
 		t.Fatal("fixture symbol missing")
 	}
@@ -41,46 +41,55 @@ func TestPrivateAccessorsWithPinnedBackend(t *testing.T) {
 		RuleID:          "handle-request",
 		SpanName:        "handle-request",
 		ContextStrategy: model.ContextStrategy{Strategy: model.ContextStrategyArgument, Index: 0},
-		ErrorStrategy:   model.ErrorStrategy{Record: true, Indexes: []int{0}},
-		Attributes:      []model.AttributePlan{{Key: "request.id", From: model.AttributeSource{Argument: "request.ID"}}},
+		ErrorStrategy:   model.ErrorStrategy{Record: true, Indexes: []int{1}},
+		Attributes: []model.AttributePlan{
+			{Key: "request.id", From: model.AttributeSource{Argument: "request.ID"}},
+			{Key: "result.size", From: model.AttributeSource{Result: "size"}},
+			{Key: "component", From: model.AttributeSource{Constant: "probe"}},
+			{Key: "cache.hit", From: model.AttributeSource{Constant: false}},
+			{Key: "weight", From: model.AttributeSource{Constant: 1.5}},
+		},
 	}}}
-	helperSource, accessors, err := RenderAccessors(code, plan.Targets[0])
+	unused, ok := code.Symbol("example.com/probe/unused.Process")
+	if !ok {
+		t.Fatal("unused fixture symbol missing")
+	}
+	plan.Targets = append(plan.Targets, model.ResolvedTarget{
+		SymbolID: unused.ID, Signature: unused.Signature, SpanName: "unused",
+		ContextStrategy: model.ContextStrategy{Strategy: model.ContextStrategyArgument, Index: 0},
+		Attributes:      []model.AttributePlan{{Key: "quantity", From: model.AttributeSource{Argument: "1"}}},
+	})
+	rules, _, err := RenderRules(SupportedVersion, code, plan, "example.com/probe/hooks")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(accessors) != 1 || accessors[0].Key != "request.id" {
-		t.Fatal("unexpected accessor bindings")
+	for i, target := range plan.Targets {
+		helperSource, _, err := RenderAccessors(code, target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		filename := fmt.Sprintf("helper%d.go", i)
+		if err := os.WriteFile(filepath.Join(root, "accessors", filename), helperSource, 0600); err != nil {
+			t.Fatal(err)
+		}
+		original["accessors/"+filename] = helperSource
+		symbol, _ := code.Symbol(target.SymbolID)
+		rules = append(rules, []byte(fmt.Sprintf("accessor%d:\n  target: %s\n  do:\n    - add_file:\n        file: %s\n        path: example.com/probe/accessors\n", i, symbol.PackageImportPath, filename))...)
 	}
-	helperFile := filepath.Join(root, "accessors", "helper.go")
-	if err := os.WriteFile(helperFile, helperSource, 0600); err != nil {
-		t.Fatal(err)
-	}
-	original["accessors/helper.go"] = helperSource
-	hookData, bindings, err := RenderRules(SupportedVersion, code, plan, "example.com/probe/hooks")
-	if err != nil {
-		t.Fatal(err)
-	}
-	rules := append([]byte("accessor_helper:\n  target: example.com/probe/ops\n  do:\n    - add_file:\n        file: helper.go\n        path: example.com/probe/accessors\n"), hookData...)
 	if err := os.WriteFile(filepath.Join(root, "rules.yaml"), rules, 0600); err != nil {
 		t.Fatal(err)
 	}
 	hookFile := filepath.Join(root, "hooks", "hooks.go")
-	hooks, err := os.ReadFile(hookFile)
+	hooks, err := RenderHooks(SupportedVersion, "test", code, plan, "example.com/probe/hooks")
 	if err != nil {
 		t.Fatal(err)
 	}
-	hookSource := strings.ReplaceAll(string(hooks), "RequestID", accessors[0].Function)
-	for _, binding := range bindings {
-		symbol, _ := code.Symbol(binding.Symbol)
-		hookSource = strings.ReplaceAll(hookSource, "Before"+symbol.Name, binding.Before)
-		hookSource = strings.ReplaceAll(hookSource, "After"+symbol.Name, binding.After)
-	}
-	if err := os.WriteFile(hookFile, []byte(hookSource), 0600); err != nil {
+	if err := os.WriteFile(hookFile, hooks, 0600); err != nil {
 		t.Fatal(err)
 	}
-	original["hooks/hooks.go"] = []byte(hookSource)
+	original["hooks/hooks.go"] = hooks
 	binary := filepath.Join(root, "probe")
-	build := exec.CommandContext(t.Context(), executable, "--rules", filepath.Join(root, "rules.yaml"), "go", "build", "-o", binary, ".")
+	build := exec.CommandContext(t.Context(), executable, "--rules", filepath.Join(root, "rules.yaml"), "go", "build", "-race", "-o", binary, ".")
 	build.Dir = root
 	build.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=", "OTELC_BUILD_FLAGS=", "OTELC_WORK_DIR="+root, "OTELC_RULES="+filepath.Join(root, "rules.yaml"))
 	if output, err := build.CombinedOutput(); err != nil {
@@ -93,6 +102,7 @@ func TestPrivateAccessorsWithPinnedBackend(t *testing.T) {
 	}
 	var result struct {
 		Errors []string
+		Sizes  []int
 		Spans  []struct {
 			Name, ID, Parent, Trace string
 			Error                   bool
@@ -105,6 +115,9 @@ func TestPrivateAccessorsWithPinnedBackend(t *testing.T) {
 	}
 	if !reflect.DeepEqual(result.Errors, []string{"operation failed", "<nil>"}) {
 		t.Fatalf("returned errors changed: %#v", result.Errors)
+	}
+	if !reflect.DeepEqual(result.Sizes, []int{11, 0}) {
+		t.Fatalf("returned values changed: %s", output)
 	}
 	if len(result.Spans) != 5 {
 		t.Fatalf("unexpected instrumentation count: %s", output)
@@ -152,14 +165,19 @@ func TestPrivateAccessorsWithPinnedBackend(t *testing.T) {
 		}
 	}
 	first, second := handles[0], handles[1]
-	if len(first.Attributes) == 0 {
+	if _, captured := first.Attributes["request.id"]; !captured {
 		first, second = second, first
 	}
-	if first.Attributes["request.id"] != "approved-id" || len(first.Attributes) != 1 {
+	if first.Attributes["request.id"] != "approved-id" || first.Attributes["result.size"] != float64(11) || len(first.Attributes) != 5 {
 		t.Fatalf("unexpected selected attributes: %#v", first.Attributes)
 	}
-	if len(second.Attributes) != 0 {
+	if _, captured := second.Attributes["request.id"]; captured || second.Attributes["result.size"] != float64(0) || len(second.Attributes) != 4 {
 		t.Fatalf("nil request should omit attributes: %#v", second.Attributes)
+	}
+	for _, span := range handles {
+		if span.Attributes["component"] != "probe" || span.Attributes["cache.hit"] != false || span.Attributes["weight"] != 1.5 {
+			t.Fatalf("constant attributes changed: %#v", span.Attributes)
+		}
 	}
 	if !first.Error || first.Events != 1 || second.Error || second.Events != 0 {
 		t.Fatalf("returned error semantics changed: %s", output)

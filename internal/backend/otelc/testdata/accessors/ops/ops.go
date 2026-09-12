@@ -16,11 +16,13 @@ func NewRequest(id, secret string) *request {
 	return &request{ID: id, Secret: secret}
 }
 
-func Handle(ctx context.Context, request *request) error {
+type Worker struct{}
+
+func (*Worker) Handle(ctx context.Context, request *request) (size int, err error) {
 	_, child := otel.Tracer("probe").Start(ctx, "downstream")
 	child.End()
 	if request == nil {
-		return nil
+		return 0, nil
 	}
-	return errors.New("operation failed")
+	return len(request.ID), errors.New("operation failed")
 }

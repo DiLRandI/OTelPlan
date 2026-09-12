@@ -36,7 +36,7 @@ func TestCopySourceTreeBuild(t *testing.T) {
 		t.Fatalf("link not relocated: %s, %v", linked, err)
 	}
 	binary := filepath.Join(t.TempDir(), "app")
-	build := exec.CommandContext(t.Context(), "go", "build", "-mod=readonly", "-o", binary, ".")
+	build := exec.CommandContext(t.Context(), "go", "build", "-buildvcs=false", "-mod=readonly", "-o", binary, ".")
 	build.Dir = copied
 	build.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=", "GOPROXY=off")
 	if output, err := build.CombinedOutput(); err != nil {

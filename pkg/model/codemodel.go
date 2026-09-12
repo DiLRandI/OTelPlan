@@ -52,11 +52,18 @@ type TypeField struct {
 	Embedded bool   `json:"embedded"`
 }
 
+type TypeImport struct {
+	Path  string `json:"path"`
+	Alias string `json:"alias"`
+}
+
 type TypeInfo struct {
-	Type    string      `json:"type"`
-	Kind    string      `json:"kind"`
-	Element string      `json:"element,omitempty"`
-	Fields  []TypeField `json:"fields,omitempty"`
+	Expression string       `json:"expression,omitempty"`
+	Imports    []TypeImport `json:"imports,omitempty"`
+	Type       string       `json:"type"`
+	Kind       string       `json:"kind"`
+	Element    string       `json:"element,omitempty"`
+	Fields     []TypeField  `json:"fields,omitempty"`
 }
 
 // BuildEnvironment describes the Go inputs that can change package selection

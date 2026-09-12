@@ -44,6 +44,18 @@ func TestPrivateAccessorsWithPinnedBackend(t *testing.T) {
 		ErrorStrategy:   model.ErrorStrategy{Record: true, Indexes: []int{0}},
 		Attributes:      []model.AttributePlan{{Key: "request.id", From: model.AttributeSource{Argument: "request.ID"}}},
 	}}}
+	helperSource, accessors, err := RenderAccessors(code, plan.Targets[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(accessors) != 1 || accessors[0].Key != "request.id" {
+		t.Fatal("unexpected accessor bindings")
+	}
+	helperFile := filepath.Join(root, "accessors", "helper.go")
+	if err := os.WriteFile(helperFile, helperSource, 0600); err != nil {
+		t.Fatal(err)
+	}
+	original["accessors/helper.go"] = helperSource
 	hookData, bindings, err := RenderRules(SupportedVersion, code, plan, "example.com/probe/hooks")
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +69,7 @@ func TestPrivateAccessorsWithPinnedBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hookSource := string(hooks)
+	hookSource := strings.ReplaceAll(string(hooks), "RequestID", accessors[0].Function)
 	for _, binding := range bindings {
 		symbol, _ := code.Symbol(binding.Symbol)
 		hookSource = strings.ReplaceAll(hookSource, "Before"+symbol.Name, binding.Before)

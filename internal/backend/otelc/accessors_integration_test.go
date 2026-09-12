@@ -3,7 +3,6 @@ package otelc
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,19 +62,17 @@ func TestPrivateAccessorsWithPinnedBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i, target := range plan.Targets {
-		helperSource, _, err := RenderAccessors(code, target)
-		if err != nil {
-			t.Fatal(err)
-		}
-		filename := fmt.Sprintf("helper%d.go", i)
-		if err := os.WriteFile(filepath.Join(root, "accessors", filename), helperSource, 0600); err != nil {
-			t.Fatal(err)
-		}
-		original["accessors/"+filename] = helperSource
-		symbol, _ := code.Symbol(target.SymbolID)
-		rules = append(rules, []byte(fmt.Sprintf("accessor%d:\n  target: %s\n  do:\n    - add_file:\n        file: %s\n        path: example.com/probe/accessors\n", i, symbol.PackageImportPath, filename))...)
+	accessorRules, helpers, err := RenderAccessorRules(SupportedVersion, code, plan, "example.com/probe/accessors")
+	if err != nil {
+		t.Fatal(err)
 	}
+	for _, helper := range helpers {
+		if err := os.WriteFile(filepath.Join(root, "accessors", helper.Name), helper.Source, 0600); err != nil {
+			t.Fatal(err)
+		}
+		original["accessors/"+helper.Name] = helper.Source
+	}
+	rules = append(rules, accessorRules...)
 	if err := os.WriteFile(filepath.Join(root, "rules.yaml"), rules, 0600); err != nil {
 		t.Fatal(err)
 	}

@@ -31,6 +31,7 @@ type response struct {
 
 type options struct {
 	strict, offline, check, dryRun, allowLargePlan          bool
+	configSet                                               bool
 	root, config, format                                    string
 	quiet, verbose, noColor, dependencies, interfaces, help bool
 }
@@ -38,15 +39,17 @@ type options struct {
 func Run(args []string, stdout, stderr io.Writer) int {
 	opts, positionals, err := parse(args)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
+		command := ""
+		if len(positionals) > 0 {
+			command = positionals[0]
+		}
+		return usageError(opts, command, err.Error(), stdout, stderr)
 	}
 	if opts.help {
 		positionals = []string{"help"}
 	}
 	if len(positionals) == 0 {
-		fmt.Fprintln(stderr, "usage: otelplan [global flags] <scan|inspect|explain|validate|lock|diff|version> [arguments]")
-		return 2
+		return usageError(opts, "", "usage: otelplan [global flags] <scan|inspect|explain|validate|lock|diff|version> [arguments]", stdout, stderr)
 	}
 	command := positionals[0]
 	rest := positionals[1:]
@@ -55,10 +58,23 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		output.OK = false
 		output.Diagnostics = append(output.Diagnostics, model.Diagnostic{Severity: model.SeverityError, Code: code, Message: message})
 		if err := emit(stdout, opts, output); err != nil {
-			fmt.Fprintln(stderr, err)
+			_, _ = fmt.Fprintln(stderr, err)
 			return 1
 		}
 		return exit
+	}
+	if opts.check && opts.dryRun {
+		return fail(2, model.CodeInvalidPolicy, "cannot combine --check and --dry-run")
+	}
+	if (opts.dependencies || opts.interfaces) && command != "scan" {
+		return fail(2, model.CodeInvalidPolicy, "--dependencies and --interfaces are supported by scan")
+	}
+	policyCommand := command == "inspect" || command == "explain" || command == "validate" || command == "lock" || command == "diff"
+	if (opts.strict || opts.allowLargePlan || opts.configSet) && !policyCommand {
+		return fail(2, model.CodeInvalidPolicy, "--config, --strict, and --allow-large-plan require a policy command")
+	}
+	if opts.verbose {
+		return fail(2, model.CodeInvalidPolicy, "--verbose output is not implemented")
 	}
 	if opts.check && command != "lock" && command != "diff" {
 		return fail(2, model.CodeInvalidPolicy, "--check is supported by lock and diff")
@@ -69,6 +85,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	exitCode := 0
 	switch command {
 	case "help":
+		if len(rest) > 0 {
+			return fail(2, model.CodeInvalidPolicy, "help takes no positional arguments")
+		}
 		output.Data = "usage: otelplan [--root path] [--config path] [--format text|json] <scan|inspect|explain|validate|lock|diff|version>\nscan [packages...] lists Go symbols; inspect resolves policy; explain <symbol> shows rule decisions"
 	case "version":
 		if len(rest) > 0 {
@@ -82,8 +101,11 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		}
 		output.Data = inventory
 	case "inspect", "explain", "validate", "lock", "diff":
-		if (command != "explain" && len(rest) != 0) || (command == "explain" && len(rest) != 1) {
-			return fail(2, model.CodeInvalidPolicy, "inspect takes no arguments; explain requires one canonical symbol")
+		if command == "explain" && len(rest) != 1 {
+			return fail(2, model.CodeInvalidPolicy, "explain requires one canonical symbol")
+		}
+		if command != "explain" && len(rest) != 0 {
+			return fail(2, model.CodeInvalidPolicy, command+" takes no positional arguments")
 		}
 		config := opts.config
 		if !filepath.IsAbs(config) {
@@ -97,7 +119,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		if output.Diagnostics.HasErrors() {
 			output.OK = false
 			if err := emit(stdout, opts, output); err != nil {
-				fmt.Fprintln(stderr, err)
+				_, _ = fmt.Fprintln(stderr, err)
 				return 1
 			}
 			return 3
@@ -113,7 +135,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		}
 		backendDiags := otelc.Check(p.Backend.Version, inventory, result.Plan)
 		output.Diagnostics = append(output.Diagnostics, backendDiags...)
-		output.OK = !output.Diagnostics.HasErrors() && !(opts.strict && len(output.Diagnostics.Warnings()) > 0)
+		output.OK = !output.Diagnostics.HasErrors() && (!opts.strict || len(output.Diagnostics.Warnings()) == 0)
 		if !output.OK {
 			exitCode = 5
 		}
@@ -142,7 +164,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return fail(2, model.CodeInvalidPolicy, "unknown command: "+command)
 	}
 	if err := emit(stdout, opts, output); err != nil {
-		fmt.Fprintln(stderr, err)
+		_, _ = fmt.Fprintln(stderr, err)
 		return 1
 	}
 	return exitCode
@@ -168,6 +190,8 @@ func parse(args []string) (options, []string, error) {
 	flags.BoolVar(&opts.dependencies, "dependencies", false, "include dependency code in scan")
 	flags.BoolVar(&opts.interfaces, "interfaces", false, "show interface methods in text scans")
 	var flagArgs, positionals []string
+	var usageErr error
+	formatHint := opts.format
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -178,29 +202,62 @@ func parse(args []string) (options, []string, error) {
 			positionals = append(positionals, arg)
 			continue
 		}
-		name := strings.TrimLeft(arg, "-")
-		name, _, hasValue := strings.Cut(name, "=")
+		name, value, hasValue := strings.Cut(strings.TrimLeft(arg, "-"), "=")
 		option := flags.Lookup(name)
 		if option == nil {
-			return opts, nil, fmt.Errorf("unknown flag: %s", arg)
+			if usageErr == nil {
+				usageErr = fmt.Errorf("unknown flag: --%s", name)
+			}
+			continue
 		}
 		flagArgs = append(flagArgs, arg)
 		boolean, ok := option.Value.(interface{ IsBoolFlag() bool })
-		if !hasValue && !(ok && boolean.IsBoolFlag()) {
+		if !hasValue && (!ok || !boolean.IsBoolFlag()) {
 			i++
 			if i == len(args) {
-				return opts, nil, fmt.Errorf("flag --%s requires a value", name)
+				if usageErr == nil {
+					usageErr = fmt.Errorf("flag --%s requires a value", name)
+				}
+				break
 			}
-			flagArgs = append(flagArgs, args[i])
+			value = args[i]
+			flagArgs = append(flagArgs, value)
+		}
+		if name == "format" {
+			formatHint = value
 		}
 	}
-	if err := flags.Parse(flagArgs); err != nil {
-		return opts, nil, err
+	if err := flags.Parse(flagArgs); err != nil && usageErr == nil {
+		usageErr = fmt.Errorf("invalid flag value or syntax")
+	}
+	opts.format = formatHint
+	if usageErr != nil {
+		return opts, positionals, usageErr
 	}
 	if opts.format != "text" && opts.format != "json" {
-		return opts, nil, fmt.Errorf("format must be text or json")
+		return opts, positionals, fmt.Errorf("format must be text or json")
 	}
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "config" {
+			opts.configSet = true
+		}
+	})
 	return opts, positionals, nil
+}
+
+func usageError(opts options, command, message string, stdout, stderr io.Writer) int {
+	if opts.format != "json" {
+		if _, err := fmt.Fprintln(stderr, message); err != nil {
+			return 1
+		}
+		return 2
+	}
+	reply := response{APIVersion: APIVersion, Command: command, OK: false, Diagnostics: model.DiagnosticList{{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, Message: message}}}
+	if err := emit(stdout, opts, reply); err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+		return 1
+	}
+	return 2
 }
 
 func emit(out io.Writer, opts options, reply response) error {

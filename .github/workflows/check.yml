@@ -1,0 +1,47 @@
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOLANGCI_LINT_VERSION: 2.13.2
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - name: Install pinned linter
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP"
+          archive="golangci-lint-${GOLANGCI_LINT_VERSION}-linux-amd64.tar.gz"
+          checksums="golangci-lint-${GOLANGCI_LINT_VERSION}-checksums.txt"
+          gh release download "v${GOLANGCI_LINT_VERSION}" --repo golangci/golangci-lint --pattern "$archive" --pattern "$checksums"
+          sha256sum --check --ignore-missing "$checksums"
+          tar -xzf "$archive" "golangci-lint-${GOLANGCI_LINT_VERSION}-linux-amd64/golangci-lint"
+          echo "$RUNNER_TEMP/golangci-lint-${GOLANGCI_LINT_VERSION}-linux-amd64" >> "$GITHUB_PATH"
+      - name: Check out pinned backend
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: open-telemetry/opentelemetry-go-compile-instrumentation
+          ref: 449ee08a682586adb177e4402845ed404565879f # otelc v1.1.0
+          path: .ci-otelc
+          persist-credentials: false
+      - name: Build pinned backend
+        working-directory: .ci-otelc
+        run: go build -mod=readonly -trimpath -ldflags '-X go.opentelemetry.io/otelc/tool/util.Version=v1.1.0' -o "$RUNNER_TEMP/otelc" ./tool/cmd/otelc
+      - run: make check
+        env:
+          OTELPLAN_OTELC: ${{ runner.temp }}/otelc

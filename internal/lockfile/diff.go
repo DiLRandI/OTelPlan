@@ -56,8 +56,8 @@ func Diff(previous, current model.Lockfile) model.LockDiff {
 		if !equal(before.Attributes, target.Attributes) {
 			add(model.DiffAttribute, target.Symbol, "attributes or safety acknowledgment changed")
 		}
-		if before.Location != target.Location {
-			add(model.DiffSource, target.Symbol, "source location changed")
+		if before.Location.File != target.Location.File {
+			add(model.DiffSource, target.Symbol, "source file changed")
 		}
 	}
 	for symbol := range old {

@@ -84,7 +84,7 @@ func TestPrivateAccessorsWithPinnedBackend(t *testing.T) {
 	binary := filepath.Join(root, "probe")
 	build := exec.CommandContext(t.Context(), executable, "--rules", filepath.Join(generated, "rules"), "go", "build", "-race", "-o", binary, ".")
 	build.Dir = root
-	build.Env = append(os.Environ(), "GOWORK="+workspace, "GOFLAGS=", "OTELC_BUILD_FLAGS=", "OTELC_WORK_DIR="+root, "OTELC_RULES="+filepath.Join(generated, "rules"))
+	build.Env = append(os.Environ(), "GOTMPDIR="+t.TempDir(), "GOWORK="+workspace, "GOFLAGS=", "OTELC_BUILD_FLAGS=", "OTELC_WORK_DIR="+root, "OTELC_RULES="+filepath.Join(generated, "rules"))
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("real backend build failed: %v\n%s", err, output)
 	}

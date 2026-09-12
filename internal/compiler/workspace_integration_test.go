@@ -76,7 +76,7 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 	rules := filepath.Join(prepared.Runtime.Dir, "rules")
 	build := exec.CommandContext(t.Context(), executable, "--rules", rules, "go", "build", "-race", "-buildvcs=false", "-o", binary, ".")
 	build.Dir = prepared.Relocations[source]
-	build.Env = append(os.Environ(), "GOWORK="+prepared.WorkspaceFile, "GOFLAGS=", "OTELC_BUILD_FLAGS=", "OTELC_RULES="+rules, "OTELC_WORK_DIR="+prepared.Dir)
+	build.Env = append(os.Environ(), "GOTMPDIR="+t.TempDir(), "GOWORK="+prepared.WorkspaceFile, "GOFLAGS=", "OTELC_BUILD_FLAGS=", "OTELC_RULES="+rules, "OTELC_WORK_DIR="+prepared.Dir)
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("prepared backend build failed: %v\n%s", err, output)
 	}

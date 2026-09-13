@@ -69,7 +69,7 @@ func TestGeneratedRulesWithPinnedBackend(t *testing.T) {
 	binary := filepath.Join(root, "probe")
 	build := exec.CommandContext(t.Context(), executable, "--rules", filename, "go", "build", "-race", "-o", binary, ".")
 	build.Dir = root
-	build.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=", "OTELC_WORK_DIR="+root, "OTELC_BUILD_FLAGS=", "OTELC_RULES="+filename)
+	build.Env = append(os.Environ(), "GOTMPDIR="+t.TempDir(), "GOWORK=off", "GOFLAGS=", "OTELC_WORK_DIR="+root, "OTELC_BUILD_FLAGS=", "OTELC_RULES="+filename)
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("real backend build failed: %v\n%s", err, output)
 	}

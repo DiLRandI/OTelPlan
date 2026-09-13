@@ -1,11 +1,7 @@
 package compiler
 
 import (
-	"bytes"
-	"encoding/json"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -30,25 +26,9 @@ func TestWorkspaceModuleSelection(t *testing.T) {
 		}
 	}
 	read := func(workspace string) []model.ModuleInfo {
-		command := exec.CommandContext(t.Context(), "go", "list", "-mod=readonly", "-m", "-json", "all")
-		command.Dir = filepath.Join(root, "app")
-		command.Env = append(os.Environ(), "GOWORK="+workspace, "GOFLAGS=", "GOPROXY=off", "GOSUMDB=off")
-		data, err := command.Output()
+		modules, err := ReadModuleSelection(t.Context(), filepath.Join(root, "app"), append(os.Environ(), "GOWORK="+workspace, "GOFLAGS=", "GOPROXY=off", "GOSUMDB=off"))
 		if err != nil {
 			t.Fatal(err)
-		}
-		decoder := json.NewDecoder(bytes.NewReader(data))
-		var modules []model.ModuleInfo
-		for {
-			var module model.ModuleInfo
-			err := decoder.Decode(&module)
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			modules = append(modules, module)
 		}
 		return modules
 	}

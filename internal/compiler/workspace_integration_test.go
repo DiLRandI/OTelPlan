@@ -27,6 +27,23 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for name, content := range map[string]string{
+		"selected.go":   "//go:build otelplan_probe\n\npackage ops\nconst buildSelection = true\n",
+		"unselected.go": "//go:build !otelplan_probe\n\npackage ops\nconst buildSelection = false\n",
+	} {
+		if err := os.WriteFile(filepath.Join(source, "ops", name), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	opsPath := filepath.Join(source, "ops", "ops.go")
+	opsSource, err := os.ReadFile(opsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opsSource = []byte(strings.Replace(string(opsSource), "(size int, err error) {", "(size int, err error) {\nif !buildSelection { panic(\"wrong build selection\") }", 1))
+	if err := os.WriteFile(opsPath, opsSource, 0600); err != nil {
+		t.Fatal(err)
+	}
 	originalFiles := model.Artifacts{Dir: source}
 	if err := filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -48,7 +65,7 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	code, err := discovery.LoadContext(t.Context(), discovery.Options{Root: source, Patterns: []string{"./ops"}, Env: []string{"GOWORK=off", "GOFLAGS="}})
+	code, err := discovery.LoadContext(t.Context(), discovery.Options{Root: source, Patterns: []string{"./ops"}, BuildTags: []string{"otelplan_probe"}, Env: []string{"GOWORK=off", "GOFLAGS=-race"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,15 +91,16 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 		t.Fatal(err)
 	}
 	binary := filepath.Join(prepared.Dir, "probe")
-	env := append(os.Environ(), "GOFLAGS=")
-	runtimeSelection, err := ReadModuleSelection(t.Context(), runtime.Dir, append(append([]string(nil), env...), "GOWORK=off"))
+	env := append(os.Environ(), "GOFLAGS=-tags=wrong", "GOOS=wrong")
+	runtimeSelection, err := ReadModuleSelection(t.Context(), runtime.Dir, append(os.Environ(), "GOFLAGS=", "GOWORK=off"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	request := PreparedBuildRequest{
-		Workspace: prepared, ModuleDir: prepared.Relocations[source], Executable: executable, Backend: backend,
+		BuildEnvironment: code.EffectiveBuild,
+		Workspace:        prepared, ModuleDir: prepared.Relocations[source], Executable: executable, Backend: backend,
 		ApplicationModules: code.Modules, RuntimeModules: runtimeSelection, RuntimeOriginalDir: runtime.Dir,
-		Env: env, GoArgs: []string{"-race", "-buildvcs=false", "-o", binary, "."},
+		Env: env, GoArgs: []string{"-buildvcs=false", "-o", binary, "."},
 	}
 	for _, change := range []func(*PreparedBuildRequest){
 		func(r *PreparedBuildRequest) { r.Backend.Digest = "sha256:" + strings.Repeat("0", 64) },

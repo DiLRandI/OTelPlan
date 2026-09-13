@@ -12,6 +12,7 @@ import (
 )
 
 type PreparedBuildRequest struct {
+	BuildEnvironment   model.BuildEnvironment
 	Workspace          PreparedWorkspace
 	ModuleDir          string
 	Executable         string
@@ -28,6 +29,10 @@ type PreparedBuildRequest struct {
 func BuildPrepared(ctx context.Context, request PreparedBuildRequest) error {
 	if len(request.ApplicationModules) == 0 || len(request.RuntimeModules) == 0 || request.Backend.Digest == "" {
 		return fmt.Errorf("build requires verified module and backend identities")
+	}
+	baseEnv, buildFlags, err := RecordedBuildEnvironment(request.Env, request.BuildEnvironment)
+	if err != nil {
+		return err
 	}
 	known := false
 	for _, dir := range request.Workspace.Relocations {
@@ -62,7 +67,10 @@ func BuildPrepared(ctx context.Context, request PreparedBuildRequest) error {
 	}
 	defer func() { _ = os.RemoveAll(temporary) }()
 	rules := filepath.Join(request.Workspace.Runtime.Dir, "rules")
-	env := append(append([]string(nil), request.Env...), "GOWORK="+request.Workspace.WorkspaceFile, "GOTMPDIR="+temporary, "OTELC_RULES="+rules, "OTELC_WORK_DIR="+request.Workspace.Dir, "OTELC_BUILD_FLAGS=")
+	env := append(baseEnv, "GOWORK="+request.Workspace.WorkspaceFile, "GOTMPDIR="+temporary, "OTELC_RULES="+rules, "OTELC_WORK_DIR="+request.Workspace.Dir, "OTELC_BUILD_FLAGS=")
+	if err := verifyRecordedGoEnvironment(ctx, request.ModuleDir, env, request.BuildEnvironment); err != nil {
+		return err
+	}
 	selected, err := ReadModuleSelection(ctx, request.ModuleDir, env)
 	if err != nil {
 		return err
@@ -73,7 +81,8 @@ func BuildPrepared(ctx context.Context, request PreparedBuildRequest) error {
 	if err := CheckModuleSelection(request.RuntimeModules, selected, map[string]string{request.RuntimeOriginalDir: request.Workspace.Runtime.Dir}); err != nil {
 		return err
 	}
-	args := append([]string{"--rules", rules, "go", "build"}, request.GoArgs...)
+	args := append([]string{"--rules", rules, "go", "build"}, buildFlags...)
+	args = append(args, request.GoArgs...)
 	command := exec.CommandContext(ctx, executable, args...)
 	command.Dir = request.ModuleDir
 	command.Env = env

@@ -91,7 +91,7 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 	if err := json.Unmarshal(output, &build); err != nil {
 		return nil, nil, fmt.Errorf("decode Go build environment: %w", err)
 	}
-	parsed, err := parseGOFLAGS(build.GOFLAGS)
+	parsed, err := parseGOFLAGS(build.GOFLAGS, opts.BuildFlags...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -113,6 +113,12 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 		mode = parsed.moduleMode
 	} else if vendorErr == nil {
 		mode = "vendor"
+	}
+	for _, flag := range opts.BuildFlags {
+		name, _, _ := strings.Cut(flag, "=")
+		if name == "-tags" || name == "--tags" {
+			opts.BuildTags = nil
+		}
 	}
 	if len(opts.BuildTags) == 0 {
 		opts.BuildTags = parsed.tags
@@ -220,11 +226,12 @@ func companionSum(modfile string) string {
 
 // parseGOFLAGS uses the same whole-argument quoting accepted by Go's command
 // tools, while retaining only flags relevant to package analysis.
-func parseGOFLAGS(raw string) (goFlags, error) {
+func parseGOFLAGS(raw string, overrides ...string) (goFlags, error) {
 	tokens, err := splitQuoted(raw)
 	if err != nil {
 		return goFlags{}, fmt.Errorf("invalid GOFLAGS: %w", err)
 	}
+	tokens = append(tokens, overrides...)
 	var out goFlags
 	for i := 0; i < len(tokens); i++ {
 		token := tokens[i]

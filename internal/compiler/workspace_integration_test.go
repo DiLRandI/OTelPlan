@@ -27,6 +27,13 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	buildDir := filepath.Join(source, "cmd", "probe")
+	if err := os.MkdirAll(buildDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(source, "main.go"), filepath.Join(buildDir, "main.go")); err != nil {
+		t.Fatal(err)
+	}
 	for name, content := range map[string]string{
 		"selected.go":   "//go:build otelplan_probe\n\npackage ops\nconst buildSelection = true\n",
 		"unselected.go": "//go:build !otelplan_probe\n\npackage ops\nconst buildSelection = false\n",
@@ -101,9 +108,13 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	preparedDir, err := prepared.BuildDirectory(buildDir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	request := PreparedBuildRequest{
 		BuildEnvironment: code.EffectiveBuild,
-		Workspace:        prepared, ModuleDir: prepared.Relocations[source], Executable: executable, Backend: backend,
+		Workspace:        prepared, ModuleDir: preparedDir, Executable: executable, Backend: backend,
 		ApplicationModules: code.Modules, RuntimeModules: runtimeSelection, RuntimeOriginalDir: runtime.Dir,
 		Env: env, GoArgs: []string{"-o", binary, "."},
 	}

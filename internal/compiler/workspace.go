@@ -5,13 +5,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strings"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
 type WorkspaceRequest struct {
-	SourceDirs           []string
+	SourceDirs []string
+	// AlternateModFiles maps original module directories to absolute .mod files.
+	AlternateModFiles    map[string]string
 	OriginalWorkspaceDir string
 	Workspace            []byte
 	WorkspaceSums        []byte
@@ -42,6 +46,11 @@ func PrepareWorkspace(ctx context.Context, request WorkspaceRequest) (PreparedWo
 	if len(dirs) == 0 {
 		return PreparedWorkspace{}, fmt.Errorf("build workspace requires application modules")
 	}
+	for dir, path := range request.AlternateModFiles {
+		if !slices.Contains(dirs, dir) || !filepath.IsAbs(path) || !strings.HasSuffix(path, ".mod") {
+			return PreparedWorkspace{}, fmt.Errorf("alternate module file requires a known module and an absolute .mod path")
+		}
+	}
 	stagingParent := request.Parent
 	if stagingParent == "" {
 		stagingParent = os.TempDir()
@@ -70,6 +79,11 @@ func PrepareWorkspace(ctx context.Context, request WorkspaceRequest) (PreparedWo
 	}
 	for _, dir := range dirs {
 		path := filepath.Join(result.Relocations[dir], "go.mod")
+		if alternate, ok := request.AlternateModFiles[dir]; ok {
+			if err := installAlternateModuleFiles(alternate, result.Relocations[dir]); err != nil {
+				return PreparedWorkspace{}, err
+			}
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return PreparedWorkspace{}, fmt.Errorf("read copied module manifest: %w", err)

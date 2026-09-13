@@ -34,7 +34,7 @@ func TestPrepareWorkspaceAlternateModfile(t *testing.T) {
 	runtimeModule := []byte("module example.com/runtime\n\ngo 1.25.0\n")
 	write(filepath.Join(runtimeDir, "go.mod"), string(runtimeModule))
 	runtime := model.Artifacts{Dir: runtimeDir, Files: []model.ArtifactFile{{Path: "go.mod", Digest: artifactDigest(runtimeModule)}}}
-	request := WorkspaceRequest{SourceDirs: []string{source, dependency}, OriginalWorkspaceDir: source, Workspace: []byte("go 1.25.0\nuse .\n"), Runtime: runtime, Parent: t.TempDir(), AlternateModFiles: map[string]string{source: alternatePath}}
+	request := WorkspaceRequest{OriginalWorkspaceDir: source, Workspace: []byte("go 1.25.0\nuse .\n"), Runtime: runtime, Parent: t.TempDir(), AlternateModFiles: map[string]string{source: alternatePath}}
 	for _, sums := range []string{"", "alternate checksums\n"} {
 		if sums != "" {
 			write(filepath.Join(alternateDir, "build.sum"), sums)

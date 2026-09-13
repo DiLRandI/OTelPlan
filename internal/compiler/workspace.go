@@ -31,12 +31,20 @@ type PreparedWorkspace struct {
 }
 
 // PrepareWorkspace creates disposable module and runtime copies. The caller
-// supplies every workspace/local-replacement module and owns result.Dir cleanup.
+// may supply an explicit source directory list and owns result.Dir cleanup.
+// Otherwise the directories are collected from workspace and module manifests.
 func PrepareWorkspace(ctx context.Context, request WorkspaceRequest) (PreparedWorkspace, error) {
 	if err := VerifyArtifacts(request.Runtime); err != nil {
 		return PreparedWorkspace{}, err
 	}
 	dirs := append([]string(nil), request.SourceDirs...)
+	if len(dirs) == 0 {
+		var err error
+		dirs, err = CollectWorkspaceSources(ctx, request.Workspace, request.OriginalWorkspaceDir, request.AlternateModFiles)
+		if err != nil {
+			return PreparedWorkspace{}, err
+		}
+	}
 	sort.Strings(dirs)
 	for i, dir := range dirs {
 		if !filepath.IsAbs(dir) || filepath.Clean(dir) != dir || (i > 0 && dirs[i-1] == dir) {

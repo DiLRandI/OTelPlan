@@ -65,7 +65,7 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	code, err := discovery.LoadContext(t.Context(), discovery.Options{Root: source, Patterns: []string{"./ops"}, BuildTags: []string{"otelplan_probe"}, Env: []string{"GOWORK=off", "GOFLAGS=-race"}})
+	code, err := discovery.LoadContext(t.Context(), discovery.Options{Root: source, Patterns: []string{"./ops"}, BuildTags: []string{"otelplan_probe"}, Env: []string{"GOWORK=off", "GOFLAGS=-race -buildvcs=false"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,11 +100,13 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 		BuildEnvironment: code.EffectiveBuild,
 		Workspace:        prepared, ModuleDir: prepared.Relocations[source], Executable: executable, Backend: backend,
 		ApplicationModules: code.Modules, RuntimeModules: runtimeSelection, RuntimeOriginalDir: runtime.Dir,
-		Env: env, GoArgs: []string{"-buildvcs=false", "-o", binary, "."},
+		Env: env, GoArgs: []string{"-o", binary, "."},
 	}
 	for _, change := range []func(*PreparedBuildRequest){
 		func(r *PreparedBuildRequest) { r.Backend.Digest = "sha256:" + strings.Repeat("0", 64) },
 		func(r *PreparedBuildRequest) { r.ModuleDir = source },
+		func(r *PreparedBuildRequest) { r.GoArgs = []string{"-race=false", "-o", binary, "."} },
+		func(r *PreparedBuildRequest) { r.GoArgs = []string{"-tags=wrong", "-o", binary, "."} },
 		func(r *PreparedBuildRequest) { r.ApplicationModules = nil },
 		func(r *PreparedBuildRequest) {
 			r.ApplicationModules = append([]model.ModuleInfo(nil), r.ApplicationModules...)

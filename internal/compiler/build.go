@@ -30,6 +30,9 @@ func BuildPrepared(ctx context.Context, request PreparedBuildRequest) error {
 	if len(request.ApplicationModules) == 0 || len(request.RuntimeModules) == 0 || request.Backend.Digest == "" {
 		return fmt.Errorf("build requires verified module and backend identities")
 	}
+	if err := ValidateBuildArguments(request.GoArgs, request.BuildEnvironment); err != nil {
+		return err
+	}
 	baseEnv, buildFlags, err := RecordedBuildEnvironment(request.Env, request.BuildEnvironment)
 	if err != nil {
 		return err

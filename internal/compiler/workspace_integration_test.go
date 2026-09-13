@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DiLRandI/OTelPlan/internal/backend/otelc"
@@ -73,26 +74,36 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 		t.Fatal(err)
 	}
 	binary := filepath.Join(prepared.Dir, "probe")
-	rules := filepath.Join(prepared.Runtime.Dir, "rules")
-	build := exec.CommandContext(t.Context(), executable, "--rules", rules, "go", "build", "-race", "-buildvcs=false", "-o", binary, ".")
-	build.Dir = prepared.Relocations[source]
-	build.Env = append(os.Environ(), "GOTMPDIR="+t.TempDir(), "GOWORK="+prepared.WorkspaceFile, "GOFLAGS=", "OTELC_BUILD_FLAGS=", "OTELC_RULES="+rules, "OTELC_WORK_DIR="+prepared.Dir)
-	selected, err := ReadModuleSelection(t.Context(), build.Dir, build.Env)
+	env := append(os.Environ(), "GOFLAGS=")
+	runtimeSelection, err := ReadModuleSelection(t.Context(), runtime.Dir, append(append([]string(nil), env...), "GOWORK=off"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := CheckModuleSelection(code.Modules, selected, prepared.Relocations); err != nil {
-		t.Fatal(err)
+	request := PreparedBuildRequest{
+		Workspace: prepared, ModuleDir: prepared.Relocations[source], Executable: executable, Backend: backend,
+		ApplicationModules: code.Modules, RuntimeModules: runtimeSelection, RuntimeOriginalDir: runtime.Dir,
+		Env: env, GoArgs: []string{"-race", "-buildvcs=false", "-o", binary, "."},
 	}
-	runtimeSelection, err := ReadModuleSelection(t.Context(), runtime.Dir, append(os.Environ(), "GOWORK=off", "GOFLAGS="))
-	if err != nil {
-		t.Fatal(err)
+	for _, change := range []func(*PreparedBuildRequest){
+		func(r *PreparedBuildRequest) { r.Backend.Digest = "sha256:" + strings.Repeat("0", 64) },
+		func(r *PreparedBuildRequest) { r.ModuleDir = source },
+		func(r *PreparedBuildRequest) { r.ApplicationModules = nil },
+		func(r *PreparedBuildRequest) {
+			r.ApplicationModules = append([]model.ModuleInfo(nil), r.ApplicationModules...)
+			r.ApplicationModules[0].Version = "v999.0.0"
+		},
+	} {
+		invalid := request
+		change(&invalid)
+		if err := BuildPrepared(t.Context(), invalid); err == nil {
+			t.Fatal("accepted invalid build inputs")
+		}
+		if _, err := os.Stat(binary); !os.IsNotExist(err) {
+			t.Fatal("invalid inputs produced a binary")
+		}
 	}
-	if err := CheckModuleSelection(runtimeSelection, selected, map[string]string{runtime.Dir: prepared.Runtime.Dir}); err != nil {
+	if err := BuildPrepared(t.Context(), request); err != nil {
 		t.Fatal(err)
-	}
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("prepared backend build failed: %v\n%s", err, output)
 	}
 	output, err := exec.CommandContext(t.Context(), binary).Output()
 	if err != nil {

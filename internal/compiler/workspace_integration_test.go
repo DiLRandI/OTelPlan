@@ -86,7 +86,12 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := PrepareWorkspace(t.Context(), WorkspaceRequest{OriginalWorkspaceDir: source, Workspace: []byte("go 1.27\nuse .\n"), Runtime: runtime, Parent: t.TempDir()})
+	workspaceRequest, err := WorkspaceForAnalysis(code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaceRequest.Runtime, workspaceRequest.Parent = runtime, t.TempDir()
+	prepared, err := PrepareWorkspace(t.Context(), workspaceRequest)
 	if err != nil {
 		t.Fatal(err)
 	}

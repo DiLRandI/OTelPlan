@@ -147,7 +147,11 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 	if err != nil || artifactDigest(data) != built.Digest {
 		t.Fatal("build output identity mismatch")
 	}
-	output, err := exec.CommandContext(t.Context(), built.File).Output()
+	published := filepath.Join(t.TempDir(), "bin", "probe")
+	if err := PublishBuildArtifact(built, published); err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.CommandContext(t.Context(), published).Output()
 	if err != nil {
 		t.Fatal(err)
 	}

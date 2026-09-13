@@ -97,7 +97,11 @@ func BuildResolved(ctx context.Context, request ResolvedBuildRequest) (BuildArti
 		return BuildArtifact{}, err
 	}
 	output := filepath.Join(prepared.Dir, "output")
-	args := append([]string{"-o", output}, request.GoArgs...)
+	relocatedArgs, err := prepared.RelocateBuildArguments(request.GoArgs, workingDir)
+	if err != nil {
+		return BuildArtifact{}, err
+	}
+	args := append([]string{"-o", output}, relocatedArgs...)
 	err = BuildPrepared(ctx, PreparedBuildRequest{BuildEnvironment: request.Code.EffectiveBuild, Workspace: prepared, ModuleDir: copiedDir, Executable: request.Executable, Backend: request.Backend, ApplicationModules: request.Code.Modules, RuntimeModules: runtimeSelection, RuntimeOriginalDir: runtime.Dir, Env: env, GoArgs: args})
 	if err != nil {
 		return BuildArtifact{}, err

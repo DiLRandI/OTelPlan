@@ -138,7 +138,7 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 			t.Fatal("invalid inputs produced a binary")
 		}
 	}
-	built, err := BuildResolved(t.Context(), ResolvedBuildRequest{Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: "test", WorkingDir: buildDir, Parent: t.TempDir(), Env: env, GoArgs: []string{"."}, Offline: true})
+	built, err := BuildResolved(t.Context(), ResolvedBuildRequest{Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: "test", WorkingDir: buildDir, Parent: t.TempDir(), Env: env, GoArgs: []string{buildDir}, Offline: true})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -27,6 +27,13 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	buildDir := filepath.Join(source, "cmd", "probe")
+	if err := os.MkdirAll(buildDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(source, "main.go"), filepath.Join(buildDir, "main.go")); err != nil {
+		t.Fatal(err)
+	}
 	for name, content := range map[string]string{
 		"selected.go":   "//go:build otelplan_probe\n\npackage ops\nconst buildSelection = true\n",
 		"unselected.go": "//go:build !otelplan_probe\n\npackage ops\nconst buildSelection = false\n",
@@ -86,7 +93,12 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := PrepareWorkspace(t.Context(), WorkspaceRequest{OriginalWorkspaceDir: source, Workspace: []byte("go 1.27\nuse .\n"), Runtime: runtime, Parent: t.TempDir()})
+	workspaceRequest, err := WorkspaceForAnalysis(code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaceRequest.Runtime, workspaceRequest.Parent = runtime, t.TempDir()
+	prepared, err := PrepareWorkspace(t.Context(), workspaceRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,9 +108,13 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	preparedDir, err := prepared.BuildDirectory(buildDir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	request := PreparedBuildRequest{
 		BuildEnvironment: code.EffectiveBuild,
-		Workspace:        prepared, ModuleDir: prepared.Relocations[source], Executable: executable, Backend: backend,
+		Workspace:        prepared, ModuleDir: preparedDir, Executable: executable, Backend: backend,
 		ApplicationModules: code.Modules, RuntimeModules: runtimeSelection, RuntimeOriginalDir: runtime.Dir,
 		Env: env, GoArgs: []string{"-o", binary, "."},
 	}
@@ -122,10 +138,20 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 			t.Fatal("invalid inputs produced a binary")
 		}
 	}
-	if err := BuildPrepared(t.Context(), request); err != nil {
+	built, err := BuildResolved(t.Context(), ResolvedBuildRequest{Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: "test", WorkingDir: buildDir, Parent: t.TempDir(), Env: env, GoArgs: []string{buildDir}, Offline: true})
+	if err != nil {
 		t.Fatal(err)
 	}
-	output, err := exec.CommandContext(t.Context(), binary).Output()
+	defer func() { _ = os.RemoveAll(built.Dir) }()
+	data, err := os.ReadFile(built.File)
+	if err != nil || artifactDigest(data) != built.Digest {
+		t.Fatal("build output identity mismatch")
+	}
+	published := filepath.Join(t.TempDir(), "bin", "probe")
+	if err := PublishBuildArtifact(built, published); err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.CommandContext(t.Context(), published).Output()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -37,14 +37,8 @@ func BuildPrepared(ctx context.Context, request PreparedBuildRequest) error {
 	if err != nil {
 		return err
 	}
-	known := false
-	for _, dir := range request.Workspace.Relocations {
-		if dir == request.ModuleDir && withinTree(request.Workspace.Dir, dir) {
-			known = true
-		}
-	}
-	if !known || !filepath.IsAbs(request.ModuleDir) {
-		return fmt.Errorf("build directory is not a prepared application module")
+	if err := request.Workspace.validateBuildDirectory(request.ModuleDir); err != nil {
+		return err
 	}
 	if err := VerifyArtifacts(request.Workspace.Runtime); err != nil {
 		return err

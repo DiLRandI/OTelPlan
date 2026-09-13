@@ -11,9 +11,11 @@ import (
 )
 
 type Options struct {
-	Root                string
-	Patterns            []string
-	BuildTags           []string
+	Root      string
+	Patterns  []string
+	BuildTags []string
+	// BuildFlags override ambient GOFLAGS; value flags use -name=value.
+	BuildFlags          []string
 	IncludeTests        bool
 	IncludeDependencies bool
 	GOOS                string

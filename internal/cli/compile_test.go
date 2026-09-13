@@ -91,3 +91,31 @@ func TestCompileCLIUsage(t *testing.T) {
 		}
 	}
 }
+
+func TestCompileOfflineDisablesProxyBypass(t *testing.T) {
+	executable := os.Getenv("OTELPLAN_OTELC")
+	if executable == "" {
+		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
+	}
+	realGo, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapperDir := t.TempDir()
+	marker := filepath.Join(wrapperDir, "checked")
+	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
+	script := "#!/bin/sh\nif [ \"$1\" = test ]; then\n [ \"$GOPROXY\" = off ] && [ \"$GONOPROXY\" = none ] && [ \"$GOSUMDB\" = off ] || exit 91\n touch " + quote(marker) + "\nfi\nexec " + quote(realGo) + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(wrapperDir, "go"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("GONOPROXY", "*")
+	root, _ := cliFixture(t)
+	var out, errout bytes.Buffer
+	if code := Run([]string{"compile", "--root", root, "--offline", "--format=json"}, &out, &errout); code != 0 {
+		t.Fatalf("offline compile exit=%d: %s %s", code, &out, &errout)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatal("generated-source compilation did not enforce offline environment")
+	}
+}

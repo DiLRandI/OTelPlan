@@ -54,7 +54,7 @@ func compileCommand(opts options, p *model.Policy, code *model.CodeModel, plan m
 	command.Dir = staged.Dir
 	command.Env = append(env, "GOWORK=off")
 	if opts.offline {
-		command.Env = append(command.Env, "GOPROXY=off", "GOSUMDB=off", "GOTOOLCHAIN=local")
+		command.Env = append(command.Env, "GOPROXY=off", "GONOPROXY=none", "GOSUMDB=off", "GOTOOLCHAIN=local")
 	}
 	if err := command.Run(); err != nil {
 		return fail(8, "generated source compilation failed")

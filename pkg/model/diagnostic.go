@@ -27,6 +27,8 @@ const (
 	CodeCaptureNotAllowed      Code = "OTP4005"
 	CodeBackendUnsupported     Code = "OTP5001"
 	CodeBackendVersionMismatch Code = "OTP5002"
+	CodeCompilationFailed      Code = "OTP5003"
+	CodeArtifactOutput         Code = "OTP5004"
 	CodeStaleLockfile          Code = "OTP6001"
 )
 

@@ -30,6 +30,8 @@ type response struct {
 }
 
 type options struct {
+	output                                                  string
+	outputSet, clean                                        bool
 	strict, offline, check, dryRun, allowLargePlan          bool
 	configSet                                               bool
 	root, config, format                                    string
@@ -49,7 +51,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		positionals = []string{"help"}
 	}
 	if len(positionals) == 0 {
-		return usageError(opts, "", "usage: otelplan [global flags] <scan|inspect|explain|validate|lock|diff|version> [arguments]", stdout, stderr)
+		return usageError(opts, "", "usage: otelplan [global flags] <scan|inspect|explain|validate|lock|diff|compile|version> [arguments]", stdout, stderr)
 	}
 	command := positionals[0]
 	rest := positionals[1:]
@@ -69,9 +71,15 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	if (opts.dependencies || opts.interfaces) && command != "scan" {
 		return fail(2, model.CodeInvalidPolicy, "--dependencies and --interfaces are supported by scan")
 	}
-	policyCommand := command == "inspect" || command == "explain" || command == "validate" || command == "lock" || command == "diff"
+	policyCommand := command == "inspect" || command == "explain" || command == "validate" || command == "lock" || command == "diff" || command == "compile"
 	if (opts.strict || opts.allowLargePlan || opts.configSet) && !policyCommand {
 		return fail(2, model.CodeInvalidPolicy, "--config, --strict, and --allow-large-plan require a policy command")
+	}
+	if command == "compile" && opts.output == "" {
+		return fail(2, model.CodeInvalidPolicy, "--output must not be empty")
+	}
+	if (opts.outputSet || opts.clean) && command != "compile" {
+		return fail(2, model.CodeInvalidPolicy, "--output and --clean are supported by compile")
 	}
 	if opts.verbose {
 		return fail(2, model.CodeInvalidPolicy, "--verbose output is not implemented")
@@ -88,7 +96,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		if len(rest) > 0 {
 			return fail(2, model.CodeInvalidPolicy, "help takes no positional arguments")
 		}
-		output.Data = "usage: otelplan [--root path] [--config path] [--format text|json] <scan|inspect|explain|validate|lock|diff|version>\nscan [packages...] lists Go symbols; inspect resolves policy; explain <symbol> shows rule decisions"
+		output.Data = "usage: otelplan [--root path] [--config path] [--format text|json] <scan|inspect|explain|validate|lock|diff|compile|version>\nscan [packages...] lists Go symbols; inspect resolves policy; explain <symbol> shows rule decisions"
 	case "version":
 		if len(rest) > 0 {
 			return fail(2, model.CodeInvalidPolicy, "version takes no positional arguments")
@@ -100,7 +108,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			return fail(4, model.CodeUnresolvedSymbol, err.Error())
 		}
 		output.Data = inventory
-	case "inspect", "explain", "validate", "lock", "diff":
+	case "inspect", "explain", "validate", "lock", "diff", "compile":
 		if command == "explain" && len(rest) != 1 {
 			return fail(2, model.CodeInvalidPolicy, "explain requires one canonical symbol")
 		}
@@ -156,7 +164,11 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			}
 		} else if output.OK {
 			var diags model.DiagnosticList
-			output.Data, exitCode, diags = lockCommand(command, opts, p, inventory, result.Plan)
+			if command == "compile" {
+				output.Data, exitCode, diags = compileCommand(opts, p, inventory, result.Plan)
+			} else {
+				output.Data, exitCode, diags = lockCommand(command, opts, p, inventory, result.Plan)
+			}
 			output.Diagnostics = append(output.Diagnostics, diags...)
 			output.OK = exitCode == 0
 		}
@@ -174,6 +186,8 @@ func parse(args []string) (options, []string, error) {
 	var opts options
 	flags := flag.NewFlagSet("otelplan", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
+	flags.StringVar(&opts.output, "output", ".otelplan/build", "artifact output relative to root")
+	flags.BoolVar(&opts.clean, "clean", false, "replace verified artifact output")
 	flags.StringVar(&opts.root, "root", ".", "project root")
 	flags.StringVar(&opts.config, "config", "otelplan.yaml", "policy path relative to root")
 	flags.StringVar(&opts.format, "format", "text", "text or json")
@@ -238,6 +252,9 @@ func parse(args []string) (options, []string, error) {
 		return opts, positionals, fmt.Errorf("format must be text or json")
 	}
 	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "output" {
+			opts.outputSet = true
+		}
 		if f.Name == "config" {
 			opts.configSet = true
 		}
@@ -309,6 +326,8 @@ func emit(out io.Writer, opts options, reply response) error {
 		for _, decision := range data.Decisions {
 			fmt.Fprintf(&text, "  %s %s: %s\n", decision.RuleID, decision.Stage, decision.Reason)
 		}
+	case compileSummary:
+		fmt.Fprintf(&text, "%s artifacts=%d\n", data.Path, data.Files)
 	case lockSummary:
 		fmt.Fprintf(&text, "%s targets=%d changed=%t dry-run=%t\n", data.Path, data.Targets, data.Changed, data.DryRun)
 	case model.LockDiff:

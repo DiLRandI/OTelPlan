@@ -1,0 +1,15 @@
+apiVersion: otelplan.io/v1alpha1
+kind: InstrumentationPlan
+backend: {name: otelc, version: v1.1.0}
+project: {packages: [./...]}
+rules:
+- id: checkout
+  match:
+    packages: [example.com/architecture/internal/order]
+    functions: [Submit]
+  span: {name: checkout}
+- id: payment
+  match:
+    packages: [example.com/architecture/internal/payment]
+    functions: [Authorize]
+  span: {name: payment}

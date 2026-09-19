@@ -143,15 +143,19 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = os.RemoveAll(built.Dir) }()
-	if built.DefaultName != "probe" {
-		t.Fatalf("unexpected default output: %s", built.DefaultName)
+	if len(built.Files) != 1 {
+		t.Fatal("expected a single executable")
 	}
-	data, err := os.ReadFile(built.File)
-	if err != nil || artifactDigest(data) != built.Digest {
+	artifact := built.Files[0]
+	if artifact.DefaultName != "probe" {
+		t.Fatalf("unexpected default output: %s", artifact.DefaultName)
+	}
+	data, err := os.ReadFile(artifact.File)
+	if err != nil || artifactDigest(data) != artifact.Digest {
 		t.Fatal("build output identity mismatch")
 	}
 	published := filepath.Join(t.TempDir(), "bin", "probe")
-	if err := PublishBuildArtifact(built, published); err != nil {
+	if err := PublishBuildArtifact(artifact, published); err != nil {
 		t.Fatal(err)
 	}
 	output, err := exec.CommandContext(t.Context(), published).Output()

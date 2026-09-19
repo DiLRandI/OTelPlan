@@ -338,7 +338,15 @@ func emit(out io.Writer, opts options, reply response) error {
 			fmt.Fprintf(&text, "  %s %s: %s\n", decision.RuleID, decision.Stage, decision.Reason)
 		}
 	case buildSummary:
-		fmt.Fprintf(&text, "built %s %s\n", data.Path, data.Digest)
+		if data.Path != "" {
+			fmt.Fprintf(&text, "built %s %s\n", data.Path, data.Digest)
+		}
+		for _, file := range data.Files {
+			fmt.Fprintf(&text, "built %s %s\n", file.Path, file.Digest)
+		}
+		if data.Path == "" && len(data.Files) == 0 {
+			fmt.Fprintln(&text, "build succeeded; no executable output")
+		}
 	case compileSummary:
 		fmt.Fprintf(&text, "%s artifacts=%d\n", data.Path, data.Files)
 	case lockSummary:

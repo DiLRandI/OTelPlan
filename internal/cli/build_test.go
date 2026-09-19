@@ -30,6 +30,18 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "otelplan.yaml"), policy, 0600); err != nil {
 		t.Fatal(err)
 	}
+
+	second := filepath.Join(root, "cmd", "second")
+	if err := os.MkdirAll(second, 0700); err != nil {
+		t.Fatal(err)
+	}
+	mainSource, err := os.ReadFile(filepath.Join(root, "main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(second, "main.go"), mainSource, 0600); err != nil {
+		t.Fatal(err)
+	}
 	original := map[string][]byte{}
 	if err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -68,6 +80,76 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 	var traces struct{ Spans []struct{ Name string } }
 	if err := json.Unmarshal(output, &traces); err != nil || len(traces.Spans) != 5 {
 		t.Fatalf("missing instrumented spans: %s", output)
+	}
+
+	for _, existing := range []bool{false, true} {
+		destination := filepath.Join(t.TempDir(), "binaries")
+		argument := destination + string(os.PathSeparator)
+		if existing {
+			if err := os.Mkdir(destination, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(destination, "keep"), []byte("keep"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			argument = destination
+		}
+		var out, errout bytes.Buffer
+		if exit := Run([]string{"build", "--root", root, "--format=json", "--offline", "--", "-buildvcs=false", "-o", argument, ".", "./cmd/second"}, &out, &errout); exit != 0 {
+			t.Fatalf("directory build exit=%d: %s %s", exit, &out, &errout)
+		}
+		var directoryReply struct {
+			OK   bool `json:"ok"`
+			Data struct {
+				Files []struct{ Path, Digest string } `json:"files"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(out.Bytes(), &directoryReply); err != nil || !directoryReply.OK || len(directoryReply.Data.Files) != 2 {
+			t.Fatalf("invalid directory response: %s", &out)
+		}
+		for _, file := range directoryReply.Data.Files {
+			if filepath.Dir(file.Path) != destination || file.Digest == "" {
+				t.Fatalf("invalid published file: %+v", file)
+			}
+			output, err := exec.Command(file.Path).Output()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(output, &traces); err != nil || len(traces.Spans) != 5 {
+				t.Fatalf("missing instrumented spans: %s", output)
+			}
+		}
+
+		if existing {
+			first, last := directoryReply.Data.Files[0].Path, directoryReply.Data.Files[1].Path
+			previous := filepath.Join(destination, "previous")
+			if err := os.WriteFile(previous, []byte("previous"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Rename(previous, first); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Remove(last); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Mkdir(last, 0700); err != nil {
+				t.Fatal(err)
+			}
+			out.Reset()
+			errout.Reset()
+			if exit := Run([]string{"build", "--root", root, "--format=json", "--offline", "--", "-buildvcs=false", "-o", argument, ".", "./cmd/second"}, &out, &errout); exit != 1 {
+				t.Fatalf("invalid destination exit=%d: %s", exit, &out)
+			}
+			if data, err := os.ReadFile(first); err != nil || string(data) != "previous" {
+				t.Fatal("invalid destination partially replaced output")
+			}
+		}
+		if existing {
+			data, err := os.ReadFile(filepath.Join(destination, "keep"))
+			if err != nil || string(data) != "keep" {
+				t.Fatal("changed unrelated output directory file")
+			}
+		}
 	}
 	var guarded, guardErr bytes.Buffer
 	if exit := Run([]string{"build", "--root", root, "--format=json", "--", "-o", "go.mod", "."}, &guarded, &guardErr); exit != 2 {
@@ -190,6 +272,22 @@ func TestBuildCLIFromWorkspaceRoot(t *testing.T) {
 		got, err := os.ReadFile(path)
 		if err != nil || !bytes.Equal(got, want) {
 			t.Fatalf("changed source file %s", path)
+		}
+	}
+}
+
+func TestBuildSummaryText(t *testing.T) {
+	for _, tc := range []struct {
+		data buildSummary
+		want string
+	}{
+		{buildSummary{}, "build succeeded; no executable output\n"},
+		{buildSummary{Path: "app", Digest: "one"}, "built app one\n"},
+		{buildSummary{Files: []buildFile{{Path: "bin/first", Digest: "one"}, {Path: "bin/second", Digest: "two"}}}, "built bin/first one\nbuilt bin/second two\n"},
+	} {
+		var out bytes.Buffer
+		if err := emit(&out, options{format: "text"}, response{OK: true, Data: tc.data}); err != nil || out.String() != tc.want {
+			t.Fatalf("output=%q, %v; want %q", out.String(), err, tc.want)
 		}
 	}
 }

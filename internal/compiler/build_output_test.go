@@ -73,3 +73,28 @@ func TestPublishBuildArtifact(t *testing.T) {
 		t.Fatal("accepted symlink artifact")
 	}
 }
+
+func TestReadBuildArtifact(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app")
+	data := []byte("binary")
+	if err := os.WriteFile(path, data, 0700); err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := readBuildArtifact(dir, path, "app")
+	if err != nil || artifact.Dir != dir || artifact.File != path || artifact.Digest != artifactDigest(data) || artifact.DefaultName != "app" {
+		t.Fatalf("artifact=%+v, %v", artifact, err)
+	}
+	for _, invalid := range []string{dir, filepath.Join(dir, "missing")} {
+		if _, err := readBuildArtifact(dir, invalid, "app"); err == nil {
+			t.Fatal("accepted non-file output")
+		}
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(path, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if _, err := readBuildArtifact(dir, link, "app"); err == nil {
+		t.Fatal("accepted symlink output")
+	}
+}

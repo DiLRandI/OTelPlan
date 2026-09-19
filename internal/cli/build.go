@@ -12,7 +12,13 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+type buildFile struct {
+	Path   string `json:"path"`
+	Digest string `json:"digest"`
+}
+
 type buildSummary struct {
+	Files   []buildFile       `json:"files,omitempty"`
 	Path    string            `json:"path,omitempty"`
 	Digest  string            `json:"digest,omitempty"`
 	Backend model.LockBackend `json:"backend"`
@@ -37,31 +43,53 @@ func buildCommand(opts options, args buildArguments, p *model.Policy, code *mode
 	if destination != "" && !filepath.IsAbs(destination) {
 		destination = filepath.Join(opts.root, destination)
 	}
-	if protectedBuildOutput(destination, opts, code) {
+	directoryOutput := strings.HasSuffix(args.Output, "/") || strings.HasSuffix(args.Output, "\\")
+	if info, err := os.Stat(destination); err == nil && info.IsDir() {
+		directoryOutput = true
+	}
+	if !directoryOutput && protectedBuildOutput(destination, opts, code) {
 		return fail(2, model.CodeInvalidPolicy, "build output must not replace Go source or module files")
 	}
-	built, err := compiler.BuildResolved(context.Background(), compiler.ResolvedBuildRequest{Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: Version, Env: os.Environ(), GoArgs: args.GoArgs, Offline: opts.offline, DefaultOutput: destination == "", Packages: args.Packages})
+	built, err := compiler.BuildResolved(context.Background(), compiler.ResolvedBuildRequest{Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: Version, Env: os.Environ(), GoArgs: args.GoArgs, Offline: opts.offline, DefaultOutput: destination == "", DirectoryOutput: directoryOutput, Packages: args.Packages})
 	if err != nil {
 		return fail(8, model.CodeCompilationFailed, "isolated backend build failed")
 	}
 	defer func() { _ = os.RemoveAll(built.Dir) }()
-	if built.File == "" {
-		return buildSummary{Backend: backend}, 0, nil
+
+	result := buildSummary{Backend: backend}
+	destinations := make([]string, len(built.Files))
+	for i, artifact := range built.Files {
+		target := destination
+		if target == "" {
+			target = filepath.Join(opts.root, artifact.DefaultName)
+		} else if directoryOutput {
+			target = filepath.Join(target, artifact.DefaultName)
+		}
+		target, err = filepath.Abs(target)
+		if err != nil {
+			return fail(1, model.CodeArtifactOutput, "cannot resolve build output")
+		}
+		if protectedBuildOutput(target, opts, code) {
+			return fail(2, model.CodeInvalidPolicy, "build output must not replace source or project metadata")
+		}
+		if info, err := os.Lstat(target); err == nil && !info.Mode().IsRegular() {
+			return fail(1, model.CodeArtifactOutput, "build output cannot replace a directory or symlink")
+		} else if err != nil && !os.IsNotExist(err) {
+			return fail(1, model.CodeArtifactOutput, "cannot inspect build output")
+		}
+		destinations[i] = target
 	}
-	if destination == "" {
-		destination = filepath.Join(opts.root, built.DefaultName)
+	for i, artifact := range built.Files {
+		if err := compiler.PublishBuildArtifact(artifact, destinations[i]); err != nil {
+			return fail(1, model.CodeArtifactOutput, "cannot publish verified build output")
+		}
+		if directoryOutput {
+			result.Files = append(result.Files, buildFile{Path: destinations[i], Digest: artifact.Digest})
+		} else {
+			result.Path, result.Digest = destinations[i], artifact.Digest
+		}
 	}
-	destination, err = filepath.Abs(destination)
-	if err != nil {
-		return fail(1, model.CodeArtifactOutput, "cannot resolve build output")
-	}
-	if protectedBuildOutput(destination, opts, code) {
-		return fail(2, model.CodeInvalidPolicy, "build output must not replace source or project metadata")
-	}
-	if err := compiler.PublishBuildArtifact(built, destination); err != nil {
-		return fail(1, model.CodeArtifactOutput, "cannot publish verified build output")
-	}
-	return buildSummary{Path: destination, Digest: built.Digest, Backend: backend}, 0, nil
+	return result, 0, nil
 }
 
 func protectedBuildOutput(destination string, opts options, code *model.CodeModel) bool {

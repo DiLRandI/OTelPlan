@@ -138,11 +138,14 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 			t.Fatal("invalid inputs produced a binary")
 		}
 	}
-	built, err := BuildResolved(t.Context(), ResolvedBuildRequest{Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: "test", WorkingDir: buildDir, Parent: t.TempDir(), Env: env, GoArgs: []string{buildDir}, Offline: true})
+	built, err := BuildResolved(t.Context(), ResolvedBuildRequest{Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: "test", WorkingDir: buildDir, Parent: t.TempDir(), Env: env, GoArgs: []string{buildDir}, Packages: []string{buildDir}, DefaultOutput: true, Offline: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = os.RemoveAll(built.Dir) }()
+	if built.DefaultName != "probe" {
+		t.Fatalf("unexpected default output: %s", built.DefaultName)
+	}
 	data, err := os.ReadFile(built.File)
 	if err != nil || artifactDigest(data) != built.Digest {
 		t.Fatal("build output identity mismatch")

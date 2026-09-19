@@ -20,12 +20,15 @@ type ResolvedBuildRequest struct {
 	Executable, RuntimeVersion, WorkingDir, Parent string
 	Env, GoArgs                                    []string
 	Offline                                        bool
+	DefaultOutput                                  bool
+	Packages                                       []string
 }
 
 type BuildArtifact struct {
-	Dir    string
-	File   string
-	Digest string
+	Dir         string
+	File        string
+	Digest      string
+	DefaultName string
 }
 
 // BuildResolved builds an already validated plan in disposable module copies.
@@ -85,7 +88,7 @@ func BuildResolved(ctx context.Context, request ResolvedBuildRequest) (BuildArti
 	if err != nil {
 		return BuildArtifact{}, err
 	}
-	env, _, err := RecordedBuildEnvironment(request.Env, request.Code.EffectiveBuild)
+	env, buildFlags, err := RecordedBuildEnvironment(request.Env, request.Code.EffectiveBuild)
 	if err != nil {
 		return BuildArtifact{}, err
 	}
@@ -108,10 +111,31 @@ func BuildResolved(ctx context.Context, request ResolvedBuildRequest) (BuildArti
 	if err != nil {
 		return BuildArtifact{}, err
 	}
-	args := append([]string{"-o", output}, relocatedArgs...)
+	defaultName := ""
+	discard := false
+	if request.DefaultOutput {
+		targets, err := prepared.RelocateBuildArguments(request.Packages, workingDir)
+		if err != nil {
+			return BuildArtifact{}, err
+		}
+		defaultName, err = defaultBuildOutput(ctx, copiedDir, append(append([]string(nil), env...), "GOWORK="+prepared.WorkspaceFile), buildFlags, targets, request.Code.EffectiveBuild.GOOS)
+		if err != nil {
+			return BuildArtifact{}, err
+		}
+		discard = defaultName == ""
+	}
+	args := relocatedArgs
+	if !discard {
+		args = append([]string{"-o", output}, relocatedArgs...)
+	}
+
 	err = BuildPrepared(ctx, PreparedBuildRequest{BuildEnvironment: request.Code.EffectiveBuild, Workspace: prepared, ModuleDir: copiedDir, Executable: request.Executable, Backend: request.Backend, ApplicationModules: applicationModules, RuntimeModules: runtimeSelection, RuntimeOriginalDir: runtime.Dir, Env: env, GoArgs: args})
 	if err != nil {
 		return BuildArtifact{}, err
+	}
+	if discard {
+		complete = true
+		return BuildArtifact{Dir: prepared.Dir}, nil
 	}
 	file, err := os.Open(output)
 	if err != nil {
@@ -127,5 +151,5 @@ func BuildResolved(ctx context.Context, request ResolvedBuildRequest) (BuildArti
 		return BuildArtifact{}, err
 	}
 	complete = true
-	return BuildArtifact{Dir: prepared.Dir, File: output, Digest: fmt.Sprintf("sha256:%x", digest.Sum(nil))}, nil
+	return BuildArtifact{Dir: prepared.Dir, File: output, Digest: fmt.Sprintf("sha256:%x", digest.Sum(nil)), DefaultName: defaultName}, nil
 }

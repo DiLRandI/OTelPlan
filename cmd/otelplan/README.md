@@ -10,6 +10,7 @@ otelplan lock --root /path/to/project
 otelplan lock --root /path/to/project --check
 otelplan diff --root /path/to/project --check
 otelplan compile --root /path/to/project --output .otelplan/build
+otelplan build --root /path/to/project -- -trimpath -o bin/api ./cmd/api
 otelplan explain --root /path/to/project 'example.com/app.(*Worker).Run'
 ```
 
@@ -19,7 +20,11 @@ otelplan explain --root /path/to/project 'example.com/app.(*Worker).Run'
 
 `lock --dry-run` previews without writing. `lock --check` and `diff --check` return 6 for drift. Plain `diff` reports drift with exit 0. Backend incompatibility returns 7. `--offline` disables Go dependency resolution and toolchain downloads. Constant values are redacted from inspection output; the lockfile preserves explicit policy constants.
 
-`compile` requires the pinned `otelc` executable on `PATH`. It resolves and validates the policy, verifies backend identity, compiles the generated Go package in temporary module state, and publishes rules, hooks, and a file-hash manifest. Output defaults to `.otelplan/build` relative to `--root`. Identical output is reused. Use `--clean` to replace changed output; edited generated files or unrelated files prevent replacement. Compilation failure returns 8; output failures return 1. Instrumented `build` is not implemented yet.
+`compile` requires the pinned `otelc` executable on `PATH`. It resolves and validates the policy, verifies backend identity, compiles the generated Go package in temporary module state, and publishes rules, hooks, and a file-hash manifest. Output defaults to `.otelplan/build` relative to `--root`. Identical output is reused. Use `--clean` to replace changed output; edited generated files or unrelated files prevent replacement. Compilation failure returns 8; output failures return 1.
+
+`build` executes the pinned backend in copied module state and verifies the output digest before publication. Pass Go arguments after `--`. A single command without `-o` uses Go's default executable name; library and multi-package builds without `-o` do not publish a binary. Output paths are relative to `--root`.
+
+Supported build flags include `-o`, `-p`, `-tags`, `-mod`, `-modfile`, `-race`, `-msan`, `-asan`, `-trimpath`, `-buildvcs`, `-a`, `-v`, and `-x`. Explicit source-selection flags override analysis defaults. Vendor-mode builds and arbitrary compiler overrides remain unsupported. Run from an application module; workspace-only working directories and directory-valued `-o` outputs are not implemented yet. Backend subprocess logs are suppressed. Build commands do not refresh the resolution lock.
 
 `lock`, `lock --check`, `diff`, and `validate` operate on resolution state. They do not verify a backend executable or generated artifact files. Executable digests and artifact hashes belong to the build phase; the full lockfile comparison API still compares them.
 
@@ -27,4 +32,4 @@ A lock refresh preserves existing build identity when resolution is unchanged. I
 
 With `--format=json`, usage errors also return a JSON envelope on stdout with `ok=false`, diagnostics, and exit code 2. Invalid flag values are not echoed. Output failures return 1. Text usage errors remain on stderr.
 
-`lock --check --dry-run` is rejected as contradictory. `--dependencies` and `--interfaces` apply to `scan`; `--config`, `--strict`, and `--allow-large-plan` apply to policy commands (`inspect`, `explain`, `validate`, `lock`, `diff`, `compile`). `--verbose` is rejected until verbose output is implemented. A stale `diff --check` returns 6 with both the diff and a diagnostic explaining the failure.
+`lock --check --dry-run` is rejected as contradictory. `--dependencies` and `--interfaces` apply to `scan`; `--config`, `--strict`, and `--allow-large-plan` apply to policy commands (`inspect`, `explain`, `validate`, `lock`, `diff`, `compile`, `build`). `--verbose` is rejected until verbose output is implemented. A stale `diff --check` returns 6 with both the diff and a diagnostic explaining the failure.

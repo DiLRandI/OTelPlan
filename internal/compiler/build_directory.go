@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"golang.org/x/mod/modfile"
 )
 
 // BuildDirectory maps an original working directory into its prepared module.
@@ -58,4 +60,29 @@ func (workspace PreparedWorkspace) validateBuildDirectory(path string) error {
 		}
 	}
 	return fmt.Errorf("build directory is not inside a prepared application module")
+}
+
+func (workspace PreparedWorkspace) applicationBuildDirectory() (string, error) {
+	data, err := os.ReadFile(workspace.WorkspaceFile)
+	if err != nil {
+		return "", fmt.Errorf("read prepared workspace: %w", err)
+	}
+	work, err := modfile.ParseWork(workspace.WorkspaceFile, data, nil)
+	if err != nil {
+		return "", fmt.Errorf("parse prepared workspace")
+	}
+	for _, use := range work.Use {
+		dir := use.Path
+		if !filepath.IsAbs(dir) {
+			dir = filepath.Join(filepath.Dir(workspace.WorkspaceFile), dir)
+		}
+		if filepath.Clean(dir) == filepath.Clean(workspace.Runtime.Dir) {
+			continue
+		}
+		if err := workspace.validateBuildDirectory(dir); err != nil {
+			return "", err
+		}
+		return dir, nil
+	}
+	return "", fmt.Errorf("workspace has no prepared application module")
 }

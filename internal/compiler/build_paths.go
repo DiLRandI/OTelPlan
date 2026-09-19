@@ -13,16 +13,7 @@ func (workspace PreparedWorkspace) RelocateBuildArguments(args []string, origina
 		return nil, fmt.Errorf("original build directory must be absolute")
 	}
 	result := append([]string(nil), args...)
-	first := 0
-	for first < len(result) && strings.HasPrefix(result[first], "-") {
-		name, _, value := strings.Cut(result[first], "=")
-		name = strings.TrimPrefix(name, "-")
-		name = strings.TrimPrefix(name, "-")
-		if !value && (name == "p" || name == "tags" || name == "mod" || name == "o") {
-			first++
-		}
-		first++
-	}
+	first := buildPackageStart(args)
 	for i := first; i < len(result); i++ {
 		arg := result[i]
 		local := filepath.IsAbs(arg) || arg == "." || arg == ".." || strings.HasPrefix(arg, "./") || strings.HasPrefix(arg, "../") || strings.HasPrefix(arg, ".\\") || strings.HasPrefix(arg, "..\\")
@@ -51,4 +42,18 @@ func (workspace PreparedWorkspace) RelocateBuildArguments(args []string, origina
 		result[i] = filepath.Join(copied, suffix)
 	}
 	return result, nil
+}
+
+func buildPackageStart(args []string) int {
+	first := 0
+	for first < len(args) && strings.HasPrefix(args[first], "-") {
+		name, _, value := strings.Cut(args[first], "=")
+		name = strings.TrimPrefix(name, "-")
+		name = strings.TrimPrefix(name, "-")
+		if !value && (name == "p" || name == "tags" || name == "mod" || name == "o") {
+			first++
+		}
+		first++
+	}
+	return first
 }

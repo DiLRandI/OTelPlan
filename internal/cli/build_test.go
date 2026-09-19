@@ -118,3 +118,78 @@ func TestBuildCLILibraryWithoutOutput(t *testing.T) {
 		t.Fatal("library build wrote project files")
 	}
 }
+
+func TestBuildCLIFromWorkspaceRoot(t *testing.T) {
+	executable := os.Getenv("OTELPLAN_OTELC")
+	if executable == "" {
+		t.Skip("OTELPLAN_OTELC is required")
+	}
+	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	fixture, err := filepath.Abs("../backend/otelc/testdata/accessors")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	copied, err := compiler.CopySourceTree(t.Context(), fixture, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(copied, filepath.Join(root, "app")); err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string]string{
+		"go.work":       "go 1.27.0\nuse ./app\n",
+		"otelplan.yaml": "apiVersion: otelplan.io/v1alpha1\nkind: InstrumentationPlan\nbackend: {name: otelc, version: v1.1.0}\nproject: {packages: [./app/ops]}\nrules:\n- id: operation\n  match:\n    methods: [Handle]\n",
+	} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	original := map[string][]byte{}
+	if err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		original[path] = data
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var out, errout bytes.Buffer
+	if exit := Run([]string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "./app"}, &out, &errout); exit != 0 {
+		t.Fatalf("workspace build exit=%d: %s %s", exit, &out, &errout)
+	}
+	var reply struct {
+		OK   bool         `json:"ok"`
+		Data buildSummary `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &reply); err != nil || !reply.OK || reply.Data.Path == "" || reply.Data.Digest == "" {
+		t.Fatalf("invalid build response: %s", &out)
+	}
+	if filepath.Dir(reply.Data.Path) != root {
+		t.Fatal("output not published in original working directory")
+	}
+	output, err := exec.Command(reply.Data.Path).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var traces struct{ Spans []struct{ Name string } }
+	if err := json.Unmarshal(output, &traces); err != nil || len(traces.Spans) != 5 {
+		t.Fatalf("missing instrumented spans: %s", output)
+	}
+	out.Reset()
+	errout.Reset()
+	if exit := Run([]string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false"}, &out, &errout); exit == 0 {
+		t.Fatal("workspace build without target silently selected a module")
+	}
+	for path, want := range original {
+		got, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("changed source file %s", path)
+		}
+	}
+}

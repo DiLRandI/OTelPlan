@@ -85,6 +85,12 @@ func BuildResolved(ctx context.Context, request ResolvedBuildRequest) (BuildArti
 		workingDir = request.Code.ModuleRoot
 	}
 	copiedDir, err := prepared.BuildDirectory(workingDir)
+	if err != nil && request.Code.EffectiveBuild.Workspace && filepath.Clean(workingDir) == filepath.Dir(request.Code.WorkspaceFile) {
+		if buildPackageStart(request.GoArgs) >= len(request.GoArgs) {
+			return BuildArtifact{}, fmt.Errorf("workspace-root build requires explicit package targets")
+		}
+		copiedDir, err = prepared.applicationBuildDirectory()
+	}
 	if err != nil {
 		return BuildArtifact{}, err
 	}

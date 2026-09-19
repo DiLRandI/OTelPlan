@@ -24,7 +24,7 @@ otelplan explain --root /path/to/project 'example.com/app.(*Worker).Run'
 
 `build` executes the pinned backend in copied module state and verifies the output digest before publication. Pass Go arguments after `--`. A single command without `-o` uses Go's default executable name; library and multi-package builds without `-o` do not publish a binary. Output paths are relative to `--root`.
 
-Supported build flags include `-o`, `-p`, `-tags`, `-mod`, `-modfile`, `-race`, `-msan`, `-asan`, `-trimpath`, `-buildvcs`, `-a`, `-v`, and `-x`. Explicit source-selection flags override analysis defaults. Vendor-mode builds and arbitrary compiler overrides remain unsupported. Run from an application module; workspace-only working directories and directory-valued `-o` outputs are not implemented yet. Backend subprocess logs are suppressed. Build commands do not refresh the resolution lock.
+Supported build flags include `-o`, `-p`, `-tags`, `-mod`, `-modfile`, `-race`, `-msan`, `-asan`, `-trimpath`, `-buildvcs`, `-a`, `-v`, and `-x`. Explicit source-selection flags override analysis defaults. Vendor-mode builds and arbitrary compiler overrides remain unsupported. Build from an application module or pass explicit package targets from a workspace root, for example `otelplan build -- ./app`. Workspace-root builds require a package target. Directory-valued `-o` outputs are not implemented yet. Backend subprocess logs are suppressed. Build commands do not refresh the resolution lock.
 
 `lock`, `lock --check`, `diff`, and `validate` operate on resolution state. They do not verify a backend executable or generated artifact files. Executable digests and artifact hashes belong to the build phase; the full lockfile comparison API still compares them.
 

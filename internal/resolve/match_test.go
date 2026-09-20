@@ -27,6 +27,7 @@ func TestGlob(t *testing.T) {
 			}
 		})
 	}
+
 	if _, err := Glob("[", "a"); err == nil {
 		t.Fatal("malformed pattern accepted")
 	}
@@ -35,6 +36,7 @@ func TestGlob(t *testing.T) {
 func TestMatchSelectors(t *testing.T) {
 	s := model.Symbol{ID: "example.com/x.(*Worker).Run", Kind: model.SymbolMethod, Name: "Run", PackageImportPath: "example.com/x", Location: model.SourceLocation{File: "domain/work.go"}, Receiver: &model.Receiver{Type: "Worker", Pointer: true}, Visibility: model.VisibilityExported, Ownership: model.OwnershipApplication, ContextIndexes: []int{0}, ErrorIndexes: []int{0}}
 	m := &model.CodeModel{InterfaceMethods: []model.InterfaceMethod{{InterfaceID: "example.com/ports.Operation", SymbolID: s.ID}}}
+
 	yes, no := true, false
 	for _, tc := range []struct {
 		name     string

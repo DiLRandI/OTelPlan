@@ -22,10 +22,12 @@ func policyDigestFixture() *model.Policy {
 
 func digestPolicy(t *testing.T, p *model.Policy) string {
 	t.Helper()
+
 	lock, err := Create(p, &model.CodeModel{GoVersion: "go1.27.0"}, model.ResolvedPlan{}, model.LockBackend{Name: p.Backend.Name, Version: p.Backend.Version}, Digest(nil), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return lock.PolicyDigest
 }
 
@@ -51,6 +53,7 @@ func TestPolicyDigestIgnoresSetOrdering(t *testing.T) {
 			p := policyDigestFixture()
 			before := digestPolicy(t, p)
 			tc.change(p)
+
 			if digestPolicy(t, p) != before {
 				t.Fatal("semantically irrelevant ordering changed policy digest")
 			}
@@ -60,18 +63,23 @@ func TestPolicyDigestIgnoresSetOrdering(t *testing.T) {
 
 func TestPolicyDigestPreservesSemanticsAndCaller(t *testing.T) {
 	p := policyDigestFixture()
+
 	original, err := json.Marshal(p)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	before := digestPolicy(t, p)
+
 	after, err := json.Marshal(p)
 	if err != nil || string(original) != string(after) {
 		t.Fatal("canonicalization mutated caller")
 	}
+
 	if digestPolicy(t, p) != before {
 		t.Fatal("policy digest is nondeterministic")
 	}
+
 	for _, change := range []func(*model.Policy){
 		func(p *model.Policy) { p.Rules[0].Match.Functions[0] = "Changed" },
 		func(p *model.Policy) { p.Rules[0].Attributes[0].From.Constant = "changed" },
@@ -80,6 +88,7 @@ func TestPolicyDigestPreservesSemanticsAndCaller(t *testing.T) {
 	} {
 		p := policyDigestFixture()
 		change(p)
+
 		if digestPolicy(t, p) == before {
 			t.Fatal("semantic change ignored")
 		}

@@ -46,6 +46,7 @@ func (d Diagnostic) Error() string {
 	if d.RuleID != "" {
 		return fmt.Sprintf("%s %s: %s (rule %s)", d.Severity, d.Code, d.Message, d.RuleID)
 	}
+
 	return fmt.Sprintf("%s %s: %s", d.Severity, d.Code, d.Message)
 }
 
@@ -53,21 +54,25 @@ type DiagnosticList []Diagnostic
 
 func (l DiagnosticList) Errors() DiagnosticList {
 	var out DiagnosticList
+
 	for _, d := range l {
 		if d.Severity == SeverityError {
 			out = append(out, d)
 		}
 	}
+
 	return out
 }
 
 func (l DiagnosticList) Warnings() DiagnosticList {
 	var out DiagnosticList
+
 	for _, d := range l {
 		if d.Severity == SeverityWarning {
 			out = append(out, d)
 		}
 	}
+
 	return out
 }
 

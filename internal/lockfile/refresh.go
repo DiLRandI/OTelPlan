@@ -1,7 +1,7 @@
 package lockfile
 
 import (
-	"fmt"
+	"errors"
 	"slices"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
@@ -12,6 +12,7 @@ import (
 func ResolutionDiff(previous, current model.Lockfile) model.LockDiff {
 	previous.Backend.Digest, current.Backend.Digest = "", ""
 	previous.Artifacts, current.Artifacts = nil, nil
+
 	return Diff(previous, current)
 }
 
@@ -19,15 +20,19 @@ func ResolutionDiff(previous, current model.Lockfile) model.LockDiff {
 // resolution is unchanged. A build must replace that identity after drift.
 func RefreshResolution(previous, current model.Lockfile) (model.Lockfile, error) {
 	if current.Backend.Digest != "" || len(current.Artifacts) > 0 {
-		return model.Lockfile{}, fmt.Errorf("resolution refresh cannot supply build-owned identity")
+		return model.Lockfile{}, errors.New("resolution refresh cannot supply build-owned identity")
 	}
+
 	if previous.Backend.Digest == "" && len(previous.Artifacts) == 0 {
 		return current, nil
 	}
+
 	if !ResolutionDiff(previous, current).Empty() {
-		return model.Lockfile{}, fmt.Errorf("resolution changed while the lock contains build-owned identity; refresh requires regenerated build metadata")
+		return model.Lockfile{}, errors.New("resolution changed while the lock contains build-owned identity; refresh requires regenerated build metadata")
 	}
+
 	current.Backend.Digest = previous.Backend.Digest
 	current.Artifacts = slices.Clone(previous.Artifacts)
+
 	return current, nil
 }

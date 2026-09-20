@@ -14,6 +14,7 @@ func BenchmarkResolveExactApplicationFunctions(b *testing.B) {
 	)
 
 	code := &model.CodeModel{Symbols: make([]model.Symbol, 0, ruleCount*functionsPerRule)}
+
 	policy := &model.Policy{
 		APIVersion: model.APIVersionV1Alpha1,
 		Kind:       model.KindInstrumentationPlan,
@@ -24,9 +25,12 @@ func BenchmarkResolveExactApplicationFunctions(b *testing.B) {
 		},
 		Rules: make([]model.Rule, 0, ruleCount),
 	}
+
 	for ruleIndex := range ruleCount {
 		rule := model.Rule{ID: fmt.Sprintf("rule-%03d", ruleIndex), Match: model.Match{}}
+
 		rule.Match.Symbols = make([]string, 0, functionsPerRule)
+
 		for functionIndex := range functionsPerRule {
 			index := ruleIndex*functionsPerRule + functionIndex
 			id := model.FunctionID("example.com/app", fmt.Sprintf("Function%04d", index))
@@ -46,6 +50,7 @@ func BenchmarkResolveExactApplicationFunctions(b *testing.B) {
 				ErrorIndexes:      []int{0},
 			})
 		}
+
 		policy.Rules = append(policy.Rules, rule)
 	}
 
@@ -53,13 +58,15 @@ func BenchmarkResolveExactApplicationFunctions(b *testing.B) {
 	if warm.Diagnostics.HasErrors() {
 		b.Fatalf("synthetic policy resolution returned errors: %+v", warm.Diagnostics)
 	}
+
 	if len(warm.Plan.Targets) != ruleCount*functionsPerRule {
 		b.Fatalf("resolved %d targets, want %d", len(warm.Plan.Targets), ruleCount*functionsPerRule)
 	}
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		Resolve(policy, code)
 	}
 }

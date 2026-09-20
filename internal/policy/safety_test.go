@@ -36,6 +36,7 @@ func TestRejectUnsafeAndInvalidDefaults(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			p := validPolicyModel()
 			mutate(p)
+
 			if !Validate(p).HasErrors() {
 				t.Fatal("invalid policy accepted")
 			}
@@ -54,13 +55,16 @@ func TestParseDefaultsPreserveExplicitFalse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !p.Defaults.Errors.Record || p.Defaults.Context.Mode != model.ContextModeRequire {
 		t.Fatalf("unsafe or missing defaults: %+v", p.Defaults)
 	}
+
 	p, err = Parse([]byte("defaults:\n  errors:\n    record: false\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if p.Defaults.Errors.Record {
 		t.Fatal("explicit false overwritten")
 	}

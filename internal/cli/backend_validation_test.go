@@ -18,24 +18,31 @@ func TestUnsupportedBackendTargetsFailValidation(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, original := cliFixture(t)
+
 			original["app.go"] = tc.source
+
 			if err := os.WriteFile(filepath.Join(root, "app.go"), []byte(tc.source), 0o600); err != nil {
 				t.Fatal(err)
 			}
+
 			for _, command := range []string{"validate", "inspect", "compile", "build"} {
 				for _, format := range []string{"text", "json"} {
 					var out, errout bytes.Buffer
 					if exit := Run([]string{command, "--root", root, "--offline", "--format=" + format}, &out, &errout); exit != 7 {
 						t.Fatalf("%s %s exit=%d: %s %s", command, format, exit, &out, &errout)
 					}
+
 					if !strings.Contains(out.String(), tc.message) || !strings.Contains(out.String(), string(model.CodeBackendUnsupported)) {
 						t.Fatalf("missing compatibility diagnostic: %s", &out)
 					}
+
 					if format == "json" {
 						var reply response
-						if err := json.Unmarshal(out.Bytes(), &reply); err != nil || reply.OK || len(reply.Diagnostics) != 1 {
+						err := json.Unmarshal(out.Bytes(), &reply)
+						if err != nil || reply.OK || len(reply.Diagnostics) != 1 {
 							t.Fatalf("invalid response: %s", &out)
 						}
+
 						diagnostic := reply.Diagnostics[0]
 						if diagnostic.Symbol != "example.com/app.Run" || diagnostic.RuleID != "operation" {
 							t.Fatalf("missing target provenance: %+v", diagnostic)
@@ -43,10 +50,12 @@ func TestUnsupportedBackendTargetsFailValidation(t *testing.T) {
 					}
 				}
 			}
+
 			entries, err := os.ReadDir(root)
 			if err != nil || len(entries) != len(original) {
 				t.Fatal("validation failure wrote project files")
 			}
+
 			for name, want := range original {
 				data, err := os.ReadFile(filepath.Join(root, name))
 				if err != nil || string(data) != want {

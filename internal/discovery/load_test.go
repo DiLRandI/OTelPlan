@@ -23,7 +23,6 @@ func fixture(t *testing.T, files map[string]string) string {
 		}
 
 		err = os.WriteFile(path, []byte(content), 0o644)
-
 		if err != nil {
 			t.Fatal(err)
 		}

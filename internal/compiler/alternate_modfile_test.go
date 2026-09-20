@@ -19,7 +19,6 @@ func TestPrepareWorkspaceAlternateModfile(t *testing.T) {
 		t.Helper()
 
 		err := os.WriteFile(path, []byte(data), 0o600)
-
 		if err != nil {
 			t.Fatal(err)
 		}

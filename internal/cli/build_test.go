@@ -162,19 +162,16 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 			}
 
 			err = os.Rename(previous, first)
-
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			err = os.Remove(last)
-
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			err = os.Mkdir(last, 0o700)
-
 			if err != nil {
 				t.Fatal(err)
 			}

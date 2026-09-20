@@ -98,7 +98,6 @@ func (workspace PreparedWorkspace) applicationBuildDirectory() (string, error) {
 		}
 
 		err := workspace.validateBuildDirectory(dir)
-
 		if err != nil {
 			return "", err
 		}

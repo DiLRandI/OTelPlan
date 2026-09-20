@@ -36,7 +36,6 @@ func RelocateModuleManifest(data []byte, originalDir string, relocations map[str
 		}
 
 		err := file.AddReplace(replacement.Old.Path, replacement.Old.Version, filepath.Clean(copied), "")
-
 		if err != nil {
 			return nil, fmt.Errorf("relocate module replacement: %w", err)
 		}

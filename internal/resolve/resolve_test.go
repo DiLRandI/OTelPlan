@@ -141,7 +141,6 @@ func TestResolveArchitectureFixtures(t *testing.T) {
 				}
 
 				err = os.WriteFile(filename, []byte(contents), 0o644)
-
 				if err != nil {
 					t.Fatal(err)
 				}

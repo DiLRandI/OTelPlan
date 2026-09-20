@@ -22,7 +22,6 @@ func TestApplicationSelectionExcludesRuntimeUpgrade(t *testing.T) {
 		}
 
 		err = os.WriteFile(filename, []byte(data), 0o600)
-
 		if err != nil {
 			t.Fatal(err)
 		}

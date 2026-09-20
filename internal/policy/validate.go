@@ -26,7 +26,6 @@ func Validate(p *model.Policy) model.DiagnosticList {
 	}
 
 	err := ValidateTemplate(p.Defaults.SpanName)
-
 	if err != nil {
 		diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeUnknownTemplateVar, Message: "defaults.spanName: " + err.Error()})
 	}

@@ -59,7 +59,6 @@ func TestEffectiveAnalysisFingerprint(t *testing.T) {
 	}
 
 	err := os.WriteFile(filepath.Join(root, "alternate.mod"), []byte("module example.com/app\n\ngo 1.27\n\nexclude example.com/unused v1.0.0\n"), 0o600)
-
 	if err != nil {
 		t.Fatal(err)
 	}

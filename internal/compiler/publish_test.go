@@ -86,7 +86,6 @@ func TestPublishArtifacts(t *testing.T) {
 			}
 
 			err := change.modify(dir)
-
 			if err != nil {
 				t.Fatal(err)
 			}

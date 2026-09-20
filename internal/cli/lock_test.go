@@ -91,7 +91,6 @@ func TestStrictWarningsAndUnsupportedBackend(t *testing.T) {
 
 	filename := filepath.Join(root, "otelplan.yaml")
 	err := os.WriteFile(filename, []byte(contents), 0o644)
-
 	if err != nil {
 		t.Fatal(err)
 	}

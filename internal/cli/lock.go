@@ -22,7 +22,6 @@ func lockCommand(command string, opts options, p *model.Policy, code *model.Code
 	}
 
 	graph, err := lockfile.GraphDigest(code)
-
 	if err != nil {
 		return fail(4, err.Error())
 	}

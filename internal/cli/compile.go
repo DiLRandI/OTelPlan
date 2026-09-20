@@ -32,7 +32,6 @@ func compileCommand(opts options, p *model.Policy, code *model.CodeModel, plan m
 	}
 
 	executable, err := exec.LookPath("otelc")
-
 	if err != nil {
 		return fail(7, "cannot find pinned otelc executable on PATH")
 	}

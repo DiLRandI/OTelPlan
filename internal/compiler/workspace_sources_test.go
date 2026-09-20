@@ -22,7 +22,6 @@ func TestCollectWorkspaceSources(t *testing.T) {
 		}
 
 		err = os.WriteFile(path, []byte(body), 0o600)
-
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -79,7 +78,6 @@ func TestCollectWorkspaceSourcesFilesystemAliases(t *testing.T) {
 	}
 
 	err = os.Symlink(root, filepath.Join(root, "alias"))
-
 	if err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}

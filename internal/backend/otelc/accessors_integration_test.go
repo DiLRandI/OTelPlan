@@ -80,6 +80,7 @@ func TestPrivateAccessorsWithPinnedBackend(t *testing.T) {
 	generated := filepath.Join(root, "generated")
 	for _, file := range files {
 		filename := filepath.Join(generated, filepath.FromSlash(file.Path))
+
 		err := os.MkdirAll(filepath.Dir(filename), 0o700)
 		if err != nil {
 			t.Fatal(err)

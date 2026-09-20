@@ -19,6 +19,7 @@ func TestCopySourceTreeBuild(t *testing.T) {
 
 	for path, data := range files {
 		name := filepath.Join(source, filepath.FromSlash(path))
+
 		err := os.MkdirAll(filepath.Dir(name), 0o700)
 		if err != nil {
 			t.Fatal(err)

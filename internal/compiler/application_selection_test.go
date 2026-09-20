@@ -16,6 +16,7 @@ func TestApplicationSelectionExcludesRuntimeUpgrade(t *testing.T) {
 	files := map[string]string{"app/go.mod": "module example.com/app\n\ngo 1.27.0\nrequire example.com/dep v1.0.0\nreplace example.com/dep => ../dep\n", "runtime/go.mod": "module example.com/runtime\n\ngo 1.27.0\nrequire example.com/dep v1.1.0\n", "dep/go.mod": "module example.com/dep\n\ngo 1.27.0\n", "go.work": fmt.Sprintf("go 1.27.0\nuse (\n%q\n%q\n)\n", app, generated)}
 	for path, data := range files {
 		filename := filepath.Join(root, path)
+
 		err := os.MkdirAll(filepath.Dir(filename), 0o700)
 		if err != nil {
 			t.Fatal(err)

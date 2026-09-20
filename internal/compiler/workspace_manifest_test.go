@@ -71,6 +71,7 @@ func TestBuildRelocatedWorkspace(t *testing.T) {
 
 	for path, data := range files {
 		filename := filepath.Join(original, filepath.FromSlash(path))
+
 		err := os.MkdirAll(filepath.Dir(filename), 0o700)
 		if err != nil {
 			t.Fatal(err)

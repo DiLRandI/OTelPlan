@@ -114,8 +114,9 @@ func Parse(data []byte) (model.Lockfile, error) {
 	}
 
 	var trailing any
+
 	err = decoder.Decode(&trailing)
-	if err != io.EOF {
+	if !errors.Is(err, io.EOF) {
 		return lock, errors.New("lockfile must contain one JSON document")
 	}
 

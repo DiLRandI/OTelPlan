@@ -25,12 +25,14 @@ func Parse(data []byte) (*model.Policy, error) {
 	dec.KnownFields(true)
 
 	p := model.Policy{Defaults: model.Defaults{Context: model.ContextDefaults{Mode: model.ContextModeRequire}, Errors: model.ErrorDefaults{Record: true}}}
+
 	err := dec.Decode(&p)
 	if err != nil {
 		return nil, fmt.Errorf("parse policy: %w", err)
 	}
 
 	var trailing any
+
 	err = dec.Decode(&trailing)
 	if !errors.Is(err, io.EOF) {
 		return nil, errors.New("parse policy: expected exactly one YAML document")

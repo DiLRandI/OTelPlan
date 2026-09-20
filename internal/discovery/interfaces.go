@@ -66,7 +66,6 @@ func (b *builder) collectInterfaceRelations(m *model.CodeModel) {
 					methods := types.NewMethodSet(concrete)
 
 					for method := range iface.typ.Methods() {
-
 						selection := methods.Lookup(method.Pkg(), method.Name())
 						if selection == nil {
 							continue

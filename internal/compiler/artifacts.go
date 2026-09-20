@@ -48,6 +48,7 @@ func StageArtifacts(parent string, files []otelc.GeneratedFile) (model.Artifacts
 
 	for _, file := range files {
 		filename := filepath.Join(dir, filepath.FromSlash(file.Path))
+
 		err := os.MkdirAll(filepath.Dir(filename), 0o700)
 		if err != nil {
 			return model.Artifacts{}, fmt.Errorf("create artifact subdirectory: %w", err)

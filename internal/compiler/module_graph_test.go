@@ -29,6 +29,7 @@ func TestCheckModuleSelection(t *testing.T) {
 
 	for _, version := range []string{"v0.9.0", "v1.1.0"} {
 		selected[1].Version = version
+
 		err := CheckModuleSelection(original, selected, mapping)
 		if err == nil {
 			t.Fatal("accepted dependency version change")
@@ -54,6 +55,7 @@ func TestCheckModuleReplacements(t *testing.T) {
 	}
 
 	selected[0].Replace.Dir = filepath.Join(isolatedDir, "other")
+
 	err = CheckModuleSelection(original, selected, map[string]string{originalDir: isolatedDir})
 	if err == nil {
 		t.Fatal("accepted changed local replacement")
@@ -69,6 +71,7 @@ func TestCheckModuleReplacements(t *testing.T) {
 	}
 
 	selected[0].Replace = nil
+
 	err = CheckModuleSelection(original, selected, nil)
 	if err == nil {
 		t.Fatal("accepted removed replacement")

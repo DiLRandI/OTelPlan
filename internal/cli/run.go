@@ -66,6 +66,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		output.OK = false
 
 		output.Diagnostics = append(output.Diagnostics, model.Diagnostic{Severity: model.SeverityError, Code: code, Message: message})
+
 		err := emit(stdout, opts, output)
 		if err != nil {
 			_, _ = fmt.Fprintln(stderr, err)
@@ -163,6 +164,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		output.Diagnostics = policy.Validate(p)
 		if output.Diagnostics.HasErrors() {
 			output.OK = false
+
 			err := emit(stdout, opts, output)
 			if err != nil {
 				_, _ = fmt.Fprintln(stderr, err)
@@ -353,6 +355,7 @@ func usageError(opts options, command, message string, stdout, stderr io.Writer)
 	}
 
 	reply := response{APIVersion: APIVersion, Command: command, OK: false, Diagnostics: model.DiagnosticList{{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, Message: message}}}
+
 	err := emit(stdout, opts, reply)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)

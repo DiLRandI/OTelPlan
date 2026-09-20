@@ -147,8 +147,8 @@ func TestStageGeneratedBundle(t *testing.T) {
 		changed.Files = append([]model.ArtifactFile(nil), staged.Files...)
 
 		changed.Files[0].Digest = digest
-		err := VerifyArtifacts(changed)
 
+		err := VerifyArtifacts(changed)
 		if err == nil {
 			t.Fatal("accepted malformed digest")
 		}

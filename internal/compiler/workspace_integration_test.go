@@ -163,7 +163,6 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 		change(&invalid)
 
 		err := BuildPrepared(t.Context(), invalid)
-
 		if err == nil {
 			t.Fatal("accepted invalid build inputs")
 		}

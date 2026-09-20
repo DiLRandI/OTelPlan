@@ -13,6 +13,7 @@ func TestLockCheckIgnoresSourceCoordinates(t *testing.T) {
 	filename := filepath.Join(root, "app.go")
 
 	moved := strings.Replace(files["app.go"], "func Run", "\n\n\tfunc Run", 1)
+
 	err := os.WriteFile(filename, []byte(moved), 0o600)
 	if err != nil {
 		t.Fatal(err)

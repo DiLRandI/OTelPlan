@@ -8,6 +8,7 @@ import (
 
 func TestDefaultBuildOutput(t *testing.T) {
 	root := t.TempDir()
+
 	err := os.Mkdir(filepath.Join(root, "library"), 0o700)
 	if err != nil {
 		t.Fatal(err)

@@ -16,6 +16,7 @@ func TestCollectWorkspaceSources(t *testing.T) {
 		t.Helper()
 
 		path := filepath.Join(root, name)
+
 		err := os.MkdirAll(filepath.Dir(path), 0o700)
 		if err != nil {
 			t.Fatal(err)
@@ -72,6 +73,7 @@ func TestCollectWorkspaceSources(t *testing.T) {
 
 func TestCollectWorkspaceSourcesFilesystemAliases(t *testing.T) {
 	root := t.TempDir()
+
 	err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/app\nreplace example.com/alias => ./alias\n"), 0o600)
 	if err != nil {
 		t.Fatal(err)

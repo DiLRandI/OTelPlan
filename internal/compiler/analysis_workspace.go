@@ -61,6 +61,7 @@ func WorkspaceForAnalysis(code *model.CodeModel) (WorkspaceRequest, error) {
 	}
 
 	work := &modfile.WorkFile{Syntax: &modfile.FileSyntax{Name: "go.work"}}
+
 	err := work.AddGoStmt(strings.TrimPrefix(code.EffectiveBuild.GoVersion, "go"))
 	if err != nil {
 		return request, errors.New("invalid analyzed Go version")

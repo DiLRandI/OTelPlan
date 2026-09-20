@@ -20,6 +20,7 @@ func invoke(t *testing.T, root string, want int, args ...string) response {
 	}
 
 	var reply response
+
 	err := json.Unmarshal(out.Bytes(), &reply)
 	if err != nil {
 		t.Fatalf("invalid JSON: %s", &out)
@@ -90,6 +91,7 @@ func TestStrictWarningsAndUnsupportedBackend(t *testing.T) {
 	contents := files["otelplan.yaml"] + "  attributes:\n  - key: user_id\n    from: {constant: stable-test-id}\n"
 
 	filename := filepath.Join(root, "otelplan.yaml")
+
 	err := os.WriteFile(filename, []byte(contents), 0o644)
 	if err != nil {
 		t.Fatal(err)

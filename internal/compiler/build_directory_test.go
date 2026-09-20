@@ -42,6 +42,7 @@ func TestPreparedBuildDirectory(t *testing.T) {
 	}
 
 	outside := t.TempDir()
+
 	err := os.Symlink(outside, filepath.Join(copied, "escape"))
 	if err != nil {
 		t.Skipf("symlinks unavailable: %v", err)

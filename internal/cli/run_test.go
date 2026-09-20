@@ -43,6 +43,7 @@ func TestInspectionCommandsJSONAndImmutability(t *testing.T) {
 		}
 
 		var result response
+
 		err := json.Unmarshal(stdout.Bytes(), &result)
 		if err != nil {
 			t.Fatal(err)
@@ -139,6 +140,7 @@ func TestInspectRejectsUnsafeCaptureWithoutPrintingConstant(t *testing.T) {
 	root, files := cliFixture(t)
 
 	contents := files["otelplan.yaml"] + "  attributes:\n  - key: password\n    from:\n      constant: do-not-print-this-secret\n"
+
 	err := os.WriteFile(filepath.Join(root, "otelplan.yaml"), []byte(contents), 0o644)
 	if err != nil {
 		t.Fatal(err)

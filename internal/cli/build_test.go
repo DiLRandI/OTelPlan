@@ -131,6 +131,7 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 				Files []struct{ Path, Digest string } `json:"files"`
 			} `json:"data"`
 		}
+
 		err := json.Unmarshal(out.Bytes(), &directoryReply)
 
 		if err != nil || !directoryReply.OK || len(directoryReply.Data.Files) != 2 {
@@ -156,6 +157,7 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 			first, last := directoryReply.Data.Files[0].Path, directoryReply.Data.Files[1].Path
 
 			previous := filepath.Join(destination, "previous")
+
 			err := os.WriteFile(previous, []byte("previous"), 0o600)
 			if err != nil {
 				t.Fatal(err)
@@ -219,6 +221,7 @@ func TestBuildCLIUsage(t *testing.T) {
 		}
 
 		var reply response
+
 		err := json.Unmarshal(out.Bytes(), &reply)
 		if err != nil || reply.OK {
 			t.Fatalf("invalid JSON: %s", &out)
@@ -362,6 +365,7 @@ func TestBuildSummaryText(t *testing.T) {
 		{buildSummary{Files: []buildFile{{Path: "bin/first", Digest: "one"}, {Path: "bin/second", Digest: "two"}}}, "built bin/first one\nbuilt bin/second two\n"},
 	} {
 		var out bytes.Buffer
+
 		err := emit(&out, options{format: "text"}, response{OK: true, Data: tc.data})
 		if err != nil || out.String() != tc.want {
 			t.Fatalf("output=%q, %v; want %q", out.String(), err, tc.want)

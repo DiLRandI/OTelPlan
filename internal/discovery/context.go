@@ -286,7 +286,7 @@ func parseGOFLAGS(raw string, overrides ...string) (goFlags, error) {
 
 	var out goFlags
 
-	for i := range len(tokens) {
+	for i := range tokens {
 		token := tokens[i]
 
 		name, value, hasValue := strings.Cut(token, "=")

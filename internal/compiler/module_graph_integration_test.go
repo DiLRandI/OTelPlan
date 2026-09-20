@@ -20,6 +20,7 @@ func TestWorkspaceModuleSelection(t *testing.T) {
 
 	for path, data := range files {
 		filename := filepath.Join(root, filepath.FromSlash(path))
+
 		err := os.MkdirAll(filepath.Dir(filename), 0o700)
 		if err != nil {
 			t.Fatal(err)
@@ -49,12 +50,14 @@ func TestWorkspaceModuleSelection(t *testing.T) {
 	}
 
 	runtimeMod := "module example.com/runtime\n\ngo 1.25.0\nrequire example.com/dep v1.0.0\n"
+
 	err = os.WriteFile(filepath.Join(root, "runtime", "go.mod"), []byte(runtimeMod), 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	compatible := read(filepath.Join(root, "go.work"))
+
 	err = CheckModuleSelection(original, compatible, nil)
 	if err != nil {
 		t.Fatal(err)

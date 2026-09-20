@@ -46,6 +46,7 @@ func TestCLIUsageContracts(t *testing.T) {
 
 				if format == "json" {
 					var reply response
+
 					err := json.Unmarshal(out.Bytes(), &reply)
 					if err != nil || reply.OK || len(reply.Diagnostics) == 0 || errout.Len() != 0 {
 						t.Fatalf("invalid error envelope: %s stderr=%s", &out, &errout)
@@ -64,6 +65,7 @@ func TestJSONFormatAfterInvalidFlag(t *testing.T) {
 		}
 
 		var reply response
+
 		err := json.Unmarshal(out.Bytes(), &reply)
 		if err != nil || reply.OK || len(reply.Diagnostics) == 0 || errout.Len() != 0 {
 			t.Fatalf("invalid JSON error: %s %s", &out, &errout)

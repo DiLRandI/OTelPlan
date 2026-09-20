@@ -83,6 +83,7 @@ func TestLoadWorkspaceRoot(t *testing.T) {
 
 	for name, contents := range files {
 		filename := filepath.Join(root, name)
+
 		err := os.MkdirAll(filepath.Dir(filename), 0o755)
 		if err != nil {
 			t.Fatal(err)

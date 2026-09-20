@@ -34,6 +34,7 @@ func defaultBuildOutput(ctx context.Context, dir string, env, flags, targets []s
 			Name, ImportPath  string
 			GoFiles, CgoFiles []string
 		}
+
 		err := decoder.Decode(&pkg)
 
 		if err == io.EOF {

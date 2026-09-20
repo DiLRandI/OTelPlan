@@ -94,6 +94,7 @@ func TestGraphDigestTracksBuildInputs(t *testing.T) {
 		}},
 		{"vendor", func(t *testing.T, c *model.CodeModel) {
 			dir := filepath.Join(c.Modules[0].Dir, "vendor")
+
 			err := os.Mkdir(dir, 0o755)
 			if err != nil {
 				t.Fatal(err)

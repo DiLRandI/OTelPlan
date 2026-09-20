@@ -17,6 +17,7 @@ func fixture(t *testing.T, files map[string]string) string {
 
 	for name, content := range files {
 		path := filepath.Join(root, name)
+
 		err := os.MkdirAll(filepath.Dir(path), 0o755)
 		if err != nil {
 			t.Fatal(err)

@@ -25,6 +25,7 @@ func TestPrepareWorkspaceAlternateModfile(t *testing.T) {
 	}
 
 	dependency := filepath.Join(source, "dependency")
+
 	err := os.Mkdir(dependency, 0o700)
 	if err != nil {
 		t.Fatal(err)

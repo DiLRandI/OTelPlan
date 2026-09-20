@@ -34,6 +34,7 @@ func TestCompileCLI(t *testing.T) {
 				OK   bool           `json:"ok"`
 				Data compileSummary `json:"data"`
 			}
+
 			err := json.Unmarshal(out.Bytes(), &reply)
 
 			if err != nil || !reply.OK || reply.Data.Backend.Digest == "" || reply.Data.Files == 0 {
@@ -101,6 +102,7 @@ func TestCompileCLIUsage(t *testing.T) {
 
 			if format == "json" {
 				var reply response
+
 				err := json.Unmarshal(out.Bytes(), &reply)
 				if err != nil || reply.OK || len(reply.Diagnostics) == 0 {
 					t.Fatalf("invalid error JSON: %s", &out)

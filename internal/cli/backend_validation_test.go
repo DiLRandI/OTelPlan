@@ -38,6 +38,7 @@ func TestUnsupportedBackendTargetsFailValidation(t *testing.T) {
 
 					if format == "json" {
 						var reply response
+
 						err := json.Unmarshal(out.Bytes(), &reply)
 						if err != nil || reply.OK || len(reply.Diagnostics) != 1 {
 							t.Fatalf("invalid response: %s", &out)

@@ -54,6 +54,7 @@ func isolateWorkspace(filename string) (string, func(), error) {
 	cleanup := func() { _ = os.RemoveAll(dir) }
 	fail := func(err error) (string, func(), error) {
 		cleanup()
+
 		return "", nil, err
 	}
 

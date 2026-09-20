@@ -20,6 +20,7 @@ func TestLockChecksIgnorePolicyRuleOrder(t *testing.T) {
 	}
 
 	policy := filepath.Join(root, "otelplan.yaml")
+
 	err = os.WriteFile(policy, []byte(header+first+second), 0o600)
 	if err != nil {
 		t.Fatal(err)

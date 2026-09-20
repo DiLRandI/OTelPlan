@@ -58,6 +58,7 @@ func TestBuildRelocatedModule(t *testing.T) {
 	}
 	for name, data := range source {
 		filename := filepath.Join(original, filepath.FromSlash(name))
+
 		err := os.MkdirAll(filepath.Dir(filename), 0o700)
 		if err != nil {
 			t.Fatal(err)

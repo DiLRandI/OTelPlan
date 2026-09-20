@@ -15,49 +15,49 @@ const (
 )
 
 type ProjectConfig struct {
-	Packages            []string `yaml:"packages,omitempty" json:"packages,omitempty"`
-	IncludeTests        bool     `yaml:"includeTests,omitempty" json:"includeTests,omitempty"`
-	IncludeDependencies bool     `yaml:"includeDependencies,omitempty" json:"includeDependencies,omitempty"`
-	BuildTags           []string `yaml:"buildTags,omitempty" json:"buildTags,omitempty"`
+	Packages            []string `json:"packages,omitempty"            yaml:"packages,omitempty"`
+	IncludeTests        bool     `json:"includeTests,omitempty"        yaml:"includeTests,omitempty"`
+	IncludeDependencies bool     `json:"includeDependencies,omitempty" yaml:"includeDependencies,omitempty"`
+	BuildTags           []string `json:"buildTags,omitempty"           yaml:"buildTags,omitempty"`
 }
 
 type BackendConfig struct {
-	Name    string `yaml:"name" json:"name"`
-	Version string `yaml:"version" json:"version"`
+	Name    string `json:"name"    yaml:"name"`
+	Version string `json:"version" yaml:"version"`
 }
 
 type ContextDefaults struct {
-	Mode ContextMode `yaml:"mode,omitempty" json:"mode,omitempty"`
+	Mode ContextMode `json:"mode,omitempty" yaml:"mode,omitempty"`
 }
 
 type ErrorDefaults struct {
-	Record bool `yaml:"record,omitempty" json:"record,omitempty"`
+	Record bool `json:"record,omitempty" yaml:"record,omitempty"`
 }
 
 type CaptureDefaults struct {
-	Arguments bool `yaml:"arguments,omitempty" json:"arguments,omitempty"`
-	Results   bool `yaml:"results,omitempty" json:"results,omitempty"`
+	Arguments bool `json:"arguments,omitempty" yaml:"arguments,omitempty"`
+	Results   bool `json:"results,omitempty"   yaml:"results,omitempty"`
 }
 
 type Defaults struct {
-	SpanName   string          `yaml:"spanName,omitempty" json:"spanName,omitempty"`
-	Context    ContextDefaults `yaml:"context,omitempty" json:"context"`
-	Errors     ErrorDefaults   `yaml:"errors,omitempty" json:"errors"`
-	Attributes CaptureDefaults `yaml:"attributes,omitempty" json:"attributes"`
+	SpanName   string          `json:"spanName,omitempty" yaml:"spanName,omitempty"`
+	Context    ContextDefaults `json:"context"            yaml:"context,omitempty"`
+	Errors     ErrorDefaults   `json:"errors"             yaml:"errors,omitempty"`
+	Attributes CaptureDefaults `json:"attributes"         yaml:"attributes,omitempty"`
 }
 
 type Match struct {
-	Packages     []string  `yaml:"packages,omitempty" json:"packages,omitempty"`
-	Files        []string  `yaml:"files,omitempty" json:"files,omitempty"`
-	Symbols      []string  `yaml:"symbols,omitempty" json:"symbols,omitempty"`
-	Functions    []string  `yaml:"functions,omitempty" json:"functions,omitempty"`
-	Receivers    []string  `yaml:"receivers,omitempty" json:"receivers,omitempty"`
-	Methods      []string  `yaml:"methods,omitempty" json:"methods,omitempty"`
-	Implements   []string  `yaml:"implements,omitempty" json:"implements,omitempty"`
-	Exported     *bool     `yaml:"exported,omitempty" json:"exported,omitempty"`
-	HasContext   *bool     `yaml:"hasContext,omitempty" json:"hasContext,omitempty"`
-	ReturnsError *bool     `yaml:"returnsError,omitempty" json:"returnsError,omitempty"`
-	Ownership    Ownership `yaml:"ownership,omitempty" json:"ownership,omitempty"`
+	Packages     []string  `json:"packages,omitempty"     yaml:"packages,omitempty"`
+	Files        []string  `json:"files,omitempty"        yaml:"files,omitempty"`
+	Symbols      []string  `json:"symbols,omitempty"      yaml:"symbols,omitempty"`
+	Functions    []string  `json:"functions,omitempty"    yaml:"functions,omitempty"`
+	Receivers    []string  `json:"receivers,omitempty"    yaml:"receivers,omitempty"`
+	Methods      []string  `json:"methods,omitempty"      yaml:"methods,omitempty"`
+	Implements   []string  `json:"implements,omitempty"   yaml:"implements,omitempty"`
+	Exported     *bool     `json:"exported,omitempty"     yaml:"exported,omitempty"`
+	HasContext   *bool     `json:"hasContext,omitempty"   yaml:"hasContext,omitempty"`
+	ReturnsError *bool     `json:"returnsError,omitempty" yaml:"returnsError,omitempty"`
+	Ownership    Ownership `json:"ownership,omitempty"    yaml:"ownership,omitempty"`
 }
 
 func (m Match) IsEmpty() bool {
@@ -77,52 +77,52 @@ const (
 )
 
 type Safety struct {
-	Classification SafetyClassification `yaml:"classification,omitempty" json:"classification,omitempty"`
-	Allow          bool                 `yaml:"allow,omitempty" json:"allow,omitempty"`
+	Classification SafetyClassification `json:"classification,omitempty" yaml:"classification,omitempty"`
+	Allow          bool                 `json:"allow,omitempty"          yaml:"allow,omitempty"`
 }
 
 type AttributeSource struct {
-	Argument string `yaml:"argument,omitempty" json:"argument,omitempty"`
-	Result   string `yaml:"result,omitempty" json:"result,omitempty"`
-	Constant any    `yaml:"constant,omitempty" json:"constant,omitempty"`
+	Argument string `json:"argument,omitempty" yaml:"argument,omitempty"`
+	Result   string `json:"result,omitempty"   yaml:"result,omitempty"`
+	Constant any    `json:"constant,omitempty" yaml:"constant,omitempty"`
 }
 
 type AttributeRule struct {
-	Key    string          `yaml:"key" json:"key"`
-	From   AttributeSource `yaml:"from" json:"from"`
-	Safety *Safety         `yaml:"safety,omitempty" json:"safety,omitempty"`
+	Key    string          `json:"key"              yaml:"key"`
+	From   AttributeSource `json:"from"             yaml:"from"`
+	Safety *Safety         `json:"safety,omitempty" yaml:"safety,omitempty"`
 }
 
 type SpanConfig struct {
-	Name string `yaml:"name,omitempty" json:"name,omitempty"`
-	Kind string `yaml:"kind,omitempty" json:"kind,omitempty"`
+	Name string `json:"name,omitempty" yaml:"name,omitempty"`
+	Kind string `json:"kind,omitempty" yaml:"kind,omitempty"`
 }
 
 type ErrorConfig struct {
-	Record bool `yaml:"record,omitempty" json:"record,omitempty"`
+	Record bool `json:"record,omitempty" yaml:"record,omitempty"`
 }
 
 type Rule struct {
-	ID          string          `yaml:"id" json:"id"`
-	Description string          `yaml:"description,omitempty" json:"description,omitempty"`
-	Match       Match           `yaml:"match" json:"match"`
-	Exclude     *Match          `yaml:"exclude,omitempty" json:"exclude,omitempty"`
-	Span        *SpanConfig     `yaml:"span,omitempty" json:"span,omitempty"`
-	Errors      *ErrorConfig    `yaml:"errors,omitempty" json:"errors,omitempty"`
-	Attributes  []AttributeRule `yaml:"attributes,omitempty" json:"attributes,omitempty"`
+	ID          string          `json:"id"                    yaml:"id"`
+	Description string          `json:"description,omitempty" yaml:"description,omitempty"`
+	Match       Match           `json:"match"                 yaml:"match"`
+	Exclude     *Match          `json:"exclude,omitempty"     yaml:"exclude,omitempty"`
+	Span        *SpanConfig     `json:"span,omitempty"        yaml:"span,omitempty"`
+	Errors      *ErrorConfig    `json:"errors,omitempty"      yaml:"errors,omitempty"`
+	Attributes  []AttributeRule `json:"attributes,omitempty"  yaml:"attributes,omitempty"`
 }
 
 type Exclusion struct {
-	ID    string `yaml:"id" json:"id"`
-	Match Match  `yaml:"match" json:"match"`
+	ID    string `json:"id"    yaml:"id"`
+	Match Match  `json:"match" yaml:"match"`
 }
 
 type Policy struct {
-	APIVersion string        `yaml:"apiVersion" json:"apiVersion"`
-	Kind       string        `yaml:"kind" json:"kind"`
-	Project    ProjectConfig `yaml:"project,omitempty" json:"project"`
-	Backend    BackendConfig `yaml:"backend" json:"backend"`
-	Defaults   Defaults      `yaml:"defaults,omitempty" json:"defaults"`
-	Rules      []Rule        `yaml:"rules" json:"rules"`
-	Exclusions []Exclusion   `yaml:"exclusions,omitempty" json:"exclusions,omitempty"`
+	APIVersion string        `json:"apiVersion"           yaml:"apiVersion"`
+	Kind       string        `json:"kind"                 yaml:"kind"`
+	Project    ProjectConfig `json:"project"              yaml:"project,omitempty"`
+	Backend    BackendConfig `json:"backend"              yaml:"backend"`
+	Defaults   Defaults      `json:"defaults"             yaml:"defaults,omitempty"`
+	Rules      []Rule        `json:"rules"                yaml:"rules"`
+	Exclusions []Exclusion   `json:"exclusions,omitempty" yaml:"exclusions,omitempty"`
 }

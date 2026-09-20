@@ -3,6 +3,7 @@ package compiler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/version"
 	"os/exec"
@@ -16,30 +17,39 @@ import (
 // workspace paths are supplied separately after their isolated copies exist.
 func RecordedBuildEnvironment(base []string, build model.BuildEnvironment) ([]string, []string, error) {
 	if !version.IsValid(build.GoVersion) || build.GOOS == "" || build.GOARCH == "" {
-		return nil, nil, fmt.Errorf("complete analyzed Go environment is required")
+		return nil, nil, errors.New("complete analyzed Go environment is required")
 	}
+
 	values := recordedGoValues(build)
+
 	env := make([]string, 0, len(base)+len(values))
+
 	for _, entry := range base {
 		key, _, _ := strings.Cut(entry, "=")
 		if _, overridden := values[key]; !overridden {
 			env = append(env, entry)
 		}
 	}
+
 	keys := make([]string, 0, len(values))
 	for key := range values {
 		keys = append(keys, key)
 	}
+
 	sort.Strings(keys)
+
 	for _, key := range keys {
 		env = append(env, key+"="+values[key])
 	}
+
 	tags := append([]string(nil), build.BuildTags...)
 	sort.Strings(tags)
+
 	flags := append([]string(nil), build.SemanticFlags...)
 	if len(tags) > 0 {
 		flags = append(flags, "-tags="+strings.Join(tags, ","))
 	}
+
 	return env, flags, nil
 }
 
@@ -58,25 +68,32 @@ func verifyRecordedGoEnvironment(ctx context.Context, dir string, env []string, 
 	expected := recordedGoValues(build)
 	delete(expected, "GOPACKAGESDRIVER")
 	expected["GOVERSION"] = build.GoVersion
+
 	keys := make([]string, 0, len(expected))
+
 	for key := range expected {
 		keys = append(keys, key)
 	}
+
 	sort.Strings(keys)
 	command := exec.CommandContext(ctx, "go", append([]string{"env", "-json"}, keys...)...)
 	command.Dir, command.Env = dir, env
+
 	output, err := command.Output()
 	if err != nil {
 		return fmt.Errorf("verify recorded Go environment: %w", err)
 	}
+
 	var actual map[string]string
 	if err := json.Unmarshal(output, &actual); err != nil {
 		return fmt.Errorf("decode effective Go environment: %w", err)
 	}
+
 	for _, key := range keys {
 		if actual[key] != expected[key] {
 			return fmt.Errorf("effective Go setting %s differs from analysis", key)
 		}
 	}
+
 	return nil
 }

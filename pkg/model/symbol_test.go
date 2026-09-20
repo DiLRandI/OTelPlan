@@ -4,16 +4,20 @@ import "testing"
 
 func TestFunctionIDRoundTrip(t *testing.T) {
 	id := FunctionID("github.com/acme/shop/internal/payment", "ProcessPayment")
+
 	parsed, err := ParseSymbolID(id)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
+
 	if parsed.ImportPath != "github.com/acme/shop/internal/payment" {
 		t.Errorf("import path = %q", parsed.ImportPath)
 	}
+
 	if parsed.Name != "ProcessPayment" {
 		t.Errorf("name = %q", parsed.Name)
 	}
+
 	if parsed.Receiver != nil {
 		t.Errorf("receiver = %v, want nil", parsed.Receiver)
 	}
@@ -45,19 +49,24 @@ func TestMethodIDRoundTrip(t *testing.T) {
 			if id != tc.wantID {
 				t.Fatalf("id = %q, want %q", id, tc.wantID)
 			}
+
 			parsed, err := ParseSymbolID(id)
 			if err != nil {
 				t.Fatalf("parse: %v", err)
 			}
+
 			if parsed.Receiver == nil {
 				t.Fatal("receiver = nil, want non-nil")
 			}
+
 			if parsed.Receiver.Type != "Processor" {
 				t.Errorf("receiver type = %q", parsed.Receiver.Type)
 			}
+
 			if parsed.Receiver.Pointer != tc.recv.Pointer {
 				t.Errorf("receiver pointer = %v, want %v", parsed.Receiver.Pointer, tc.recv.Pointer)
 			}
+
 			if parsed.Name != tc.method {
 				t.Errorf("method = %q", parsed.Name)
 			}
@@ -78,6 +87,7 @@ func TestSymbolPredicates(t *testing.T) {
 	if !s.HasContext() || !s.ReturnsError() {
 		t.Error("predicates should be true")
 	}
+
 	empty := Symbol{}
 	if empty.HasContext() || empty.ReturnsError() {
 		t.Error("predicates should be false")

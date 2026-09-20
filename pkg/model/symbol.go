@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -93,6 +94,7 @@ func MethodID(importPath string, recv Receiver, method string) SymbolID {
 	if recv.Pointer {
 		recvType = pointerPrefix + recvType
 	}
+
 	return SymbolID(importPath + separator + receiverOpen + recvType + receiverClose + separator + method)
 }
 
@@ -105,31 +107,40 @@ type ParsedSymbolID struct {
 func ParseSymbolID(id SymbolID) (ParsedSymbolID, error) {
 	s := string(id)
 	if s == "" {
-		return ParsedSymbolID{}, fmt.Errorf("empty symbol id")
+		return ParsedSymbolID{}, errors.New("empty symbol id")
 	}
+
 	if idx := strings.LastIndex(s, receiverOpen); idx > 0 && s[idx-1] == separator[0] {
 		closeRel := strings.Index(s[idx:], receiverClose)
 		if closeRel < 0 {
 			return ParsedSymbolID{}, fmt.Errorf("malformed method symbol id %q: unterminated receiver", s)
 		}
+
 		idxClose := idx + closeRel
 		recvPart := s[idx+1 : idxClose]
+
 		rest := s[idxClose+1:]
 		if !strings.HasPrefix(rest, separator) || len(rest) == 1 {
 			return ParsedSymbolID{}, fmt.Errorf("malformed method symbol id %q", s)
 		}
+
 		method := rest[1:]
 		recv := &Receiver{Type: strings.TrimPrefix(recvPart, pointerPrefix)}
+
 		recv.Pointer = strings.HasPrefix(recvPart, pointerPrefix)
+
 		if recv.Type == "" {
 			return ParsedSymbolID{}, fmt.Errorf("malformed method symbol id %q: empty receiver type", s)
 		}
+
 		return ParsedSymbolID{ImportPath: s[:idx-1], Receiver: recv, Name: method}, nil
 	}
+
 	idx := strings.LastIndex(s, separator)
 	if idx <= 0 || idx == len(s)-1 {
 		return ParsedSymbolID{}, fmt.Errorf("malformed function symbol id %q", s)
 	}
+
 	return ParsedSymbolID{ImportPath: s[:idx], Name: s[idx+1:]}, nil
 }
 

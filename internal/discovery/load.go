@@ -32,6 +32,7 @@ func (o *Options) applyDefaults() {
 	if o.Root == "" {
 		o.Root = "."
 	}
+
 	if len(o.Patterns) == 0 {
 		o.Patterns = []string{"./..."}
 	}
@@ -44,7 +45,9 @@ func LoadContext(ctx context.Context, opts Options) (*model.CodeModel, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer opts.cleanup()
+
 	cfg := &packages.Config{
 		Context: ctx,
 		Mode:    packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports | packages.NeedModule | packages.NeedDeps | packages.NeedCompiledGoFiles,
@@ -55,25 +58,33 @@ func LoadContext(ctx context.Context, opts Options) (*model.CodeModel, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load packages: %w", err)
 	}
+
 	if err := reportErrors(pkgs); err != nil {
 		return nil, err
 	}
 
 	var selected, all []*packages.Package
+
 	seen := map[string]*packages.Package{}
+
 	packages.Visit(pkgs, func(p *packages.Package) bool {
 		all = append(all, p)
+
 		if (opts.IncludeDependencies || (p.Module != nil && p.Module.Main)) && !strings.HasSuffix(p.PkgPath, ".test") {
 			if previous := seen[p.PkgPath]; previous == nil || len(p.Syntax) > len(previous.Syntax) {
 				seen[p.PkgPath] = p
 			}
 		}
+
 		return true
 	}, nil)
+
 	for _, p := range seen {
 		selected = append(selected, p)
 	}
+
 	sort.Slice(selected, func(i, j int) bool { return selected[i].PkgPath < selected[j].PkgPath })
+
 	return buildModel(selected, all, opts), nil
 }
 
@@ -81,19 +92,23 @@ func buildFlags(tags []string) []string {
 	if len(tags) == 0 {
 		return nil
 	}
+
 	return []string{"-tags=" + strings.Join(tags, ",")}
 }
 
 func reportErrors(pkgs []*packages.Package) error {
 	var errs []string
+
 	packages.Visit(pkgs, nil, func(p *packages.Package) {
 		for _, e := range p.Errors {
 			errs = append(errs, e.Error())
 		}
 	})
 	sort.Strings(errs)
+
 	if len(errs) > 0 {
 		return fmt.Errorf("package analysis failed: %s", strings.Join(errs, "; "))
 	}
+
 	return nil
 }

@@ -122,15 +122,18 @@ func (m *CodeModel) Symbol(id SymbolID) (*Symbol, bool) {
 			return &m.Symbols[i], true
 		}
 	}
+
 	return nil, false
 }
 
 func (m *CodeModel) Implementors(interfacePath, interfaceName string) []InterfaceRelation {
 	var out []InterfaceRelation
+
 	for _, rel := range m.Implements {
 		if rel.InterfacePkg == interfacePath && rel.Interface == interfaceName {
 			out = append(out, rel)
 		}
 	}
+
 	return out
 }

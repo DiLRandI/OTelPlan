@@ -12,16 +12,23 @@ import (
 func fixture(t *testing.T, files map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
+
 	files["go.mod"] = "module example.com/shop\n\ngo 1.27\n"
+
 	for name, content := range files {
 		path := filepath.Join(root, name)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+
+		err := os.MkdirAll(filepath.Dir(path), 0o755)
+		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+
+		err = os.WriteFile(path, []byte(content), 0o644)
+		if err != nil {
 			t.Fatal(err)
 		}
 	}
+
 	return root
 }
 
@@ -46,61 +53,79 @@ func AliasContext(ctx Alias) {}
 		"tagged.go":          "//go:build special\n\npackage shop\nfunc Tagged() {}\n",
 	})
 	opts := Options{Root: root}
+
 	m, err := Load(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, name := range []string{"helper", "Generic", "AliasContext"} {
 		s, ok := m.Symbol(model.FunctionID("example.com/shop", name))
 		if !ok || !s.HasContext() || s.Location.File != "operations.go" || s.Location.Line == 0 || s.Ownership != model.OwnershipApplication {
 			t.Fatalf("invalid %s: %+v", name, s)
 		}
 	}
+
 	generic, _ := m.Symbol("example.com/shop.Generic")
 	if generic.Generics == nil || len(generic.Generics.TypeParams) != 1 {
 		t.Fatalf("generics: %+v", generic)
 	}
+
 	generated, _ := m.Symbol("example.com/shop.Generated")
+
 	real, _ := m.Symbol("example.com/shop.Real")
+
 	if !generated.Generated || real.Generated {
 		t.Fatal("generated classification must use source marker")
 	}
+
 	rels := m.Implementors("example.com/shop/ports", "Boundary")
 	if len(rels) != 1 || !rels[0].Pointer || rels[0].InterfaceID != "example.com/shop/ports.Boundary" {
 		t.Fatalf("interface relations: %+v", rels)
 	}
+
 	for _, name := range []model.SymbolID{"example.com/shop.testHelper", "example.com/shop.Tagged"} {
 		if _, ok := m.Symbol(name); ok {
 			t.Fatalf("unexpected symbol %s", name)
 		}
 	}
+
 	again, err := Load(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	firstJSON, _ := json.Marshal(m)
+
 	secondJSON, _ := json.Marshal(again)
+
 	if string(firstJSON) != string(secondJSON) {
 		t.Fatal("inventory is not deterministic")
 	}
+
 	opts.IncludeTests = true
 	opts.BuildTags = []string{"special"}
+
 	m, err = Load(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	testSymbol, ok := m.Symbol("example.com/shop.testHelper")
 	if !ok || !testSymbol.TestFile {
 		t.Fatalf("test symbol: %+v", testSymbol)
 	}
+
 	if _, ok := m.Symbol("example.com/shop.Tagged"); !ok {
 		t.Fatal("tagged symbol missing")
 	}
+
 	seen := map[model.SymbolID]bool{}
 	for _, s := range m.Symbols {
 		if seen[s.ID] {
 			t.Fatalf("duplicate %s", s.ID)
 		}
+
 		seen[s.ID] = true
 	}
 }

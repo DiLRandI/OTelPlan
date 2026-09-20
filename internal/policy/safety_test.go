@@ -1,8 +1,9 @@
-package policy
+package policy_test
 
 import (
 	"testing"
 
+	"github.com/DiLRandI/OTelPlan/internal/policy"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
@@ -15,6 +16,8 @@ func validPolicyModel() *model.Policy {
 }
 
 func TestRejectUnsafeAndInvalidDefaults(t *testing.T) {
+	t.Parallel()
+
 	for name, mutate := range map[string]func(*model.Policy){
 		"argument capture": func(p *model.Policy) { p.Defaults.Attributes.Arguments = true },
 		"result capture":   func(p *model.Policy) { p.Defaults.Attributes.Results = true },
@@ -34,10 +37,12 @@ func TestRejectUnsafeAndInvalidDefaults(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			p := validPolicyModel()
 			mutate(p)
 
-			if !Validate(p).HasErrors() {
+			if !policy.Validate(p).HasErrors() {
 				t.Fatal("invalid policy accepted")
 			}
 		})
@@ -45,13 +50,18 @@ func TestRejectUnsafeAndInvalidDefaults(t *testing.T) {
 }
 
 func TestParseRejectsTrailingDocuments(t *testing.T) {
-	if _, err := Parse([]byte("apiVersion: otelplan.io/v1alpha1\n---\nrules: []\n")); err == nil {
+	t.Parallel()
+
+	_, err := policy.Parse([]byte("apiVersion: otelplan.io/v1alpha1\n---\nrules: []\n"))
+	if err == nil {
 		t.Fatal("second YAML document ignored")
 	}
 }
 
 func TestParseDefaultsPreserveExplicitFalse(t *testing.T) {
-	p, err := Parse([]byte("apiVersion: otelplan.io/v1alpha1\n"))
+	t.Parallel()
+
+	p, err := policy.Parse([]byte("apiVersion: otelplan.io/v1alpha1\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +70,7 @@ func TestParseDefaultsPreserveExplicitFalse(t *testing.T) {
 		t.Fatalf("unsafe or missing defaults: %+v", p.Defaults)
 	}
 
-	p, err = Parse([]byte("defaults:\n  errors:\n    record: false\n"))
+	p, err = policy.Parse([]byte("defaults:\n  errors:\n    record: false\n"))
 	if err != nil {
 		t.Fatal(err)
 	}

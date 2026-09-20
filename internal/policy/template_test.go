@@ -1,8 +1,14 @@
-package policy
+package policy_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/DiLRandI/OTelPlan/internal/policy"
+)
 
 func TestValidateTemplate(t *testing.T) {
+	t.Parallel()
+
 	valid := []string{
 		"{{package}}.{{receiver}}.{{method}}",
 		"{{symbol}}",
@@ -11,7 +17,7 @@ func TestValidateTemplate(t *testing.T) {
 		"",
 	}
 	for _, tpl := range valid {
-		err := ValidateTemplate(tpl)
+		err := policy.ValidateTemplate(tpl)
 		if err != nil {
 			t.Errorf("ValidateTemplate(%q) = %v, want nil", tpl, err)
 		}
@@ -23,7 +29,7 @@ func TestValidateTemplate(t *testing.T) {
 		"{{}}",
 	}
 	for _, tpl := range invalid {
-		err := ValidateTemplate(tpl)
+		err := policy.ValidateTemplate(tpl)
 		if err == nil {
 			t.Errorf("ValidateTemplate(%q) = nil, want error", tpl)
 		}
@@ -31,6 +37,8 @@ func TestValidateTemplate(t *testing.T) {
 }
 
 func TestRenderTemplate(t *testing.T) {
+	t.Parallel()
+
 	vars := map[string]string{
 		"symbol":      "pkg.(*Recv).Method",
 		"package":     "pkg",
@@ -40,7 +48,7 @@ func TestRenderTemplate(t *testing.T) {
 		"method":      "Method",
 	}
 
-	got, err := RenderTemplate("{{package}}.{{receiver}}.{{method}}", vars)
+	got, err := policy.RenderTemplate("{{package}}.{{receiver}}.{{method}}", vars)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}

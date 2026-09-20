@@ -57,3 +57,36 @@ func TestRenderTemplate(t *testing.T) {
 		t.Errorf("render = %q", got)
 	}
 }
+
+func TestRenderTemplateContract(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		template string
+		output   string
+		message  string
+	}{
+		{template: "{{ package }} / {{function}} / {{package}}", output: "shop /  / shop", message: ""},
+		{template: "prefix {{unknown}}", output: "", message: `unknown template variable "unknown"`},
+		{template: "prefix {{package", output: "", message: `unterminated template variable at "{{package"`},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.template, func(t *testing.T) {
+			t.Parallel()
+
+			output, err := policy.RenderTemplate(testCase.template, map[string]string{"package": "shop"})
+			if testCase.message == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if err == nil || err.Error() != testCase.message {
+				t.Fatalf("error = %v, want %q", err, testCase.message)
+			}
+
+			if output != testCase.output {
+				t.Fatalf("output = %q, want %q", output, testCase.output)
+			}
+		})
+	}
+}

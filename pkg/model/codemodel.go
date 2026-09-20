@@ -33,9 +33,27 @@ type InterfaceRelation struct {
 	Pointer      bool     `json:"pointer"`
 }
 
+// CallPrecision describes callee resolution, not proof that a call executes.
+type CallPrecision string
+
+// Call precision distinguishes a known callee from a conservative candidate.
+const (
+	CallPrecisionStatic       CallPrecision = "static"
+	CallPrecisionConservative CallPrecision = "conservative"
+)
+
+// CallGraphInfo records the algorithm, scope, and limits of advisory call analysis.
+type CallGraphInfo struct {
+	Algorithm    string   `json:"algorithm"`
+	Scope        string   `json:"scope"`
+	Conservative bool     `json:"conservative"`
+	Limitations  []string `json:"limitations"`
+}
+
 type CallRelation struct {
-	Caller SymbolID `json:"caller"`
-	Callee SymbolID `json:"callee"`
+	Precision CallPrecision `json:"precision,omitempty"`
+	Caller    SymbolID      `json:"caller"`
+	Callee    SymbolID      `json:"callee"`
 }
 
 type InterfaceMethod struct {
@@ -109,6 +127,7 @@ type CodeModel struct {
 	Types            []TypeInfo          `json:"types,omitempty"`
 	Implements       []InterfaceRelation `json:"implements,omitempty"`
 	InterfaceMethods []InterfaceMethod   `json:"interfaceMethods,omitempty"`
+	CallGraph        *CallGraphInfo      `json:"callGraph,omitempty"`
 	CallEdges        []CallRelation      `json:"callEdges,omitempty"`
 	BuildTags        []string            `json:"buildTags,omitempty"`
 	GOOS             string              `json:"goos,omitempty"`

@@ -16,6 +16,7 @@ type Options struct {
 	BuildTags []string
 	// BuildFlags override ambient GOFLAGS; value flags use -name=value.
 	BuildFlags          []string
+	CallGraph           bool
 	IncludeTests        bool
 	IncludeDependencies bool
 	GOOS                string
@@ -85,7 +86,15 @@ func LoadContext(ctx context.Context, opts Options) (*model.CodeModel, error) {
 
 	sort.Slice(selected, func(i, j int) bool { return selected[i].PkgPath < selected[j].PkgPath })
 
-	return buildModel(selected, all, opts), nil
+	code := buildModel(selected, all, opts)
+	if opts.CallGraph {
+		err = addCallGraph(ctx, code, selected)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return code, nil
 }
 
 func buildFlags(tags []string) []string {

@@ -31,7 +31,9 @@ type accessorRule struct {
 
 // RenderAccessorRules returns injection rules and compile-only helper files for
 // an importable provider package. It does not write files or load the provider.
-func RenderAccessorRules(version string, code *model.CodeModel, plan model.ResolvedPlan, provider string) ([]byte, []AccessorFile, error) {
+func RenderAccessorRules(
+	version string, code *model.CodeModel, plan model.ResolvedPlan, provider string,
+) ([]byte, []AccessorFile, error) {
 	if _, _, err := RenderRules(version, code, plan, provider); err != nil {
 		return nil, nil, err
 	}
@@ -57,7 +59,17 @@ func RenderAccessorRules(version string, code *model.CodeModel, plan model.Resol
 		suffix := hex.EncodeToString(sum[:8])
 		name := "accessor_" + suffix + ".go"
 		symbol, _ := code.Symbol(target.SymbolID)
-		rule := accessorRule{Target: symbol.PackageImportPath, Actions: []accessorAction{{AddFile: accessorAdvice{File: name, Path: provider}}}}
+		rule := accessorRule{
+			Target: symbol.PackageImportPath,
+			Actions: []accessorAction{
+				{
+					AddFile: accessorAdvice{
+						File: name,
+						Path: provider,
+					},
+				},
+			},
+		}
 
 		var node yaml.Node
 

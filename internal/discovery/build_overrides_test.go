@@ -10,7 +10,9 @@ import (
 func TestDiscoveryBuildFlagOverrides(t *testing.T) {
 	root := t.TempDir()
 
-	files := map[string]string{"go.mod": "module example.com/flags\n\ngo 1.27.0\n", "chosen.go": "//go:build chosen\n\npackage flags\nfunc Chosen() {}\n", "fallback.go": "//go:build !chosen\n\npackage flags\nfunc Fallback() {}\n"}
+	files := map[string]string{
+		"go.mod": "module example.com/flags\n\ngo 1.27.0\n", "chosen.go": "//go:build chosen\n\npackage flags\nfunc Chosen() {}\n", "fallback.go": "//go:build !chosen\n\npackage flags\nfunc Fallback() {}\n",
+	}
 
 	for name, data := range files {
 		err := os.WriteFile(filepath.Join(root, name), []byte(data), 0o600)

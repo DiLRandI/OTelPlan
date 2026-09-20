@@ -45,7 +45,7 @@ func applicationModuleSelection(ctx context.Context, workspace PreparedWorkspace
 	}
 	sums, err := os.ReadFile(workspace.WorkspaceFile + ".sum")
 	if err == nil {
-		if err := os.WriteFile(file.Name()+".sum", sums, 0600); err != nil {
+		if err := os.WriteFile(file.Name()+".sum", sums, 0o600); err != nil {
 			return nil, err
 		}
 	} else if !os.IsNotExist(err) {

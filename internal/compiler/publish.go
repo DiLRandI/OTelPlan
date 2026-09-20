@@ -64,7 +64,7 @@ func PublishArtifacts(destination string, files []otelc.GeneratedFile, clean boo
 		return model.Artifacts{}, err
 	}
 	parent := filepath.Dir(destination)
-	if err := os.MkdirAll(parent, 0700); err != nil {
+	if err := os.MkdirAll(parent, 0o700); err != nil {
 		return model.Artifacts{}, err
 	}
 	staged, err := StageArtifacts(parent, files)

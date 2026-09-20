@@ -51,10 +51,10 @@ func TestBuildRelocatedModule(t *testing.T) {
 	}
 	for name, data := range source {
 		filename := filepath.Join(original, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(filename), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filename, []byte(data), 0600); err != nil {
+		if err := os.WriteFile(filename, []byte(data), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -71,7 +71,7 @@ func TestBuildRelocatedModule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(appCopy, "go.mod"), manifest, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(appCopy, "go.mod"), manifest, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	// Remove the original dependency from its old location to prove the build uses the copy.

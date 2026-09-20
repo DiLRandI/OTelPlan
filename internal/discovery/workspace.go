@@ -43,12 +43,12 @@ func isolateWorkspace(filename string) (string, func(), error) {
 	cleanup := func() { _ = os.RemoveAll(dir) }
 	fail := func(err error) (string, func(), error) { cleanup(); return "", nil, err }
 	target := filepath.Join(dir, "go.work")
-	if err := os.WriteFile(target, modfile.Format(work.Syntax), 0600); err != nil {
+	if err := os.WriteFile(target, modfile.Format(work.Syntax), 0o600); err != nil {
 		return fail(err)
 	}
 	sums, err := os.ReadFile(filename + ".sum")
 	if err == nil {
-		if err := os.WriteFile(target+".sum", sums, 0600); err != nil {
+		if err := os.WriteFile(target+".sum", sums, 0o600); err != nil {
 			return fail(err)
 		}
 	} else if !os.IsNotExist(err) {

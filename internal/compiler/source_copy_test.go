@@ -17,10 +17,10 @@ func TestCopySourceTreeBuild(t *testing.T) {
 	}
 	for path, data := range files {
 		name := filepath.Join(source, filepath.FromSlash(path))
-		if err := os.MkdirAll(filepath.Dir(name), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(name), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(name, []byte(data), 0600); err != nil {
+		if err := os.WriteFile(name, []byte(data), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -46,7 +46,7 @@ func TestCopySourceTreeBuild(t *testing.T) {
 	if err != nil || string(output) != "copied asset" {
 		t.Fatalf("copied binary failed: %v, %s", err, output)
 	}
-	if err := os.WriteFile(filepath.Join(copied, "linked-assets", "message.txt"), []byte("changed"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(copied, "linked-assets", "message.txt"), []byte("changed"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	for path, wanted := range files {
@@ -59,7 +59,7 @@ func TestCopySourceTreeBuild(t *testing.T) {
 
 func TestCopySourceTreeRejectsExternalLinks(t *testing.T) {
 	source, parent := t.TempDir(), t.TempDir()
-	if err := os.WriteFile(filepath.Join(source, "a"), []byte("already copied"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(source, "a"), []byte("already copied"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(t.TempDir(), filepath.Join(source, "z")); err != nil {

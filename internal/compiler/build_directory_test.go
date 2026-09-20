@@ -12,7 +12,7 @@ func TestPreparedBuildDirectory(t *testing.T) {
 	copied := filepath.Join(parent, "module")
 	nested := filepath.Join(parent, "nested")
 	for _, dir := range []string{filepath.Join(copied, "cmd", "app"), filepath.Join(nested, "cmd")} {
-		if err := os.MkdirAll(dir, 0700); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -46,7 +46,7 @@ func TestApplicationBuildDirectory(t *testing.T) {
 	parent, source := t.TempDir(), t.TempDir()
 	copied, runtime := filepath.Join(parent, "app"), filepath.Join(parent, "runtime")
 	for _, dir := range []string{copied, runtime} {
-		if err := os.Mkdir(dir, 0700); err != nil {
+		if err := os.Mkdir(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -59,7 +59,7 @@ func TestApplicationBuildDirectory(t *testing.T) {
 		{"outside copy", "use " + strconv.Quote(source) + "\n", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := os.WriteFile(workspace.WorkspaceFile, []byte("go 1.27.0\n"+tc.uses), 0600); err != nil {
+			if err := os.WriteFile(workspace.WorkspaceFile, []byte("go 1.27.0\n"+tc.uses), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			got, err := workspace.applicationBuildDirectory()

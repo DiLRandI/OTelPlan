@@ -61,8 +61,11 @@ func Matches(m *model.CodeModel, s model.Symbol, selector model.Match) (bool, er
 		patterns []string
 		value    string
 	}{
-		{selector.Packages, s.PackageImportPath}, {selector.Files, s.Location.File},
-		{selector.Functions, function}, {selector.Methods, method}, {selector.Receivers, receiver},
+		{selector.Packages, s.PackageImportPath},
+		{selector.Files, s.Location.File},
+		{selector.Functions, function},
+		{selector.Methods, method},
+		{selector.Receivers, receiver},
 	}
 	matched := true
 	for _, field := range fields {

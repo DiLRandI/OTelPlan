@@ -13,7 +13,7 @@ import (
 func TestBuildResolvedFailureCleanup(t *testing.T) {
 	source, parent := t.TempDir(), t.TempDir()
 	manifest := []byte("module example.com/app\n\ngo 1.27.0\n")
-	if err := os.WriteFile(filepath.Join(source, "go.mod"), manifest, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(source, "go.mod"), manifest, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	backend, _ := otelc.Identity(otelc.SupportedVersion)

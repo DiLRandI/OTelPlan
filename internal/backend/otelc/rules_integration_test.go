@@ -51,7 +51,7 @@ func TestGeneratedRulesWithPinnedBackend(t *testing.T) {
 		t.Fatal(err)
 	}
 	filename := filepath.Join(root, "rules.yaml")
-	if err := os.WriteFile(filename, data, 0600); err != nil {
+	if err := os.WriteFile(filename, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	hookFile := filepath.Join(root, "hooks", "hooks.go")
@@ -59,7 +59,7 @@ func TestGeneratedRulesWithPinnedBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(hookFile, hooks, 0600); err != nil {
+	if err := os.WriteFile(hookFile, hooks, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	original, err := os.ReadFile(filepath.Join(root, "ops", "ops.go"))

@@ -12,7 +12,7 @@ func TestLockCheckIgnoresSourceCoordinates(t *testing.T) {
 	invoke(t, root, 0, "lock")
 	filename := filepath.Join(root, "app.go")
 	moved := strings.Replace(files["app.go"], "func Run", "\n\n\tfunc Run", 1)
-	if err := os.WriteFile(filename, []byte(moved), 0600); err != nil {
+	if err := os.WriteFile(filename, []byte(moved), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	invoke(t, root, 0, "lock", "--check")

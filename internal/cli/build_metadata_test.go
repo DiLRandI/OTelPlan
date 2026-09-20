@@ -44,7 +44,7 @@ func TestResolutionCommandsPreserveBuildIdentity(t *testing.T) {
 		t.Fatal("lock refresh erased build identity")
 	}
 	changed := strings.Replace(files["app.go"], "ctx context.Context", "ctx context.Context, value int", 1)
-	if err := os.WriteFile(filepath.Join(root, "app.go"), []byte(changed), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "app.go"), []byte(changed), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	invoke(t, root, 6, "lock", "--check")

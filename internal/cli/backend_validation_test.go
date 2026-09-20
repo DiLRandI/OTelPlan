@@ -19,7 +19,7 @@ func TestUnsupportedBackendTargetsFailValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root, original := cliFixture(t)
 			original["app.go"] = tc.source
-			if err := os.WriteFile(filepath.Join(root, "app.go"), []byte(tc.source), 0600); err != nil {
+			if err := os.WriteFile(filepath.Join(root, "app.go"), []byte(tc.source), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			for _, command := range []string{"validate", "inspect", "compile", "build"} {

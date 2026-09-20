@@ -17,12 +17,12 @@ func TestPrepareWorkspaceAlternateModfile(t *testing.T) {
 	alternate := "module example.com/alternate\n\ngo 1.25.0\nreplace example.com/dependency => ./dependency\n"
 	write := func(path, data string) {
 		t.Helper()
-		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 	dependency := filepath.Join(source, "dependency")
-	if err := os.Mkdir(dependency, 0700); err != nil {
+	if err := os.Mkdir(dependency, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	write(filepath.Join(dependency, "go.mod"), "module example.com/dependency\n\ngo 1.25.0\n")

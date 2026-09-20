@@ -15,10 +15,10 @@ func TestCollectWorkspaceSources(t *testing.T) {
 	write := func(name, body string) {
 		t.Helper()
 		path := filepath.Join(root, name)
-		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -60,7 +60,7 @@ func TestCollectWorkspaceSources(t *testing.T) {
 
 func TestCollectWorkspaceSourcesFilesystemAliases(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/app\nreplace example.com/alias => ./alias\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/app\nreplace example.com/alias => ./alias\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(root, filepath.Join(root, "alias")); err != nil {

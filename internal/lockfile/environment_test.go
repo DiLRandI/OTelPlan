@@ -16,7 +16,7 @@ func TestEffectiveAnalysisFingerprint(t *testing.T) {
 			"alternate.mod": "module example.com/app\n\ngo 1.27\n",
 			"app.go":        "package app\nfunc Run() {}\n",
 		} {
-			if err := os.WriteFile(filepath.Join(root, name), []byte(contents), 0600); err != nil {
+			if err := os.WriteFile(filepath.Join(root, name), []byte(contents), 0o600); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -48,7 +48,7 @@ func TestEffectiveAnalysisFingerprint(t *testing.T) {
 	if digest(moved, "-modfile="+filepath.Join(moved, "alternate.mod")) != alternate {
 		t.Fatal("absolute modfile location caused drift")
 	}
-	if err := os.WriteFile(filepath.Join(root, "alternate.mod"), []byte("module example.com/app\n\ngo 1.27\n\nexclude example.com/unused v1.0.0\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "alternate.mod"), []byte("module example.com/app\n\ngo 1.27\n\nexclude example.com/unused v1.0.0\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if digest(root, "-modfile="+filepath.Join(root, "alternate.mod")) == alternate {
@@ -64,14 +64,14 @@ func TestAlternateManifestSumFingerprint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(code.EffectiveBuild.ModFile, original, 0600); err != nil {
+	if err := os.WriteFile(code.EffectiveBuild.ModFile, original, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	before, err := GraphDigest(code)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(companionSum(code.EffectiveBuild.ModFile), []byte("example.com/unused v1.0.0 h1:example\n"), 0600); err != nil {
+	if err := os.WriteFile(companionSum(code.EffectiveBuild.ModFile), []byte("example.com/unused v1.0.0 h1:example\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	after, err := GraphDigest(code)

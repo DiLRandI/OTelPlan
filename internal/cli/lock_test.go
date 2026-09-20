@@ -43,7 +43,7 @@ func TestLockCommandsAndDrift(t *testing.T) {
 	invoke(t, root, 0, "lock", "--check")
 	invoke(t, root, 0, "diff", "--check")
 	changed := strings.Replace(files["app.go"], "ctx context.Context", "ctx context.Context, value int", 1)
-	if err := os.WriteFile(filepath.Join(root, "app.go"), []byte(changed), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "app.go"), []byte(changed), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	invoke(t, root, 6, "lock", "--check")
@@ -56,7 +56,7 @@ func TestLockCommandsAndDrift(t *testing.T) {
 	}
 	invoke(t, root, 0, "lock")
 	invoke(t, root, 0, "validate", "--strict")
-	if err := os.WriteFile(filename, []byte("invalid lockfile"), 0644); err != nil {
+	if err := os.WriteFile(filename, []byte("invalid lockfile"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	invoke(t, root, 6, "lock", "--check")
@@ -72,12 +72,12 @@ func TestStrictWarningsAndUnsupportedBackend(t *testing.T) {
 	root, files := cliFixture(t)
 	contents := files["otelplan.yaml"] + "  attributes:\n  - key: user_id\n    from: {constant: stable-test-id}\n"
 	filename := filepath.Join(root, "otelplan.yaml")
-	if err := os.WriteFile(filename, []byte(contents), 0644); err != nil {
+	if err := os.WriteFile(filename, []byte(contents), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	invoke(t, root, 0, "validate")
 	invoke(t, root, 5, "validate", "--strict")
-	if err := os.WriteFile(filename, []byte(strings.Replace(files["otelplan.yaml"], "v1.1.0", "v9.9.9", 1)), 0644); err != nil {
+	if err := os.WriteFile(filename, []byte(strings.Replace(files["otelplan.yaml"], "v1.1.0", "v9.9.9", 1)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	invoke(t, root, 7, "validate")

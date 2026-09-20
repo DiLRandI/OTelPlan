@@ -25,7 +25,7 @@ type Request struct { *Details; Left; Right; Count int; Payload []byte }
 func Run(request *Request) (result bool) { return true }
 `}
 	for name, contents := range files {
-		if err := os.WriteFile(filepath.Join(root, name), []byte(contents), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(contents), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}

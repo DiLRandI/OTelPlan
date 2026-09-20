@@ -8,11 +8,11 @@ import (
 
 func TestDefaultBuildOutput(t *testing.T) {
 	root := t.TempDir()
-	if err := os.Mkdir(filepath.Join(root, "library"), 0700); err != nil {
+	if err := os.Mkdir(filepath.Join(root, "library"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	for path, data := range map[string]string{"go.mod": "module example.com/tool/v2\n\ngo 1.27.0\n", "main.go": "package main\nfunc main(){}\n", "library/lib.go": "package library\n"} {
-		if err := os.WriteFile(filepath.Join(root, path), []byte(data), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(root, path), []byte(data), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}

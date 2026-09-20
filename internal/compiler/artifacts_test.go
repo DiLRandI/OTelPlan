@@ -1,13 +1,14 @@
 package compiler
 
 import (
-	"github.com/DiLRandI/OTelPlan/pkg/model"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/DiLRandI/OTelPlan/pkg/model"
 
 	"github.com/DiLRandI/OTelPlan/internal/backend/otelc"
 )
@@ -34,10 +35,10 @@ func TestStageAndVerifyArtifacts(t *testing.T) {
 		mutate func(string) error
 	}{
 		{"modified", func(dir string) error {
-			return os.WriteFile(filepath.Join(dir, "manifest.json"), []byte("changed"), 0600)
+			return os.WriteFile(filepath.Join(dir, "manifest.json"), []byte("changed"), 0o600)
 		}},
 		{"missing", func(dir string) error { return os.Remove(filepath.Join(dir, "manifest.json")) }},
-		{"extra", func(dir string) error { return os.WriteFile(filepath.Join(dir, "extra"), nil, 0600) }},
+		{"extra", func(dir string) error { return os.WriteFile(filepath.Join(dir, "extra"), nil, 0o600) }},
 		{"symlink", func(dir string) error {
 			return os.Symlink(filepath.Join(second.Dir, "manifest.json"), filepath.Join(dir, "link"))
 		}},
@@ -113,7 +114,7 @@ func TestStageGeneratedBundle(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
+		if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 			t.Fatal("artifact readable outside owner")
 		}
 	}

@@ -59,12 +59,12 @@ func TestPublishArtifacts(t *testing.T) {
 		modify func(string) error
 	}{
 		{"extra", func(dir string) error {
-			return os.WriteFile(filepath.Join(dir, "application.go"), []byte("package app"), 0600)
+			return os.WriteFile(filepath.Join(dir, "application.go"), []byte("package app"), 0o600)
 		}},
 		{"modified", func(dir string) error {
-			return os.WriteFile(filepath.Join(dir, "hooks", "hooks.go"), []byte("changed"), 0600)
+			return os.WriteFile(filepath.Join(dir, "hooks", "hooks.go"), []byte("changed"), 0o600)
 		}},
-		{"malformed", func(dir string) error { return os.WriteFile(filepath.Join(dir, "manifest.json"), []byte("{}"), 0600) }},
+		{"malformed", func(dir string) error { return os.WriteFile(filepath.Join(dir, "manifest.json"), []byte("{}"), 0o600) }},
 		{"symlink", func(dir string) error { return os.Symlink("manifest.json", filepath.Join(dir, "extra")) }},
 	} {
 		t.Run(change.name, func(t *testing.T) {

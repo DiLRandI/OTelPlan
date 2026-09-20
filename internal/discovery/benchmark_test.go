@@ -15,10 +15,10 @@ func BenchmarkLoadGeneratedSymbols(b *testing.B) {
 		fmt.Fprintf(&source, "func Function%03d(ctx context.Context) error { return nil }\n", i)
 	}
 	root := b.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/fixture\n\ngo 1.27\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/fixture\n\ngo 1.27\n"), 0o644); err != nil {
 		b.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "symbols.go"), []byte(source.String()), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "symbols.go"), []byte(source.String()), 0o644); err != nil {
 		b.Fatal(err)
 	}
 

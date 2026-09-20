@@ -12,11 +12,11 @@ import (
 
 func TestPrepareWorkspace(t *testing.T) {
 	source := t.TempDir()
-	if err := os.WriteFile(filepath.Join(source, "go.mod"), []byte("module example.com/app\n\ngo 1.25.0\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(source, "go.mod"), []byte("module example.com/app\n\ngo 1.25.0\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	app := []byte("package main\nimport \"fmt\"\nfunc main(){fmt.Print(\"prepared\")}\n")
-	if err := os.WriteFile(filepath.Join(source, "main.go"), app, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(source, "main.go"), app, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	backend, _ := otelc.Identity(otelc.SupportedVersion)
@@ -54,7 +54,7 @@ func TestPrepareWorkspace(t *testing.T) {
 	if err != nil || string(output) != "prepared" {
 		t.Fatalf("prepared build failed: %v\n%s", err, output)
 	}
-	if err := os.WriteFile(filepath.Join(prepared.Relocations[source], "main.go"), []byte("modified"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(prepared.Relocations[source], "main.go"), []byte("modified"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	original, err := os.ReadFile(filepath.Join(source, "main.go"))

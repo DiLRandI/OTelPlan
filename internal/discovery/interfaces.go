@@ -76,7 +76,7 @@ func (b *builder) collectInterfaceRelations(m *model.CodeModel) {
 							continue
 						}
 
-						signature := fn.Type().(*types.Signature)
+						signature := fn.Signature()
 						receiver := signature.Recv().Type()
 						receiverPointer := false
 

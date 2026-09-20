@@ -1,3 +1,5 @@
+// Package policy parses instrumentation policies and validates their schema
+// and safety constraints before resolution.
 package policy
 
 import (
@@ -11,6 +13,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var errPolicyDocumentCount = errors.New("parse policy: expected exactly one YAML document")
+
+// Load reads the policy at path. Callers accepting untrusted paths must enforce
+// their own permitted filesystem scope.
 func Load(path string) (*model.Policy, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -20,11 +26,24 @@ func Load(path string) (*model.Policy, error) {
 	return Parse(data)
 }
 
+// Parse decodes exactly one policy document, rejects unknown fields, and
+// applies safe context and error defaults. Validate performs semantic checks.
 func Parse(data []byte) (*model.Policy, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 
-	p := model.Policy{Defaults: model.Defaults{Context: model.ContextDefaults{Mode: model.ContextModeRequire}, Errors: model.ErrorDefaults{Record: true}}}
+	p := model.Policy{
+		APIVersion: "", Kind: "",
+		Project: model.ProjectConfig{Packages: nil, IncludeTests: false, IncludeDependencies: false, BuildTags: nil},
+		Backend: model.BackendConfig{Name: "", Version: ""},
+		Defaults: model.Defaults{
+			SpanName:   "",
+			Context:    model.ContextDefaults{Mode: model.ContextModeRequire},
+			Errors:     model.ErrorDefaults{Record: true},
+			Attributes: model.CaptureDefaults{Arguments: false, Results: false},
+		},
+		Rules: nil, Exclusions: nil,
+	}
 
 	err := dec.Decode(&p)
 	if err != nil {
@@ -35,7 +54,7 @@ func Parse(data []byte) (*model.Policy, error) {
 
 	err = dec.Decode(&trailing)
 	if !errors.Is(err, io.EOF) {
-		return nil, errors.New("parse policy: expected exactly one YAML document")
+		return nil, errPolicyDocumentCount
 	}
 
 	return &p, nil

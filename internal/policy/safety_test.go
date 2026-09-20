@@ -9,9 +9,21 @@ import (
 
 func validPolicyModel() *model.Policy {
 	return &model.Policy{
-		APIVersion: model.APIVersionV1Alpha1, Kind: model.KindInstrumentationPlan,
-		Backend: model.BackendConfig{Name: "otelc", Version: "v0.1.0"},
-		Rules:   []model.Rule{{ID: "operations", Match: model.Match{Functions: []string{"Run"}}}},
+		APIVersion: model.APIVersionV1Alpha1,
+		Kind:       model.KindInstrumentationPlan,
+		Project:    model.ProjectConfig{Packages: nil, IncludeTests: false, IncludeDependencies: false, BuildTags: nil},
+		Backend:    model.BackendConfig{Name: "otelc", Version: "v0.1.0"},
+		Defaults: model.Defaults{
+			SpanName:   "",
+			Context:    model.ContextDefaults{Mode: ""},
+			Errors:     model.ErrorDefaults{Record: false},
+			Attributes: model.CaptureDefaults{Arguments: false, Results: false},
+		},
+		Rules: []model.Rule{{
+			ID: "operations", Description: "", Match: testFunctionMatch("Run"),
+			Exclude: nil, Span: nil, Errors: nil, Attributes: nil,
+		}},
+		Exclusions: nil,
 	}
 }
 
@@ -27,13 +39,16 @@ func TestRejectUnsafeAndInvalidDefaults(t *testing.T) {
 		"ownership":        func(p *model.Policy) { p.Rules[0].Match.Ownership = "unknown" },
 		"empty pattern":    func(p *model.Policy) { p.Rules[0].Match.Functions = []string{""} },
 		"duplicate attribute": func(p *model.Policy) {
-			p.Rules[0].Attributes = []model.AttributeRule{{Key: "kind", From: model.AttributeSource{Constant: "x"}}, {Key: "kind", From: model.AttributeSource{Constant: "y"}}}
+			p.Rules[0].Attributes = []model.AttributeRule{testConstantAttribute("kind", "x"), testConstantAttribute("kind", "y")}
 		},
 		"reserved key": func(p *model.Policy) {
-			p.Rules[0].Attributes = []model.AttributeRule{{Key: "Otel.private", From: model.AttributeSource{Constant: "x"}}}
+			p.Rules[0].Attributes = []model.AttributeRule{testConstantAttribute("Otel.private", "x")}
 		},
 		"duplicate exclusion": func(p *model.Policy) {
-			p.Exclusions = []model.Exclusion{{ID: "x", Match: model.Match{Functions: []string{"A"}}}, {ID: "x", Match: model.Match{Functions: []string{"B"}}}}
+			p.Exclusions = []model.Exclusion{
+				{ID: "x", Match: testFunctionMatch("A")},
+				{ID: "x", Match: testFunctionMatch("B")},
+			}
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -61,21 +76,37 @@ func TestParseRejectsTrailingDocuments(t *testing.T) {
 func TestParseDefaultsPreserveExplicitFalse(t *testing.T) {
 	t.Parallel()
 
-	p, err := policy.Parse([]byte("apiVersion: otelplan.io/v1alpha1\n"))
+	parsed, err := policy.Parse([]byte("apiVersion: otelplan.io/v1alpha1\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !p.Defaults.Errors.Record || p.Defaults.Context.Mode != model.ContextModeRequire {
-		t.Fatalf("unsafe or missing defaults: %+v", p.Defaults)
+	if !parsed.Defaults.Errors.Record || parsed.Defaults.Context.Mode != model.ContextModeRequire {
+		t.Fatalf("unsafe or missing defaults: %+v", parsed.Defaults)
 	}
 
-	p, err = policy.Parse([]byte("defaults:\n  errors:\n    record: false\n"))
+	parsed, err = policy.Parse([]byte("defaults:\n  errors:\n    record: false\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if p.Defaults.Errors.Record {
+	if parsed.Defaults.Errors.Record {
 		t.Fatal("explicit false overwritten")
+	}
+}
+
+func testFunctionMatch(name string) model.Match {
+	return model.Match{
+		Packages: nil, Files: nil, Symbols: nil, Functions: []string{name},
+		Receivers: nil, Methods: nil, Implements: nil,
+		Exported: nil, HasContext: nil, ReturnsError: nil, Ownership: "",
+	}
+}
+
+func testConstantAttribute(key, value string) model.AttributeRule {
+	return model.AttributeRule{
+		Key:    key,
+		From:   model.AttributeSource{Argument: "", Result: "", Constant: value},
+		Safety: nil,
 	}
 }

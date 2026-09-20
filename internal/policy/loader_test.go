@@ -27,24 +27,24 @@ rules:
 func TestParseValidPolicy(t *testing.T) {
 	t.Parallel()
 
-	p, err := policy.Parse([]byte(validPolicy))
+	parsed, err := policy.Parse([]byte(validPolicy))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 
-	if p.APIVersion != model.APIVersionV1Alpha1 {
-		t.Errorf("apiVersion = %q", p.APIVersion)
+	if parsed.APIVersion != model.APIVersionV1Alpha1 {
+		t.Errorf("apiVersion = %q", parsed.APIVersion)
 	}
 
-	if p.Backend.Name != model.BackendNameOTelC {
-		t.Errorf("backend = %q", p.Backend.Name)
+	if parsed.Backend.Name != model.BackendNameOTelC {
+		t.Errorf("backend = %q", parsed.Backend.Name)
 	}
 
-	if len(p.Rules) != 1 || p.Rules[0].ID != "checkout" {
-		t.Errorf("rules = %+v", p.Rules)
+	if len(parsed.Rules) != 1 || parsed.Rules[0].ID != "checkout" {
+		t.Errorf("rules = %+v", parsed.Rules)
 	}
 
-	if p.Rules[0].Match.Exported == nil || !*p.Rules[0].Match.Exported {
+	if parsed.Rules[0].Match.Exported == nil || !*parsed.Rules[0].Match.Exported {
 		t.Error("exported should be true")
 	}
 }
@@ -80,12 +80,12 @@ func TestLoadExamplePolicies(t *testing.T) {
 			t.Skipf("examples not available on this branch: %v", err)
 		}
 
-		p, err := policy.Load(path)
+		parsed, err := policy.Load(path)
 		if err != nil {
 			t.Fatalf("load %s: %v", name, err)
 		}
 
-		if diags := policy.Validate(p); diags.HasErrors() {
+		if diags := policy.Validate(parsed); diags.HasErrors() {
 			t.Errorf("%s: unexpected errors: %v", name, diags.Errors())
 		}
 	}
@@ -138,31 +138,11 @@ rules:
 			want: model.CodeInvalidSelector,
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			p, err := policy.Parse([]byte(tc.yaml))
-			if err != nil {
-				t.Fatalf("parse: %v", err)
-			}
-
-			diags := policy.Validate(p)
-			if !diags.HasErrors() {
-				t.Fatalf("expected errors, got %+v", diags)
-			}
-
-			found := false
-
-			for _, d := range diags.Errors() {
-				if d.Code == tc.want {
-					found = true
-				}
-			}
-
-			if !found {
-				t.Errorf("want code %s, got %+v", tc.want, diags.Errors())
-			}
+			checkPolicyDiagnostic(t, testCase.yaml, testCase.want)
 		})
 	}
 }
@@ -171,14 +151,15 @@ func TestValidateRejectsReservedAttributeKey(t *testing.T) {
 	t.Parallel()
 
 	data := strings.Replace(validPolicy, "      exported: true",
-		"      exported: true\n    attributes:\n      - key: \"otel.scope.name\"\n        from:\n          constant: \"x\"", 1)
+		"      exported: true\n    attributes:\n"+
+			"      - key: \"otel.scope.name\"\n        from:\n          constant: \"x\"", 1)
 
-	p, err := policy.Parse([]byte(data))
+	parsed, err := policy.Parse([]byte(data))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 
-	diags := policy.Validate(p)
+	diags := policy.Validate(parsed)
 	if !diags.HasErrors() {
 		t.Fatal("expected error for reserved otel. key")
 	}
@@ -188,14 +169,16 @@ func TestValidateAcceptsAcknowledgedPII(t *testing.T) {
 	t.Parallel()
 
 	data := strings.Replace(validPolicy, "      exported: true",
-		"      exported: true\n    attributes:\n      - key: \"customer.email\"\n        from:\n          argument: \"customer.Email\"\n        safety:\n          classification: pii\n          allow: true", 1)
+		"      exported: true\n    attributes:\n"+
+			"      - key: \"customer.email\"\n        from:\n          argument: \"customer.Email\"\n"+
+			"        safety:\n          classification: pii\n          allow: true", 1)
 
-	p, err := policy.Parse([]byte(data))
+	parsed, err := policy.Parse([]byte(data))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 
-	if diags := policy.Validate(p); diags.HasErrors() {
+	if diags := policy.Validate(parsed); diags.HasErrors() {
 		t.Errorf("unexpected errors: %+v", diags.Errors())
 	}
 }
@@ -203,13 +186,15 @@ func TestValidateAcceptsAcknowledgedPII(t *testing.T) {
 func TestWriteReadRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	p, err := policy.Parse([]byte(validPolicy))
+	parsed, err := policy.Parse([]byte(validPolicy))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 
 	path := filepath.Join(t.TempDir(), "otelplan.yaml")
-	if err := os.WriteFile(path, []byte(validPolicy), 0o644); err != nil {
+
+	err = os.WriteFile(path, []byte(validPolicy), 0o600)
+	if err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -218,7 +203,33 @@ func TestWriteReadRoundTrip(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 
-	if got.Backend.Version != p.Backend.Version {
-		t.Errorf("version = %q, want %q", got.Backend.Version, p.Backend.Version)
+	if got.Backend.Version != parsed.Backend.Version {
+		t.Errorf("version = %q, want %q", got.Backend.Version, parsed.Backend.Version)
+	}
+}
+
+func checkPolicyDiagnostic(t *testing.T, source string, want model.Code) {
+	t.Helper()
+
+	parsed, err := policy.Parse([]byte(source))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	diags := policy.Validate(parsed)
+	if !diags.HasErrors() {
+		t.Fatalf("expected errors, got %+v", diags)
+	}
+
+	found := false
+
+	for _, d := range diags.Errors() {
+		if d.Code == want {
+			found = true
+		}
+	}
+
+	if !found {
+		t.Errorf("want code %s, got %+v", want, diags.Errors())
 	}
 }

@@ -38,6 +38,12 @@ func Check(version string, code *model.CodeModel, plan model.ResolvedPlan) model
 			add("backend target must match the analyzed symbol and signature")
 			continue
 		}
+		if symbol.PackageName == "main" {
+			add("main package targets require verified command-specific build scoping")
+		}
+		if symbol.Variadic {
+			add("variadic targets require typed hook signature generation")
+		}
 		if !symbol.HasBody {
 			add("backend cannot hook a declaration without a Go body")
 		}

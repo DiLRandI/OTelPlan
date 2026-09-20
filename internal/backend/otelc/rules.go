@@ -65,9 +65,6 @@ func RenderRules(version string, code *model.CodeModel, plan model.ResolvedPlan,
 		if (symbol.Receiver == nil && symbol.Kind != model.SymbolFunction) || (symbol.Receiver != nil && (symbol.Kind != model.SymbolMethod || !token.IsIdentifier(symbol.Receiver.Type))) {
 			return nil, nil, fmt.Errorf("backend target has invalid symbol kind or receiver")
 		}
-		if symbol.PackageName == "main" {
-			return nil, nil, fmt.Errorf("main package selectors require a verified isolated build mapping")
-		}
 		if symbol.PackageImportPath == hookImportPath {
 			return nil, nil, fmt.Errorf("generated hooks cannot instrument their own package")
 		}

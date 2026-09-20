@@ -22,6 +22,7 @@ func TestBuildResolvedFailureCleanup(t *testing.T) {
 	for _, change := range []func(*ResolvedBuildRequest){
 		func(r *ResolvedBuildRequest) { r.GoArgs = []string{"-o", "elsewhere"} },
 		func(r *ResolvedBuildRequest) { r.Code = nil },
+		func(r *ResolvedBuildRequest) { r.DefaultOutput, r.DirectoryOutput = true, true },
 		func(r *ResolvedBuildRequest) { r.WorkingDir = filepath.Join(source, "missing") },
 		func(r *ResolvedBuildRequest) {},
 	} {

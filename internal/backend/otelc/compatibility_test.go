@@ -37,6 +37,8 @@ func TestRejectUnsupportedTargets(t *testing.T) {
 		{"generic", func(c *model.CodeModel, _ *model.ResolvedPlan) {
 			c.Symbols[0].Generics = &model.GenericInfo{TypeParams: []string{"T"}}
 		}},
+		{"main package", func(c *model.CodeModel, _ *model.ResolvedPlan) { c.Symbols[0].PackageName = "main" }},
+		{"variadic", func(c *model.CodeModel, _ *model.ResolvedPlan) { c.Symbols[0].Variadic = true }},
 		{"declaration", func(c *model.CodeModel, _ *model.ResolvedPlan) { c.Symbols[0].HasBody = false }},
 		{"context", func(_ *model.CodeModel, p *model.ResolvedPlan) { p.Targets[0].ContextStrategy.Index = 2 }},
 		{"error result", func(_ *model.CodeModel, p *model.ResolvedPlan) { p.Targets[0].ErrorStrategy.Indexes = []int{2} }},

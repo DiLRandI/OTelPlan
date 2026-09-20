@@ -26,7 +26,6 @@ func RenderHooks(version, runtimeVersion string, code *model.CodeModel, plan mod
 	recordErrors := false
 	accessors := map[model.SymbolID][]AccessorBinding{}
 	for _, target := range plan.Targets {
-		symbol, _ := code.Symbol(target.SymbolID)
 		if strings.TrimSpace(target.SpanName) == "" {
 			return nil, fmt.Errorf("hook generation requires a span name")
 		}
@@ -36,9 +35,6 @@ func RenderHooks(version, runtimeVersion string, code *model.CodeModel, plan mod
 				return nil, err
 			}
 			accessors[target.SymbolID] = attributes
-		}
-		if symbol.Variadic {
-			return nil, fmt.Errorf("variadic hooks require typed signature generation")
 		}
 		seen := make(map[int]bool, len(target.ErrorStrategy.Indexes))
 		for _, index := range target.ErrorStrategy.Indexes {

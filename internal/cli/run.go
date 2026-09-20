@@ -51,7 +51,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		positionals = []string{"help"}
 	}
 	if len(positionals) == 0 {
-		return usageError(opts, "", "usage: otelplan [global flags] <scan|inspect|explain|validate|lock|diff|compile|version> [arguments]", stdout, stderr)
+		return usageError(opts, "", "usage: otelplan [global flags] <scan|inspect|explain|validate|lock|diff|compile|build|version> [arguments]", stdout, stderr)
 	}
 	command := positionals[0]
 	rest := positionals[1:]
@@ -71,7 +71,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	if (opts.dependencies || opts.interfaces) && command != "scan" {
 		return fail(2, model.CodeInvalidPolicy, "--dependencies and --interfaces are supported by scan")
 	}
-	policyCommand := command == "inspect" || command == "explain" || command == "validate" || command == "lock" || command == "diff" || command == "compile"
+	policyCommand := command == "inspect" || command == "explain" || command == "validate" || command == "lock" || command == "diff" || command == "compile" || command == "build"
 	if (opts.strict || opts.allowLargePlan || opts.configSet) && !policyCommand {
 		return fail(2, model.CodeInvalidPolicy, "--config, --strict, and --allow-large-plan require a policy command")
 	}
@@ -96,7 +96,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		if len(rest) > 0 {
 			return fail(2, model.CodeInvalidPolicy, "help takes no positional arguments")
 		}
-		output.Data = "usage: otelplan [--root path] [--config path] [--format text|json] <scan|inspect|explain|validate|lock|diff|compile|version>\nscan [packages...] lists Go symbols; inspect resolves policy; explain <symbol> shows rule decisions"
+		output.Data = "usage: otelplan [--root path] [--config path] [--format text|json] <scan|inspect|explain|validate|lock|diff|compile|build|version>\nscan [packages...] lists Go symbols; inspect resolves policy; explain <symbol> shows rule decisions"
 	case "version":
 		if len(rest) > 0 {
 			return fail(2, model.CodeInvalidPolicy, "version takes no positional arguments")
@@ -108,12 +108,20 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			return fail(4, model.CodeUnresolvedSymbol, err.Error())
 		}
 		output.Data = inventory
-	case "inspect", "explain", "validate", "lock", "diff", "compile":
+	case "inspect", "explain", "validate", "lock", "diff", "compile", "build":
 		if command == "explain" && len(rest) != 1 {
 			return fail(2, model.CodeInvalidPolicy, "explain requires one canonical symbol")
 		}
-		if command != "explain" && len(rest) != 0 {
+		if command != "explain" && command != "build" && len(rest) != 0 {
 			return fail(2, model.CodeInvalidPolicy, command+" takes no positional arguments")
+		}
+		var buildArgs buildArguments
+		if command == "build" {
+			var err error
+			buildArgs, err = parseBuildArguments(rest)
+			if err != nil {
+				return fail(2, model.CodeInvalidPolicy, err.Error())
+			}
 		}
 		config := opts.config
 		if !filepath.IsAbs(config) {
@@ -132,7 +140,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			}
 			return 3
 		}
-		inventory, err := discovery.Load(discovery.Options{Root: opts.root, Patterns: p.Project.Packages, BuildTags: p.Project.BuildTags, IncludeTests: p.Project.IncludeTests, IncludeDependencies: p.Project.IncludeDependencies, Offline: opts.offline})
+		inventory, err := discovery.Load(discovery.Options{Root: opts.root, Patterns: p.Project.Packages, BuildFlags: buildArgs.AnalysisFlags, BuildTags: p.Project.BuildTags, IncludeTests: p.Project.IncludeTests, IncludeDependencies: p.Project.IncludeDependencies, Offline: opts.offline})
 		if err != nil {
 			return fail(4, model.CodeUnresolvedSymbol, err.Error())
 		}
@@ -164,9 +172,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			}
 		} else if output.OK {
 			var diags model.DiagnosticList
-			if command == "compile" {
+			switch command {
+			case "build":
+				output.Data, exitCode, diags = buildCommand(opts, buildArgs, p, inventory, result.Plan)
+			case "compile":
 				output.Data, exitCode, diags = compileCommand(opts, p, inventory, result.Plan)
-			} else {
+			default:
 				output.Data, exitCode, diags = lockCommand(command, opts, p, inventory, result.Plan)
 			}
 			output.Diagnostics = append(output.Diagnostics, diags...)
@@ -325,6 +336,16 @@ func emit(out io.Writer, opts options, reply response) error {
 		fmt.Fprintf(&text, "%s selected=%t\n", data.SymbolID, data.Selected)
 		for _, decision := range data.Decisions {
 			fmt.Fprintf(&text, "  %s %s: %s\n", decision.RuleID, decision.Stage, decision.Reason)
+		}
+	case buildSummary:
+		if data.Path != "" {
+			fmt.Fprintf(&text, "built %s %s\n", data.Path, data.Digest)
+		}
+		for _, file := range data.Files {
+			fmt.Fprintf(&text, "built %s %s\n", file.Path, file.Digest)
+		}
+		if data.Path == "" && len(data.Files) == 0 {
+			fmt.Fprintln(&text, "build succeeded; no executable output")
 		}
 	case compileSummary:
 		fmt.Fprintf(&text, "%s artifacts=%d\n", data.Path, data.Files)

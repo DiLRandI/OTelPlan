@@ -69,3 +69,20 @@ func PublishBuildArtifact(artifact BuildArtifact, destination string) error {
 	}
 	return os.Rename(temporary.Name(), destination)
 }
+
+func readBuildArtifact(dir, path, name string) (BuildArtifact, error) {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return BuildArtifact{}, fmt.Errorf("backend output is not a regular file")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return BuildArtifact{}, err
+	}
+	defer func() { _ = file.Close() }()
+	digest := sha256.New()
+	if _, err := io.Copy(digest, file); err != nil {
+		return BuildArtifact{}, err
+	}
+	return BuildArtifact{Dir: dir, File: path, Digest: fmt.Sprintf("sha256:%x", digest.Sum(nil)), DefaultName: name}, nil
+}

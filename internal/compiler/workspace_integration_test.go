@@ -138,17 +138,24 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 			t.Fatal("invalid inputs produced a binary")
 		}
 	}
-	built, err := BuildResolved(t.Context(), ResolvedBuildRequest{Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: "test", WorkingDir: buildDir, Parent: t.TempDir(), Env: env, GoArgs: []string{buildDir}, Offline: true})
+	built, err := BuildResolved(t.Context(), ResolvedBuildRequest{Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: "test", WorkingDir: buildDir, Parent: t.TempDir(), Env: env, GoArgs: []string{buildDir}, Packages: []string{buildDir}, DefaultOutput: true, Offline: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = os.RemoveAll(built.Dir) }()
-	data, err := os.ReadFile(built.File)
-	if err != nil || artifactDigest(data) != built.Digest {
+	if len(built.Files) != 1 {
+		t.Fatal("expected a single executable")
+	}
+	artifact := built.Files[0]
+	if artifact.DefaultName != "probe" {
+		t.Fatalf("unexpected default output: %s", artifact.DefaultName)
+	}
+	data, err := os.ReadFile(artifact.File)
+	if err != nil || artifactDigest(data) != artifact.Digest {
 		t.Fatal("build output identity mismatch")
 	}
 	published := filepath.Join(t.TempDir(), "bin", "probe")
-	if err := PublishBuildArtifact(built, published); err != nil {
+	if err := PublishBuildArtifact(artifact, published); err != nil {
 		t.Fatal(err)
 	}
 	output, err := exec.CommandContext(t.Context(), published).Output()

@@ -6,7 +6,7 @@ Generic targets are rejected because this backend disables parameter/result APIs
 
 Run the real executable identity check with `OTELPLAN_OTELC=/path/to/otelc go test ./internal/backend/otelc`. Generated instrumentation and trace correctness need separate end-to-end checks.
 
-`RenderRules` converts a resolved plan into deterministic function-entry rules and stable before/after hook bindings. It preserves value/pointer receiver identity and rejects duplicate targets, inconsistent identities, and instrumentation of the generated hook package. Main-package targets require a verified isolated-build mapping and are currently rejected by generation.
+`RenderRules` converts a resolved plan into deterministic function-entry rules and stable before/after hook bindings. It preserves value/pointer receiver identity and rejects duplicate targets, inconsistent identities, and instrumentation of the generated hook package. Main-package targets require verified command-specific build scoping: the pinned backend derives package identity from the compiler `-p` argument, which identifies commands as `main`. Main-package and variadic targets are rejected during compatibility validation, before artifact generation or backend execution. Validation reports the affected symbol and policy rule.
 
 `OTELPLAN_OTELC=/path/to/otelc go test ./internal/backend/otelc -run TestGeneratedRulesWithPinnedBackend` exercises generated rules through the real pinned compiler, verifying nested trace parentage and returned-error events. The test compiles generated lifecycle hooks with the race detector and exercises methods, explicit roots, nil contexts, disabled error recording, panic propagation, no-op telemetry, and concurrent calls. Compile/build CLI wiring remains separate work.
 

@@ -24,10 +24,10 @@ func BenchmarkResolveExactApplicationFunctions(b *testing.B) {
 		},
 		Rules: make([]model.Rule, 0, ruleCount),
 	}
-	for ruleIndex := 0; ruleIndex < ruleCount; ruleIndex++ {
+	for ruleIndex := range ruleCount {
 		rule := model.Rule{ID: fmt.Sprintf("rule-%03d", ruleIndex), Match: model.Match{}}
 		rule.Match.Symbols = make([]string, 0, functionsPerRule)
-		for functionIndex := 0; functionIndex < functionsPerRule; functionIndex++ {
+		for functionIndex := range functionsPerRule {
 			index := ruleIndex*functionsPerRule + functionIndex
 			id := model.FunctionID("example.com/app", fmt.Sprintf("Function%04d", index))
 			rule.Match.Symbols = append(rule.Match.Symbols, string(id))

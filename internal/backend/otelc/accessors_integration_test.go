@@ -69,16 +69,16 @@ func TestPrivateAccessorsWithPinnedBackend(t *testing.T) {
 	generated := filepath.Join(root, "generated")
 	for _, file := range files {
 		filename := filepath.Join(generated, filepath.FromSlash(file.Path))
-		if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(filename), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filename, file.Data, 0600); err != nil {
+		if err := os.WriteFile(filename, file.Data, 0o600); err != nil {
 			t.Fatal(err)
 		}
 		original["generated/"+file.Path] = file.Data
 	}
 	workspace := filepath.Join(root, "go.work")
-	if err := os.WriteFile(workspace, []byte("go 1.27\n\nuse (\n.\n./generated\n)\n"), 0600); err != nil {
+	if err := os.WriteFile(workspace, []byte("go 1.27\n\nuse (\n.\n./generated\n)\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	binary := filepath.Join(root, "probe")

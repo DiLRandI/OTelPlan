@@ -7,9 +7,11 @@ import (
 )
 
 func validPolicyModel() *model.Policy {
-	return &model.Policy{APIVersion: model.APIVersionV1Alpha1, Kind: model.KindInstrumentationPlan,
+	return &model.Policy{
+		APIVersion: model.APIVersionV1Alpha1, Kind: model.KindInstrumentationPlan,
 		Backend: model.BackendConfig{Name: "otelc", Version: "v0.1.0"},
-		Rules:   []model.Rule{{ID: "operations", Match: model.Match{Functions: []string{"Run"}}}}}
+		Rules:   []model.Rule{{ID: "operations", Match: model.Match{Functions: []string{"Run"}}}},
+	}
 }
 
 func TestRejectUnsafeAndInvalidDefaults(t *testing.T) {

@@ -22,11 +22,11 @@ func installAlternateModuleFiles(alternate, copiedDir string) error {
 			return fmt.Errorf("remove copied module file: %w", err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(copiedDir, "go.mod"), manifest, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(copiedDir, "go.mod"), manifest, 0o600); err != nil {
 		return fmt.Errorf("write isolated alternate manifest: %w", err)
 	}
 	if !missingSums {
-		if err := os.WriteFile(filepath.Join(copiedDir, "go.sum"), sums, 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(copiedDir, "go.sum"), sums, 0o600); err != nil {
 			return fmt.Errorf("write isolated alternate checksums: %w", err)
 		}
 	}

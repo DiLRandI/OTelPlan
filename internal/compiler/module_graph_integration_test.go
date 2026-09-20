@@ -18,10 +18,10 @@ func TestWorkspaceModuleSelection(t *testing.T) {
 	}
 	for path, data := range files {
 		filename := filepath.Join(root, filepath.FromSlash(path))
-		if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(filename), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filename, []byte(data), 0600); err != nil {
+		if err := os.WriteFile(filename, []byte(data), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -38,7 +38,7 @@ func TestWorkspaceModuleSelection(t *testing.T) {
 		t.Fatal("accepted workspace-selected dependency upgrade")
 	}
 	runtimeMod := "module example.com/runtime\n\ngo 1.25.0\nrequire example.com/dep v1.0.0\n"
-	if err := os.WriteFile(filepath.Join(root, "runtime", "go.mod"), []byte(runtimeMod), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "runtime", "go.mod"), []byte(runtimeMod), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	compatible := read(filepath.Join(root, "go.work"))

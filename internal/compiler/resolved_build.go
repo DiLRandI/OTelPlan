@@ -138,7 +138,7 @@ func BuildResolved(ctx context.Context, request ResolvedBuildRequest) (BuildResu
 		discard = defaultName == ""
 	}
 	if request.DirectoryOutput {
-		if err := os.Mkdir(output, 0700); err != nil {
+		if err := os.Mkdir(output, 0o700); err != nil {
 			return BuildResult{}, err
 		}
 	}

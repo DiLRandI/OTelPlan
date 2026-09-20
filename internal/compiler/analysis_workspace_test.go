@@ -37,10 +37,10 @@ func TestWorkspaceForAnalysis(t *testing.T) {
 	code.EffectiveBuild.ModFile = ""
 	original := []byte("go 1.27.0\nuse ./app\nreplace example.com/dep => ./dep\n")
 	sums := []byte("workspace checksums\n")
-	if err := os.WriteFile(code.WorkspaceFile, original, 0600); err != nil {
+	if err := os.WriteFile(code.WorkspaceFile, original, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(code.WorkspaceFile+".sum", sums, 0600); err != nil {
+	if err := os.WriteFile(code.WorkspaceFile+".sum", sums, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	request, err = WorkspaceForAnalysis(code)

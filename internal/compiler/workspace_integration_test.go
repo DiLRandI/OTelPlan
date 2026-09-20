@@ -28,7 +28,7 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 		t.Fatal(err)
 	}
 	buildDir := filepath.Join(source, "cmd", "probe")
-	if err := os.MkdirAll(buildDir, 0700); err != nil {
+	if err := os.MkdirAll(buildDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Rename(filepath.Join(source, "main.go"), filepath.Join(buildDir, "main.go")); err != nil {
@@ -38,7 +38,7 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 		"selected.go":   "//go:build otelplan_probe\n\npackage ops\nconst buildSelection = true\n",
 		"unselected.go": "//go:build !otelplan_probe\n\npackage ops\nconst buildSelection = false\n",
 	} {
-		if err := os.WriteFile(filepath.Join(source, "ops", name), []byte(content), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(source, "ops", name), []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -48,7 +48,7 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 		t.Fatal(err)
 	}
 	opsSource = []byte(strings.Replace(string(opsSource), "(size int, err error) {", "(size int, err error) {\nif !buildSelection { panic(\"wrong build selection\") }", 1))
-	if err := os.WriteFile(opsPath, opsSource, 0600); err != nil {
+	if err := os.WriteFile(opsPath, opsSource, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	originalFiles := model.Artifacts{Dir: source}

@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -274,10 +275,5 @@ func stringLiterals(t *testing.T, source []byte) []string {
 }
 
 func containsLiteral(literals []string, want string) bool {
-	for _, literal := range literals {
-		if literal == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(literals, want)
 }

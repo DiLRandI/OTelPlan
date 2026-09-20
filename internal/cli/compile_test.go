@@ -62,7 +62,7 @@ func TestCompileCLI(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "otelplan.lock")); !os.IsNotExist(err) {
 		t.Fatal("compile changed resolution lock")
 	}
-	if err := os.WriteFile(filepath.Join(output, "unrelated"), []byte("keep"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(output, "unrelated"), []byte("keep"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var out, errout bytes.Buffer
@@ -105,7 +105,7 @@ func TestCompileOfflineDisablesProxyBypass(t *testing.T) {
 	marker := filepath.Join(wrapperDir, "checked")
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
 	script := "#!/bin/sh\nif [ \"$1\" = test ]; then\n [ \"$GOPROXY\" = off ] && [ \"$GONOPROXY\" = none ] && [ \"$GOSUMDB\" = off ] || exit 91\n touch " + quote(marker) + "\nfi\nexec " + quote(realGo) + " \"$@\"\n"
-	if err := os.WriteFile(filepath.Join(wrapperDir, "go"), []byte(script), 0700); err != nil {
+	if err := os.WriteFile(filepath.Join(wrapperDir, "go"), []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))

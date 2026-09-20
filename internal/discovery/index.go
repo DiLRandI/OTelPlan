@@ -159,11 +159,11 @@ func (b *builder) symbolFromDecl(p *packages.Package, fn *ast.FuncDecl) *model.S
 	sym.Signature = sig.String()
 	sym.Variadic = sig.Variadic()
 	for _, params := range []*types.TypeParamList{sig.TypeParams(), sig.RecvTypeParams()} {
-		for i := 0; i < params.Len(); i++ {
+		for tparam := range params.TypeParams() {
 			if sym.Generics == nil {
 				sym.Generics = &model.GenericInfo{}
 			}
-			sym.Generics.TypeParams = append(sym.Generics.TypeParams, types.TypeString(params.At(i), nil))
+			sym.Generics.TypeParams = append(sym.Generics.TypeParams, types.TypeString(tparam, nil))
 		}
 	}
 

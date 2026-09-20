@@ -12,7 +12,7 @@ func TestPublishBuildArtifact(t *testing.T) {
 	source := t.TempDir()
 	data := []byte("built output")
 	path := filepath.Join(source, "output")
-	if err := os.WriteFile(path, data, 0700); err != nil {
+	if err := os.WriteFile(path, data, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	artifact := BuildArtifact{Dir: source, File: path, Digest: artifactDigest(data)}
@@ -29,10 +29,10 @@ func TestPublishBuildArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if runtime.GOOS != "windows" && info.Mode().Perm() != 0700 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o700 {
 		t.Fatal("executable permissions were not preserved privately")
 	}
-	if err := os.WriteFile(destination, []byte("previous"), 0600); err != nil {
+	if err := os.WriteFile(destination, []byte("previous"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	invalid := artifact
@@ -78,7 +78,7 @@ func TestReadBuildArtifact(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "app")
 	data := []byte("binary")
-	if err := os.WriteFile(path, data, 0700); err != nil {
+	if err := os.WriteFile(path, data, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	artifact, err := readBuildArtifact(dir, path, "app")

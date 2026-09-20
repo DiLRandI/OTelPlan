@@ -39,10 +39,10 @@ func StageArtifacts(parent string, files []otelc.GeneratedFile) (model.Artifacts
 	}()
 	for _, file := range files {
 		filename := filepath.Join(dir, filepath.FromSlash(file.Path))
-		if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(filename), 0o700); err != nil {
 			return model.Artifacts{}, fmt.Errorf("create artifact subdirectory: %w", err)
 		}
-		if err := os.WriteFile(filename, file.Data, 0600); err != nil {
+		if err := os.WriteFile(filename, file.Data, 0o600); err != nil {
 			return model.Artifacts{}, fmt.Errorf("write artifact: %w", err)
 		}
 	}

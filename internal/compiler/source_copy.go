@@ -61,7 +61,7 @@ func CopySourceTree(ctx context.Context, source, parent string) (string, error) 
 		}
 		destination := filepath.Join(target, filepath.FromSlash(path))
 		if entry.IsDir() {
-			return os.Mkdir(destination, 0700)
+			return os.Mkdir(destination, 0o700)
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
 			resolved, err := filepath.EvalSymlinks(filepath.Join(source, filepath.FromSlash(path)))
@@ -93,7 +93,7 @@ func CopySourceTree(ctx context.Context, source, parent string) (string, error) 
 		if err != nil {
 			return err
 		}
-		output, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600|(info.Mode().Perm()&0100))
+		output, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600|(info.Mode().Perm()&0o100))
 		if err != nil {
 			return err
 		}

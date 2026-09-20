@@ -53,8 +53,8 @@ func (b *builder) collectInterfaceRelations(m *model.CodeModel) {
 					concreteID := model.SymbolID(p.PkgPath + "." + name)
 					m.Implements = append(m.Implements, model.InterfaceRelation{InterfaceID: iface.id, InterfacePkg: iface.pkg, Interface: iface.name, ConcreteID: concreteID, Pointer: pointer})
 					methods := types.NewMethodSet(concrete)
-					for i := 0; i < iface.typ.NumMethods(); i++ {
-						method := iface.typ.Method(i)
+					for method := range iface.typ.Methods() {
+						method := method
 						selection := methods.Lookup(method.Pkg(), method.Name())
 						if selection == nil {
 							continue

@@ -25,8 +25,8 @@ func (workspace PreparedWorkspace) RelocateBuildArguments(args []string, origina
 		directory, suffix := path, ""
 		if file {
 			directory, suffix = filepath.Dir(path), filepath.Base(path)
-		} else if wildcard := strings.Index(path, "..."); wildcard >= 0 {
-			separator := strings.LastIndexAny(path[:wildcard], "/\\")
+		} else if before, _, ok := strings.Cut(path, "..."); ok {
+			separator := strings.LastIndexAny(before, "/\\")
 			directory, suffix = path[:separator+1], path[separator+1:]
 			if directory == "" {
 				directory = "."

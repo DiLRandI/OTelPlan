@@ -45,8 +45,8 @@ func (b *builder) collectType(typ types.Type) string {
 		info.Element = b.collectType(underlying.Elem())
 	case *types.Struct:
 		info.Kind = "struct"
-		for i := 0; i < underlying.NumFields(); i++ {
-			field := underlying.Field(i)
+		for field := range underlying.Fields() {
+			field := field
 			info.Fields = append(info.Fields, model.TypeField{Name: field.Name(), Type: b.collectType(field.Type()), Exported: field.Exported(), Embedded: field.Embedded()})
 		}
 	case *types.Interface:

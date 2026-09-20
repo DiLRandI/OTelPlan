@@ -100,7 +100,7 @@ func PrepareWorkspace(ctx context.Context, request WorkspaceRequest) (PreparedWo
 		if err != nil {
 			return PreparedWorkspace{}, err
 		}
-		if err := os.WriteFile(path, relocated, 0600); err != nil {
+		if err := os.WriteFile(path, relocated, 0o600); err != nil {
 			return PreparedWorkspace{}, fmt.Errorf("write copied module manifest: %w", err)
 		}
 	}
@@ -116,11 +116,11 @@ func PrepareWorkspace(ctx context.Context, request WorkspaceRequest) (PreparedWo
 	if err != nil {
 		return PreparedWorkspace{}, err
 	}
-	if err := os.WriteFile(result.WorkspaceFile, workspace, 0600); err != nil {
+	if err := os.WriteFile(result.WorkspaceFile, workspace, 0o600); err != nil {
 		return PreparedWorkspace{}, fmt.Errorf("write isolated workspace: %w", err)
 	}
 	if len(request.WorkspaceSums) > 0 {
-		if err := os.WriteFile(result.WorkspaceFile+".sum", request.WorkspaceSums, 0600); err != nil {
+		if err := os.WriteFile(result.WorkspaceFile+".sum", request.WorkspaceSums, 0o600); err != nil {
 			return PreparedWorkspace{}, fmt.Errorf("write isolated workspace sums: %w", err)
 		}
 	}

@@ -113,10 +113,10 @@ func TestResolveArchitectureFixtures(t *testing.T) {
 			tc.files["go.mod"] = "module example.com/app\n\ngo 1.27\n"
 			for name, contents := range tc.files {
 				filename := filepath.Join(root, name)
-				if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+				if err := os.MkdirAll(filepath.Dir(filename), 0o755); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.WriteFile(filename, []byte(contents), 0644); err != nil {
+				if err := os.WriteFile(filename, []byte(contents), 0o644); err != nil {
 					t.Fatal(err)
 				}
 			}

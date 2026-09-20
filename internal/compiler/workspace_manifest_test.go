@@ -60,10 +60,10 @@ func TestBuildRelocatedWorkspace(t *testing.T) {
 	}
 	for path, data := range files {
 		filename := filepath.Join(original, filepath.FromSlash(path))
-		if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(filename), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filename, []byte(data), 0600); err != nil {
+		if err := os.WriteFile(filename, []byte(data), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -82,7 +82,7 @@ func TestBuildRelocatedWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	workspace := filepath.Join(staging, "go.work")
-	if err := os.WriteFile(workspace, rendered, 0600); err != nil {
+	if err := os.WriteFile(workspace, rendered, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Rename(filepath.Join(original, "dep"), filepath.Join(original, "old-dep")); err != nil {

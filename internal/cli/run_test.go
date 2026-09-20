@@ -20,7 +20,7 @@ func cliFixture(t *testing.T) (string, map[string]string) {
 		"otelplan.yaml": "apiVersion: otelplan.io/v1alpha1\nkind: InstrumentationPlan\nbackend: {name: otelc, version: v1.1.0}\nrules:\n- id: operation\n  match:\n    functions: [Run]\n",
 	}
 	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -64,8 +64,11 @@ func TestCLIExitCodes(t *testing.T) {
 		args []string
 		code int
 	}{
-		{[]string{"--unknown"}, 2}, {[]string{"--format=xml", "scan"}, 2}, {[]string{"explain"}, 2},
-		{[]string{"--config=missing.yaml", "inspect"}, 3}, {[]string{"scan", "./missing"}, 4},
+		{[]string{"--unknown"}, 2},
+		{[]string{"--format=xml", "scan"}, 2},
+		{[]string{"explain"}, 2},
+		{[]string{"--config=missing.yaml", "inspect"}, 3},
+		{[]string{"scan", "./missing"}, 4},
 		{[]string{"explain", "example.com/app.Missing"}, 5},
 	} {
 		var out, errout bytes.Buffer
@@ -114,7 +117,7 @@ func TestCLIOutputFailure(t *testing.T) {
 func TestInspectRejectsUnsafeCaptureWithoutPrintingConstant(t *testing.T) {
 	root, files := cliFixture(t)
 	contents := files["otelplan.yaml"] + "  attributes:\n  - key: password\n    from:\n      constant: do-not-print-this-secret\n"
-	if err := os.WriteFile(filepath.Join(root, "otelplan.yaml"), []byte(contents), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "otelplan.yaml"), []byte(contents), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	var out, errout bytes.Buffer

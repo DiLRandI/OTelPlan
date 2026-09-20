@@ -46,7 +46,7 @@ func PublishBuildArtifact(artifact BuildArtifact, destination string) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(destination), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
 		return err
 	}
 	temporary, err := os.CreateTemp(filepath.Dir(destination), ".otelplan-output-")
@@ -61,7 +61,7 @@ func PublishBuildArtifact(artifact BuildArtifact, destination string) error {
 	if fmt.Sprintf("sha256:%x", digest.Sum(nil)) != artifact.Digest {
 		return fmt.Errorf("build artifact digest changed before publication")
 	}
-	if err := temporary.Chmod(0600 | info.Mode().Perm()&0100); err != nil {
+	if err := temporary.Chmod(0o600 | info.Mode().Perm()&0o100); err != nil {
 		return err
 	}
 	if err := temporary.Close(); err != nil {

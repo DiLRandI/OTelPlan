@@ -21,10 +21,10 @@ func TestFunctionIDRoundTrip(t *testing.T) {
 
 func TestMethodIDRoundTrip(t *testing.T) {
 	cases := []struct {
-		name    string
-		recv    Receiver
-		method  string
-		wantID  SymbolID
+		name   string
+		recv   Receiver
+		method string
+		wantID SymbolID
 	}{
 		{
 			name:   "value receiver",
@@ -41,27 +41,27 @@ func TestMethodIDRoundTrip(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-id := MethodID("github.com/acme/shop/internal/payment", tc.recv, tc.method)
-if id != tc.wantID {
-t.Fatalf("id = %q, want %q", id, tc.wantID)
-}
-parsed, err := ParseSymbolID(id)
-if err != nil {
-t.Fatalf("parse: %v", err)
-}
-if parsed.Receiver == nil {
-t.Fatal("receiver = nil, want non-nil")
-}
-if parsed.Receiver.Type != "Processor" {
-t.Errorf("receiver type = %q", parsed.Receiver.Type)
-}
-if parsed.Receiver.Pointer != tc.recv.Pointer {
-t.Errorf("receiver pointer = %v, want %v", parsed.Receiver.Pointer, tc.recv.Pointer)
-}
-if parsed.Name != tc.method {
-t.Errorf("method = %q", parsed.Name)
-}
-})
+			id := MethodID("github.com/acme/shop/internal/payment", tc.recv, tc.method)
+			if id != tc.wantID {
+				t.Fatalf("id = %q, want %q", id, tc.wantID)
+			}
+			parsed, err := ParseSymbolID(id)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if parsed.Receiver == nil {
+				t.Fatal("receiver = nil, want non-nil")
+			}
+			if parsed.Receiver.Type != "Processor" {
+				t.Errorf("receiver type = %q", parsed.Receiver.Type)
+			}
+			if parsed.Receiver.Pointer != tc.recv.Pointer {
+				t.Errorf("receiver pointer = %v, want %v", parsed.Receiver.Pointer, tc.recv.Pointer)
+			}
+			if parsed.Name != tc.method {
+				t.Errorf("method = %q", parsed.Name)
+			}
+		})
 	}
 }
 

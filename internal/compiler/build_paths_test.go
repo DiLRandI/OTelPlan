@@ -12,7 +12,7 @@ func TestRelocateBuildArguments(t *testing.T) {
 	app, other := filepath.Join(source, "app"), filepath.Join(source, "other")
 	copiedApp, copiedOther := filepath.Join(parent, "app"), filepath.Join(parent, "other")
 	for _, dir := range []string{copiedApp, copiedOther, filepath.Join(copiedApp, "cmd")} {
-		if err := os.MkdirAll(dir, 0700); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -157,7 +157,7 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 			return nil, nil, fmt.Errorf("close isolated module manifest: %w", closeErr)
 		}
 		if sum, sumErr := os.ReadFile(companionSum(original)); sumErr == nil {
-			if writeErr := os.WriteFile(strings.TrimSuffix(tmpName, ".mod")+".sum", sum, 0600); writeErr != nil {
+			if writeErr := os.WriteFile(strings.TrimSuffix(tmpName, ".mod")+".sum", sum, 0o600); writeErr != nil {
 				_ = os.Remove(tmpName)
 				return nil, nil, fmt.Errorf("write isolated module checksums: %w", writeErr)
 			}
@@ -218,8 +218,8 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 }
 
 func companionSum(modfile string) string {
-	if strings.HasSuffix(modfile, ".mod") {
-		return strings.TrimSuffix(modfile, ".mod") + ".sum"
+	if before, ok := strings.CutSuffix(modfile, ".mod"); ok {
+		return before + ".sum"
 	}
 	return modfile + ".sum"
 }

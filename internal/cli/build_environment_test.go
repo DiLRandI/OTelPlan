@@ -16,10 +16,10 @@ func TestLockChecksPreserveExplicitModModeInputs(t *testing.T) {
 	files["local/local.go"] = "package local\n"
 	for name, contents := range files {
 		filename := filepath.Join(root, name)
-		if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(filename), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filename, []byte(contents), 0644); err != nil {
+		if err := os.WriteFile(filename, []byte(contents), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}

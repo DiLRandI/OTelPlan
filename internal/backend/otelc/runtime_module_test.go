@@ -29,12 +29,12 @@ func TestRuntimeModule(t *testing.T) {
 	}
 	root := t.TempDir()
 	for _, file := range files {
-		if err := os.WriteFile(filepath.Join(root, file.Path), file.Data, 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(root, file.Path), file.Data, 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 	source := []byte("package runtimeprobe\nimport (\n_ \"go.opentelemetry.io/otel\"\n_ \"go.opentelemetry.io/otel/attribute\"\n_ \"go.opentelemetry.io/otel/codes\"\n_ \"go.opentelemetry.io/otel/trace\"\n_ \"go.opentelemetry.io/otelc/pkg/hook\"\n)\n")
-	if err := os.WriteFile(filepath.Join(root, "runtime.go"), source, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "runtime.go"), source, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	command := exec.CommandContext(t.Context(), "go", "test", "-mod=readonly", "./...")

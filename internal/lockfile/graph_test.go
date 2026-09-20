@@ -13,7 +13,7 @@ func graphFixture(t *testing.T) *model.CodeModel {
 	root := t.TempDir()
 	app, dependency := filepath.Join(root, "app"), filepath.Join(root, "dependency")
 	for _, dir := range []string{app, dependency} {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -23,7 +23,7 @@ func graphFixture(t *testing.T) *model.CodeModel {
 		filepath.Join(root, "go.work"):      "go 1.27\n\nuse " + filepath.ToSlash(app) + "\n",
 	}
 	for name, contents := range files {
-		if err := os.WriteFile(name, []byte(contents), 0644); err != nil {
+		if err := os.WriteFile(name, []byte(contents), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -69,21 +69,21 @@ func TestGraphDigestTracksBuildInputs(t *testing.T) {
 		{"architecture", func(_ *testing.T, c *model.CodeModel) { c.GOARCH = "arm64" }},
 		{"tags", func(_ *testing.T, c *model.CodeModel) { c.BuildTags = []string{"other"} }},
 		{"dependency manifest", func(t *testing.T, c *model.CodeModel) {
-			if err := os.WriteFile(filepath.Join(c.Modules[1].Dir, "go.mod"), []byte("module example.com/dependency\n\ngo 1.27\nrequire example.com/transitive v1.0.0\n"), 0644); err != nil {
+			if err := os.WriteFile(filepath.Join(c.Modules[1].Dir, "go.mod"), []byte("module example.com/dependency\n\ngo 1.27\nrequire example.com/transitive v1.0.0\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}},
 		{"checksums", func(t *testing.T, c *model.CodeModel) {
-			if err := os.WriteFile(filepath.Join(c.Modules[0].Dir, "go.sum"), []byte("example.com/external v1.0.0 h1:example\n"), 0644); err != nil {
+			if err := os.WriteFile(filepath.Join(c.Modules[0].Dir, "go.sum"), []byte("example.com/external v1.0.0 h1:example\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}},
 		{"vendor", func(t *testing.T, c *model.CodeModel) {
 			dir := filepath.Join(c.Modules[0].Dir, "vendor")
-			if err := os.Mkdir(dir, 0755); err != nil {
+			if err := os.Mkdir(dir, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(filepath.Join(dir, "modules.txt"), []byte("# example.com/vendor v1.0.0\n"), 0644); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, "modules.txt"), []byte("# example.com/vendor v1.0.0\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}},

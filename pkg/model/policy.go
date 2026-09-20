@@ -41,9 +41,9 @@ type CaptureDefaults struct {
 
 type Defaults struct {
 	SpanName   string          `yaml:"spanName,omitempty" json:"spanName,omitempty"`
-	Context    ContextDefaults `yaml:"context,omitempty" json:"context,omitempty"`
-	Errors     ErrorDefaults   `yaml:"errors,omitempty" json:"errors,omitempty"`
-	Attributes CaptureDefaults `yaml:"attributes,omitempty" json:"attributes,omitempty"`
+	Context    ContextDefaults `yaml:"context,omitempty" json:"context"`
+	Errors     ErrorDefaults   `yaml:"errors,omitempty" json:"errors"`
+	Attributes CaptureDefaults `yaml:"attributes,omitempty" json:"attributes"`
 }
 
 type Match struct {
@@ -120,9 +120,9 @@ type Exclusion struct {
 type Policy struct {
 	APIVersion string        `yaml:"apiVersion" json:"apiVersion"`
 	Kind       string        `yaml:"kind" json:"kind"`
-	Project    ProjectConfig `yaml:"project,omitempty" json:"project,omitempty"`
+	Project    ProjectConfig `yaml:"project,omitempty" json:"project"`
 	Backend    BackendConfig `yaml:"backend" json:"backend"`
-	Defaults   Defaults      `yaml:"defaults,omitempty" json:"defaults,omitempty"`
+	Defaults   Defaults      `yaml:"defaults,omitempty" json:"defaults"`
 	Rules      []Rule        `yaml:"rules" json:"rules"`
 	Exclusions []Exclusion   `yaml:"exclusions,omitempty" json:"exclusions,omitempty"`
 }

@@ -1,8 +1,9 @@
 package resolve
 
 import (
-	"github.com/DiLRandI/OTelPlan/pkg/model"
 	"testing"
+
+	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
 func TestGlob(t *testing.T) {
@@ -10,9 +11,14 @@ func TestGlob(t *testing.T) {
 		pattern, value string
 		want           bool
 	}{
-		{"**/*.go", "root.go", true}, {"**/*.go", "a/b/root.go", true},
-		{"a/**", "a", true}, {"a/*", "a/b/c", false}, {"a/**/b", "a/b", true},
-		{"[AB]?", "Ax", true}, {"Run", "RunMore", false}, {"**/mock_*.go", "mock_x.go", true},
+		{"**/*.go", "root.go", true},
+		{"**/*.go", "a/b/root.go", true},
+		{"a/**", "a", true},
+		{"a/*", "a/b/c", false},
+		{"a/**/b", "a/b", true},
+		{"[AB]?", "Ax", true},
+		{"Run", "RunMore", false},
+		{"**/mock_*.go", "mock_x.go", true},
 	} {
 		t.Run(tc.pattern+tc.value, func(t *testing.T) {
 			got, err := Glob(tc.pattern, tc.value)

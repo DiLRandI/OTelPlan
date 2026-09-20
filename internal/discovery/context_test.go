@@ -36,7 +36,7 @@ func TestLoadVendorWithoutNetwork(t *testing.T) {
 		"vendor/modules.txt": "# example.com/dependency v1.0.0\n## explicit; go 1.27\nexample.com/dependency\n",
 		"vendor/example.com/dependency/dependency.go": "package dependency\nfunc Dependency() {}\n",
 	})
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/shop\n\ngo 1.27\n\nrequire example.com/dependency v1.0.0\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/shop\n\ngo 1.27\n\nrequire example.com/dependency v1.0.0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	code, err := Load(Options{Root: root})
@@ -71,10 +71,10 @@ func TestLoadWorkspaceRoot(t *testing.T) {
 	}
 	for name, contents := range files {
 		filename := filepath.Join(root, name)
-		if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(filename), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filename, []byte(contents), 0644); err != nil {
+		if err := os.WriteFile(filename, []byte(contents), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}

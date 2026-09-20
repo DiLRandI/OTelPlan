@@ -10,68 +10,86 @@ import (
 
 var ruleIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
+// Validate checks policy schema, selectors, and safety without modifying p.
+// Rules and exclusions are checked in declaration order; symbols are not resolved.
 func Validate(p *model.Policy) model.DiagnosticList {
 	var diags model.DiagnosticList
 
 	if p == nil {
-		return model.DiagnosticList{{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, Message: "policy is required"}}
+		return model.DiagnosticList{policyDiagnostic(model.CodeInvalidPolicy, "policy is required", "")}
 	}
 
 	if p.Defaults.Attributes.Arguments || p.Defaults.Attributes.Results {
-		diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeCaptureNotAllowed, Message: "blanket argument/result capture is prohibited; use explicit attribute rules"})
+		diags = append(diags, policyDiagnostic(
+			model.CodeCaptureNotAllowed,
+			"blanket argument/result capture is prohibited; use explicit attribute rules",
+			"",
+		))
 	}
 
 	if p.Defaults.Context.Mode != "" && p.Defaults.Context.Mode != model.ContextModeRequire && p.Defaults.Context.Mode != model.ContextModeRoot {
-		diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, Message: "unsupported default context mode"})
+		diags = append(diags, policyDiagnostic(
+			model.CodeInvalidPolicy,
+			"unsupported default context mode",
+			"",
+		))
 	}
 
 	err := ValidateTemplate(p.Defaults.SpanName)
 	if err != nil {
-		diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeUnknownTemplateVar, Message: "defaults.spanName: " + err.Error()})
+		diags = append(diags, policyDiagnostic(
+			model.CodeUnknownTemplateVar,
+			"defaults.spanName: "+err.Error(),
+			"",
+		))
 	}
 
 	if p.Backend.Name != "" && p.Backend.Name != model.BackendNameOTelC {
-		diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, Message: "unsupported backend"})
+		diags = append(diags, policyDiagnostic(
+			model.CodeInvalidPolicy,
+			"unsupported backend",
+			"",
+		))
 	}
 
 	if p.APIVersion != model.APIVersionV1Alpha1 {
-		diags = append(diags, model.Diagnostic{
-			Severity: model.SeverityError,
-			Code:     model.CodeInvalidPolicy,
-			Message:  fmt.Sprintf("apiVersion %q is not supported, want %q", p.APIVersion, model.APIVersionV1Alpha1),
-		})
+		diags = append(diags, policyDiagnostic(
+			model.CodeInvalidPolicy,
+			fmt.Sprintf("apiVersion %q is not supported, want %q", p.APIVersion, model.APIVersionV1Alpha1),
+			"",
+		))
 	}
 
 	if p.Kind != model.KindInstrumentationPlan {
-		diags = append(diags, model.Diagnostic{
-			Severity: model.SeverityError,
-			Code:     model.CodeInvalidPolicy,
-			Message:  fmt.Sprintf("kind %q is not supported, want %q", p.Kind, model.KindInstrumentationPlan),
-		})
+		diags = append(diags, policyDiagnostic(
+			model.CodeInvalidPolicy,
+			fmt.Sprintf("kind %q is not supported, want %q", p.Kind, model.KindInstrumentationPlan),
+			"",
+		))
 	}
 
 	if p.Backend.Name == "" {
-		diags = append(diags, model.Diagnostic{
-			Severity: model.SeverityError,
-			Code:     model.CodeInvalidPolicy,
-			Message:  "backend.name is required",
-		})
+		diags = append(diags, policyDiagnostic(
+			model.CodeInvalidPolicy,
+			"backend.name is required",
+			"",
+		))
 	}
 
 	if p.Backend.Version == "" {
-		diags = append(diags, model.Diagnostic{
-			Severity: model.SeverityError,
-			Code:     model.CodeBackendVersionMismatch,
-			Message:  "backend.version must be pinned to an exact version for lock/build workflows",
-		})
+		diags = append(diags, policyDiagnostic(
+			model.CodeBackendVersionMismatch,
+			"backend.version must be pinned to an exact version for lock/build workflows",
+			"",
+		))
 	}
 
 	if len(p.Rules) == 0 {
-		diags = append(diags, model.Diagnostic{
-			Severity: model.SeverityError,
-			Code:     model.CodeInvalidPolicy,
-			Message:  "at least one rule is required",
-		})
+		diags = append(diags, policyDiagnostic(
+			model.CodeInvalidPolicy,
+			"at least one rule is required",
+			"",
+		))
 	}
 
 	seen := make(map[string]bool, len(p.Rules))
@@ -87,29 +105,29 @@ func Validate(p *model.Policy) model.DiagnosticList {
 
 		id := p.Rules[i].ID
 		if id == "" {
-			diags = append(diags, model.Diagnostic{
-				Severity: model.SeverityError,
-				Code:     model.CodeInvalidPolicy,
-				Message:  fmt.Sprintf("rules[%d]: id is required", i),
-			})
+			diags = append(diags, policyDiagnostic(
+				model.CodeInvalidPolicy,
+				fmt.Sprintf("rules[%d]: id is required", i),
+				"",
+			))
 
 			continue
 		}
 
 		if !ruleIDPattern.MatchString(id) {
-			diags = append(diags, model.Diagnostic{
-				Severity: model.SeverityError,
-				Code:     model.CodeInvalidPolicy,
-				Message:  fmt.Sprintf("rule %q: id must match %s", id, ruleIDPattern.String()),
-			})
+			diags = append(diags, policyDiagnostic(
+				model.CodeInvalidPolicy,
+				fmt.Sprintf("rule %q: id must match %s", id, ruleIDPattern.String()),
+				"",
+			))
 		}
 
 		if seen[id] {
-			diags = append(diags, model.Diagnostic{
-				Severity: model.SeverityError,
-				Code:     model.CodeConflictingRules,
-				Message:  fmt.Sprintf("duplicate rule id %q", id),
-			})
+			diags = append(diags, policyDiagnostic(
+				model.CodeConflictingRules,
+				fmt.Sprintf("duplicate rule id %q", id),
+				"",
+			))
 		}
 
 		seen[id] = true
@@ -121,25 +139,29 @@ func Validate(p *model.Policy) model.DiagnosticList {
 		diags = append(diags, validateMatch(e.ID, e.Match)...)
 
 		if seen[e.ID] || (e.ID != "" && !ruleIDPattern.MatchString(e.ID)) {
-			diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, RuleID: e.ID, Message: "exclusion ID must be valid and unique across rules and exclusions"})
+			diags = append(diags, policyDiagnostic(
+				model.CodeInvalidPolicy,
+				"exclusion ID must be valid and unique across rules and exclusions",
+				e.ID,
+			))
 		}
 
 		seen[e.ID] = true
 
 		if e.ID == "" {
-			diags = append(diags, model.Diagnostic{
-				Severity: model.SeverityError,
-				Code:     model.CodeInvalidPolicy,
-				Message:  fmt.Sprintf("exclusions[%d]: id is required", i),
-			})
+			diags = append(diags, policyDiagnostic(
+				model.CodeInvalidPolicy,
+				fmt.Sprintf("exclusions[%d]: id is required", i),
+				"",
+			))
 		}
 
 		if e.Match.IsEmpty() {
-			diags = append(diags, model.Diagnostic{
-				Severity: model.SeverityError,
-				Code:     model.CodeInvalidSelector,
-				Message:  fmt.Sprintf("exclusion %q: match must select at least one field", e.ID),
-			})
+			diags = append(diags, policyDiagnostic(
+				model.CodeInvalidSelector,
+				fmt.Sprintf("exclusion %q: match must select at least one field", e.ID),
+				"",
+			))
 		}
 	}
 
@@ -150,44 +172,48 @@ func validateRule(r *model.Rule) model.DiagnosticList {
 	var diags model.DiagnosticList
 
 	if r.Match.IsEmpty() {
-		diags = append(diags, model.Diagnostic{
-			Severity: model.SeverityError,
-			Code:     model.CodeInvalidSelector,
-			Message:  fmt.Sprintf("rule %q: match must select at least one field", r.ID),
-		})
+		diags = append(diags, policyDiagnostic(
+			model.CodeInvalidSelector,
+			fmt.Sprintf("rule %q: match must select at least one field", r.ID),
+			"",
+		))
 	}
 
 	if r.Exclude != nil && r.Exclude.IsEmpty() {
-		diags = append(diags, model.Diagnostic{
-			Severity: model.SeverityError,
-			Code:     model.CodeInvalidSelector,
-			Message:  fmt.Sprintf("rule %q: exclude must select at least one field", r.ID),
-		})
+		diags = append(diags, policyDiagnostic(
+			model.CodeInvalidSelector,
+			fmt.Sprintf("rule %q: exclude must select at least one field", r.ID),
+			"",
+		))
 	}
 
 	if r.Span != nil && r.Span.Kind != "" && r.Span.Kind != "internal" {
-		diags = append(diags, model.Diagnostic{
-			Severity: model.SeverityError,
-			Code:     model.CodeInvalidPolicy,
-			Message:  fmt.Sprintf("rule %q: span.kind %q is not supported, only \"internal\"", r.ID, r.Span.Kind),
-		})
+		diags = append(diags, policyDiagnostic(
+			model.CodeInvalidPolicy,
+			fmt.Sprintf("rule %q: span.kind %q is not supported, only \"internal\"", r.ID, r.Span.Kind),
+			"",
+		))
 	}
 
 	if r.Span != nil && r.Span.Name != "" {
 		err := ValidateTemplate(r.Span.Name)
 		if err != nil {
-			diags = append(diags, model.Diagnostic{
-				Severity: model.SeverityError,
-				Code:     model.CodeUnknownTemplateVar,
-				Message:  fmt.Sprintf("rule %q: span.name: %v", r.ID, err),
-			})
+			diags = append(diags, policyDiagnostic(
+				model.CodeUnknownTemplateVar,
+				fmt.Sprintf("rule %q: span.name: %v", r.ID, err),
+				"",
+			))
 		}
 	}
 
 	keys := map[string]bool{}
 	for i := range r.Attributes {
 		if keys[r.Attributes[i].Key] {
-			diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, RuleID: r.ID, Message: "duplicate attribute key"})
+			diags = append(diags, policyDiagnostic(
+				model.CodeInvalidPolicy,
+				"duplicate attribute key",
+				r.ID,
+			))
 		}
 
 		keys[r.Attributes[i].Key] = true
@@ -204,19 +230,19 @@ func validateAttribute(ruleID string, idx int, attr *model.AttributeRule) model.
 	loc := fmt.Sprintf("rule %q attributes[%d]", ruleID, idx)
 
 	if attr.Key == "" {
-		diags = append(diags, model.Diagnostic{
-			Severity: model.SeverityError,
-			Code:     model.CodeInvalidPolicy,
-			Message:  loc + ": key is required",
-		})
+		diags = append(diags, policyDiagnostic(
+			model.CodeInvalidPolicy,
+			loc+": key is required",
+			"",
+		))
 	}
 
 	if attr.Key != "" && hasReservedPrefix(attr.Key) {
-		diags = append(diags, model.Diagnostic{
-			Severity: model.SeverityError,
-			Code:     model.CodeInvalidPolicy,
-			Message:  fmt.Sprintf("%s: key %q uses the reserved otel. prefix", loc, attr.Key),
-		})
+		diags = append(diags, policyDiagnostic(
+			model.CodeInvalidPolicy,
+			fmt.Sprintf("%s: key %q uses the reserved otel. prefix", loc, attr.Key),
+			"",
+		))
 	}
 
 	src := attr.From
@@ -229,30 +255,30 @@ func validateAttribute(ruleID string, idx int, attr *model.AttributeRule) model.
 	}
 
 	if set == 0 {
-		diags = append(diags, model.Diagnostic{
-			Severity: model.SeverityError,
-			Code:     model.CodeInvalidPolicy,
-			Message:  loc + ": from must set exactly one of argument, result, constant",
-		})
+		diags = append(diags, policyDiagnostic(
+			model.CodeInvalidPolicy,
+			loc+": from must set exactly one of argument, result, constant",
+			"",
+		))
 	}
 
 	if set > 1 {
-		diags = append(diags, model.Diagnostic{
-			Severity: model.SeverityError,
-			Code:     model.CodeInvalidPolicy,
-			Message:  loc + ": from must not set more than one source",
-		})
+		diags = append(diags, policyDiagnostic(
+			model.CodeInvalidPolicy,
+			loc+": from must not set more than one source",
+			"",
+		))
 	}
 
 	if attr.Safety != nil {
 		switch attr.Safety.Classification {
 		case "", model.ClassificationPublic, model.ClassificationInternal, model.ClassificationPII, model.ClassificationSecret:
 		default:
-			diags = append(diags, model.Diagnostic{
-				Severity: model.SeverityError,
-				Code:     model.CodeInvalidPolicy,
-				Message:  fmt.Sprintf("%s: unknown safety classification %q", loc, attr.Safety.Classification),
-			})
+			diags = append(diags, policyDiagnostic(
+				model.CodeInvalidPolicy,
+				fmt.Sprintf("%s: unknown safety classification %q", loc, attr.Safety.Classification),
+				"",
+			))
 		}
 	}
 
@@ -266,16 +292,36 @@ func hasReservedPrefix(key string) bool {
 func validateMatch(ruleID string, match model.Match) model.DiagnosticList {
 	var diags model.DiagnosticList
 	if match.Ownership != "" && match.Ownership != model.OwnershipApplication && match.Ownership != model.OwnershipDependency && match.Ownership != model.OwnershipAny {
-		diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeInvalidSelector, RuleID: ruleID, Message: "unknown ownership selector"})
+		diags = append(diags, policyDiagnostic(
+			model.CodeInvalidSelector,
+			"unknown ownership selector",
+			ruleID,
+		))
 	}
 
 	for _, list := range [][]string{match.Packages, match.Files, match.Symbols, match.Functions, match.Receivers, match.Methods, match.Implements} {
 		for _, item := range list {
 			if strings.TrimSpace(item) == "" {
-				diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeInvalidSelector, RuleID: ruleID, Message: "selector values must not be empty"})
+				diags = append(diags, policyDiagnostic(
+					model.CodeInvalidSelector,
+					"selector values must not be empty",
+					ruleID,
+				))
 			}
 		}
 	}
 
 	return diags
+}
+
+func policyDiagnostic(code model.Code, message, ruleID string) model.Diagnostic {
+	return model.Diagnostic{
+		Severity: model.SeverityError,
+		Code:     code,
+		Message:  message,
+		RuleID:   ruleID,
+		Symbol:   "",
+		File:     "",
+		Line:     0,
+	}
 }

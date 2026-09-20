@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 
@@ -96,10 +97,5 @@ func matchesAny(value string, patterns []string) bool {
 }
 
 func hasIPToken(value string) bool {
-	for _, part := range strings.FieldsFunc(strings.ToLower(value), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
-		if part == "ip" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.FieldsFunc(strings.ToLower(value), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }), "ip")
 }

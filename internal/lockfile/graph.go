@@ -229,8 +229,8 @@ func GraphDigest(code *model.CodeModel) (string, error) {
 }
 
 func companionSum(modfile string) string {
-	if strings.HasSuffix(modfile, ".mod") {
-		return strings.TrimSuffix(modfile, ".mod") + ".sum"
+	if before, ok := strings.CutSuffix(modfile, ".mod"); ok {
+		return before + ".sum"
 	}
 	return modfile + ".sum"
 }
@@ -287,7 +287,7 @@ func optionalLines(filename string) ([]string, error) {
 		return nil, fmt.Errorf("read module graph input: %w", err)
 	}
 	var lines []string
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		fields := strings.Fields(line)
 		for i, field := range fields {
 			if field == "=>" && i+2 == len(fields) {

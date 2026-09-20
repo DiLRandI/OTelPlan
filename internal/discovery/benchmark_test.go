@@ -11,7 +11,7 @@ import (
 func BenchmarkLoadGeneratedSymbols(b *testing.B) {
 	var source strings.Builder
 	source.WriteString("package fixture\n\nimport \"context\"\n\n")
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		fmt.Fprintf(&source, "func Function%03d(ctx context.Context) error { return nil }\n", i)
 	}
 	root := b.TempDir()

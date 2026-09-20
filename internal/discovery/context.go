@@ -218,8 +218,8 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 }
 
 func companionSum(modfile string) string {
-	if strings.HasSuffix(modfile, ".mod") {
-		return strings.TrimSuffix(modfile, ".mod") + ".sum"
+	if before, ok := strings.CutSuffix(modfile, ".mod"); ok {
+		return before + ".sum"
 	}
 	return modfile + ".sum"
 }

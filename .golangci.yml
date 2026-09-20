@@ -5,3 +5,17 @@ linters:
   default: all
   disable:
     - depguard
+  settings:
+    tagliatelle:
+      case:
+        extended-rules:
+          json:
+            case: goCamel
+            initialism-overrides:
+              CPP: true
+              LD: true
+              CXX: true
+        overrides:
+          - pkg: internal/backend/otelc
+            rules:
+              yaml: snake

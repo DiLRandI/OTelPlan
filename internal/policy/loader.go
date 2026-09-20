@@ -32,7 +32,7 @@ func Parse(data []byte) (*model.Policy, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 
-	p := model.Policy{
+	parsed := model.Policy{
 		APIVersion: "", Kind: "",
 		Project: model.ProjectConfig{Packages: nil, IncludeTests: false, IncludeDependencies: false, BuildTags: nil},
 		Backend: model.BackendConfig{Name: "", Version: ""},
@@ -45,7 +45,7 @@ func Parse(data []byte) (*model.Policy, error) {
 		Rules: nil, Exclusions: nil,
 	}
 
-	err := dec.Decode(&p)
+	err := dec.Decode(&parsed)
 	if err != nil {
 		return nil, fmt.Errorf("parse policy: %w", err)
 	}
@@ -57,5 +57,5 @@ func Parse(data []byte) (*model.Policy, error) {
 		return nil, errPolicyDocumentCount
 	}
 
-	return &p, nil
+	return &parsed, nil
 }

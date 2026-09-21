@@ -38,9 +38,9 @@ const (
 	CodeStaleLockfile          Code = "OTP6001"
 )
 
-// Diagnostic describes one explainable problem or notice, with optional policy
+// DiagnosticError describes one explainable problem or notice, with optional policy
 // rule, symbol, and source location context.
-type Diagnostic struct {
+type DiagnosticError struct {
 	Severity Severity `json:"severity"`
 	Code     Code     `json:"code"`
 	Message  string   `json:"message"`
@@ -51,7 +51,7 @@ type Diagnostic struct {
 }
 
 // Error formats the severity, diagnostic code, message, and optional rule ID.
-func (d Diagnostic) Error() string {
+func (d DiagnosticError) Error() string {
 	if d.RuleID != "" {
 		return fmt.Sprintf("%s %s: %s (rule %s)", d.Severity, d.Code, d.Message, d.RuleID)
 	}
@@ -59,13 +59,13 @@ func (d Diagnostic) Error() string {
 	return fmt.Sprintf("%s %s: %s", d.Severity, d.Code, d.Message)
 }
 
-// DiagnosticList is an ordered collection of diagnostics produced by a model
+// DiagnosticErrorList is an ordered collection of diagnostics produced by a model
 // operation.
-type DiagnosticList []Diagnostic
+type DiagnosticErrorList []DiagnosticError
 
 // Errors returns diagnostics with error severity, preserving their order.
-func (l DiagnosticList) Errors() DiagnosticList {
-	var out DiagnosticList
+func (l DiagnosticErrorList) Errors() DiagnosticErrorList {
+	var out DiagnosticErrorList
 
 	for _, d := range l {
 		if d.Severity == SeverityError {
@@ -78,8 +78,8 @@ func (l DiagnosticList) Errors() DiagnosticList {
 
 // Warnings returns diagnostics with warning severity, preserving their order.
 // Callers may treat these as failures in strict mode.
-func (l DiagnosticList) Warnings() DiagnosticList {
-	var out DiagnosticList
+func (l DiagnosticErrorList) Warnings() DiagnosticErrorList {
+	var out DiagnosticErrorList
 
 	for _, d := range l {
 		if d.Severity == SeverityWarning {
@@ -91,6 +91,6 @@ func (l DiagnosticList) Warnings() DiagnosticList {
 }
 
 // HasErrors reports whether the list contains at least one error diagnostic.
-func (l DiagnosticList) HasErrors() bool {
+func (l DiagnosticErrorList) HasErrors() bool {
 	return len(l.Errors()) > 0
 }

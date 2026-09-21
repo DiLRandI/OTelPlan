@@ -15,11 +15,11 @@ type Options struct {
 	MaximumTargets int
 }
 
-func Safety(code *model.CodeModel, plan model.ResolvedPlan, opts Options) model.DiagnosticList {
-	var diags model.DiagnosticList
+func Safety(code *model.CodeModel, plan model.ResolvedPlan, opts Options) model.DiagnosticErrorList {
+	var diags model.DiagnosticErrorList
 
 	if code == nil {
-		return model.DiagnosticList{{Severity: model.SeverityError, Code: model.CodeUnresolvedSymbol, Message: "code model is required"}}
+		return model.DiagnosticErrorList{{Severity: model.SeverityError, Code: model.CodeUnresolvedSymbol, Message: "code model is required"}}
 	}
 
 	if opts.WarningTargets <= 0 {
@@ -31,22 +31,22 @@ func Safety(code *model.CodeModel, plan model.ResolvedPlan, opts Options) model.
 	}
 
 	if len(plan.Targets) > opts.WarningTargets {
-		diags = append(diags, model.Diagnostic{Severity: model.SeverityWarning, Code: model.CodeBroadPlan, Message: "policy selects many targets; review trace volume"})
+		diags = append(diags, model.DiagnosticError{Severity: model.SeverityWarning, Code: model.CodeBroadPlan, Message: "policy selects many targets; review trace volume"})
 	}
 
 	if len(plan.Targets) > 500 {
-		diags = append(diags, model.Diagnostic{Severity: model.SeverityWarning, Code: model.CodeBroadPlan, Message: "policy selects more than 500 targets; review span noise and telemetry cost carefully"})
+		diags = append(diags, model.DiagnosticError{Severity: model.SeverityWarning, Code: model.CodeBroadPlan, Message: "policy selects more than 500 targets; review span noise and telemetry cost carefully"})
 	}
 
 	if len(plan.Targets) > opts.MaximumTargets && !opts.AllowLargePlan {
-		diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeBroadPlan, Message: "plan exceeds target limit; explicit large-plan acknowledgment is required"})
+		diags = append(diags, model.DiagnosticError{Severity: model.SeverityError, Code: model.CodeBroadPlan, Message: "plan exceeds target limit; explicit large-plan acknowledgment is required"})
 	}
 
 	secrets := append([]string{"password", "passwd", "pwd", "secret", "token", "authorization", "cookie", "apikey", "privatekey", "credential", "session"}, opts.DenyPatterns...)
 
 	for _, target := range plan.Targets {
 		add := func(severity model.Severity, code model.Code, message string) {
-			diags = append(diags, model.Diagnostic{Severity: severity, Code: code, RuleID: target.RuleID, Symbol: target.SymbolID, Message: message})
+			diags = append(diags, model.DiagnosticError{Severity: severity, Code: code, RuleID: target.RuleID, Symbol: target.SymbolID, Message: message})
 		}
 
 		symbol, ok := code.Symbol(target.SymbolID)

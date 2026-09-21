@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"errors"
 	"go/ast"
 	"go/types"
 	"path/filepath"
@@ -10,6 +11,8 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 	"golang.org/x/tools/go/packages"
 )
+
+var errReceiverUnknown = errors.New("cannot determine receiver type")
 
 type builder struct {
 	types     map[string]model.TypeInfo
@@ -219,6 +222,8 @@ func (b *builder) symbolFromDecl(p *packages.Package, fn *ast.FuncDecl) *model.S
 		}
 	}
 
+	errorType := types.Universe.Lookup("error").Type()
+
 	results := sig.Results()
 	for i := 0; i < results.Len(); i++ {
 		rv := results.At(i)
@@ -270,12 +275,6 @@ func (b *builder) receiver(p *packages.Package, fn *ast.FuncDecl) (*model.Receiv
 	}, nil
 }
 
-var errReceiverUnknown = errUnknownReceiver{}
-
-type errUnknownReceiver struct{}
-
-func (errUnknownReceiver) Error() string { return "cannot determine receiver type" }
-
 func isPointerReceiver(t types.Type) bool {
 	_, ok := t.(*types.Pointer)
 
@@ -292,8 +291,6 @@ func isContextType(t types.Type) bool {
 
 	return obj != nil && obj.Pkg() != nil && obj.Pkg().Path() == "context" && obj.Name() == "Context"
 }
-
-var errorType = types.Universe.Lookup("error").Type()
 
 func relFile(p *packages.Package, file string) string {
 	if p.Module != nil && p.Module.Dir != "" {

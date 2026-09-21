@@ -23,11 +23,11 @@ const APIVersion = "otelplan.io/cli/v1alpha1"
 var Version = "dev"
 
 type response struct {
-	APIVersion  string               `json:"apiVersion"`
-	Command     string               `json:"command"`
-	OK          bool                 `json:"ok"`
-	Diagnostics model.DiagnosticList `json:"diagnostics"`
-	Data        any                  `json:"data,omitempty"`
+	APIVersion  string                    `json:"apiVersion"`
+	Command     string                    `json:"command"`
+	OK          bool                      `json:"ok"`
+	Diagnostics model.DiagnosticErrorList `json:"diagnostics"`
+	Data        any                       `json:"data,omitempty"`
 }
 
 type options struct {
@@ -61,12 +61,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 	command := positionals[0]
 	rest := positionals[1:]
-	output := response{APIVersion: APIVersion, Command: command, OK: true, Diagnostics: model.DiagnosticList{}}
+	output := response{APIVersion: APIVersion, Command: command, OK: true, Diagnostics: model.DiagnosticErrorList{}}
 
 	fail := func(exit int, code model.Code, message string) int {
 		output.OK = false
 
-		output.Diagnostics = append(output.Diagnostics, model.Diagnostic{Severity: model.SeverityError, Code: code, Message: message})
+		output.Diagnostics = append(output.Diagnostics, model.DiagnosticError{Severity: model.SeverityError, Code: code, Message: message})
 
 		err := emit(stdout, opts, output)
 		if err != nil {
@@ -188,7 +188,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 		output.Diagnostics = append(result.Diagnostics, validate.Safety(inventory, result.Plan, validate.Options{AllowLargePlan: opts.allowLargePlan})...)
 		if output.Diagnostics == nil {
-			output.Diagnostics = model.DiagnosticList{}
+			output.Diagnostics = model.DiagnosticErrorList{}
 		}
 
 		backendDiags := otelc.Check(p.Backend.Version, inventory, result.Plan)
@@ -218,7 +218,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 				return fail(5, model.CodeUnresolvedSymbol, "symbol does not exist or policy could not be resolved")
 			}
 		} else if output.OK {
-			var diags model.DiagnosticList
+			var diags model.DiagnosticErrorList
 
 			switch command {
 			case "build":
@@ -359,7 +359,7 @@ func usageError(opts options, command, message string, stdout, stderr io.Writer)
 		return 2
 	}
 
-	reply := response{APIVersion: APIVersion, Command: command, OK: false, Diagnostics: model.DiagnosticList{{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, Message: message}}}
+	reply := response{APIVersion: APIVersion, Command: command, OK: false, Diagnostics: model.DiagnosticErrorList{{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, Message: message}}}
 
 	err := emit(stdout, opts, reply)
 	if err != nil {

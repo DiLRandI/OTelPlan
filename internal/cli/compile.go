@@ -17,8 +17,8 @@ type compileSummary struct {
 	Backend model.LockBackend `json:"backend"`
 }
 
-func compileCommand(opts options, p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan) (any, int, model.DiagnosticList) {
-	fail := func(exit int, message string) (any, int, model.DiagnosticList) {
+func compileCommand(opts options, p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan) (any, int, model.DiagnosticErrorList) {
+	fail := func(exit int, message string) (any, int, model.DiagnosticErrorList) {
 		code := model.CodeBackendUnsupported
 		if exit == 8 {
 			code = model.CodeCompilationFailed
@@ -28,7 +28,7 @@ func compileCommand(opts options, p *model.Policy, code *model.CodeModel, plan m
 			code = model.CodeArtifactOutput
 		}
 
-		return nil, exit, model.DiagnosticList{{Severity: model.SeverityError, Code: code, Message: message}}
+		return nil, exit, model.DiagnosticErrorList{{Severity: model.SeverityError, Code: code, Message: message}}
 	}
 
 	executable, err := exec.LookPath("otelc")

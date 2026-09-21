@@ -1,19 +1,17 @@
 package policy
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
 
-var templateVars = map[string]bool{
-	"symbol":      true,
-	"package":     true,
-	"import_path": true,
-	"function":    true,
-	"receiver":    true,
-	"method":      true,
-}
+var (
+	errUnterminatedTemplateVariable = errors.New("unterminated template variable")
+	errUnknownTemplateVariable      = errors.New("unknown template variable")
+)
 
+// ValidateTemplate rejects unterminated or unknown template variables.
 func ValidateTemplate(tpl string) error {
 	for {
 		open := strings.Index(tpl, "{{")
@@ -23,40 +21,44 @@ func ValidateTemplate(tpl string) error {
 
 		closeRel := strings.Index(tpl[open:], "}}")
 		if closeRel < 0 {
-			return fmt.Errorf("unterminated template variable at %q", tpl[open:])
+			return fmt.Errorf("%w at %q", errUnterminatedTemplateVariable, tpl[open:])
 		}
 
 		name := strings.TrimSpace(tpl[open+2 : open+closeRel])
-		if !templateVars[name] {
-			return fmt.Errorf("unknown template variable %q", name)
+		switch name {
+		case "symbol", "package", "import_path", "function", "receiver", "method":
+		default:
+			return fmt.Errorf("%w %q", errUnknownTemplateVariable, name)
 		}
 
 		tpl = tpl[open+closeRel+2:]
 	}
 }
 
+// RenderTemplate substitutes supported variables after validating tpl.
+// Supported variables absent from vars are replaced by an empty string.
 func RenderTemplate(tpl string, vars map[string]string) (string, error) {
 	err := ValidateTemplate(tpl)
 	if err != nil {
 		return "", err
 	}
 
-	var b strings.Builder
+	var rendered strings.Builder
 
 	rest := tpl
 
 	for {
 		open := strings.Index(rest, "{{")
 		if open < 0 {
-			b.WriteString(rest)
+			rendered.WriteString(rest)
 
-			return b.String(), nil
+			return rendered.String(), nil
 		}
 
 		closeRel := strings.Index(rest[open:], "}}")
 		name := strings.TrimSpace(rest[open+2 : open+closeRel])
-		b.WriteString(rest[:open])
-		b.WriteString(vars[name])
+		rendered.WriteString(rest[:open])
+		rendered.WriteString(vars[name])
 
 		rest = rest[open+closeRel+2:]
 	}

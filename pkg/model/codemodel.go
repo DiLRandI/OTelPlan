@@ -1,5 +1,7 @@
 package model
 
+// ModuleInfo identifies a module in the loaded build and records its ownership
+// and any replacement selected by the module graph.
 type ModuleInfo struct {
 	Path      string             `json:"path"`
 	Version   string             `json:"version,omitempty"`
@@ -9,12 +11,16 @@ type ModuleInfo struct {
 	Replace   *ModuleReplacement `json:"replace,omitempty"`
 }
 
+// ModuleReplacement describes the module path, version, or local directory
+// that replaces a module in the effective build.
 type ModuleReplacement struct {
 	Path    string `json:"path"`
 	Version string `json:"version,omitempty"`
 	Dir     string `json:"dir,omitempty"`
 }
 
+// PackageInfo describes a discovered package and the source files that belong
+// to it, including whether the package is generated or test-only.
 type PackageInfo struct {
 	ImportPath string   `json:"importPath"`
 	Name       string   `json:"name"`
@@ -25,6 +31,8 @@ type PackageInfo struct {
 	TestOnly   bool     `json:"testOnly"`
 }
 
+// InterfaceRelation records a concrete type that implements an interface and
+// whether the relation is through the pointer method set.
 type InterfaceRelation struct {
 	InterfaceID  SymbolID `json:"interfaceID"`
 	InterfacePkg string   `json:"interfacePkg"`
@@ -33,11 +41,33 @@ type InterfaceRelation struct {
 	Pointer      bool     `json:"pointer"`
 }
 
-type CallRelation struct {
-	Caller SymbolID `json:"caller"`
-	Callee SymbolID `json:"callee"`
+// CallPrecision describes callee resolution, not proof that a call executes.
+type CallPrecision string
+
+// Call precision distinguishes a known callee from a conservative candidate.
+const (
+	CallPrecisionStatic       CallPrecision = "static"
+	CallPrecisionConservative CallPrecision = "conservative"
+)
+
+// CallGraphInfo records the algorithm, scope, and limits of advisory call analysis.
+type CallGraphInfo struct {
+	Algorithm    string   `json:"algorithm"`
+	Scope        string   `json:"scope"`
+	Conservative bool     `json:"conservative"`
+	Limitations  []string `json:"limitations"`
 }
 
+// CallRelation records a caller-to-callee edge and whether discovery resolved
+// it statically or retained conservative candidates.
+type CallRelation struct {
+	Precision CallPrecision `json:"precision,omitempty"`
+	Caller    SymbolID      `json:"caller"`
+	Callee    SymbolID      `json:"callee"`
+}
+
+// InterfaceMethod maps an interface method to the concrete method selected for
+// that implementation, distinguishing value and pointer concrete types.
 type InterfaceMethod struct {
 	InterfaceID SymbolID `json:"interfaceID"`
 	ConcreteID  SymbolID `json:"concreteID"`
@@ -45,6 +75,8 @@ type InterfaceMethod struct {
 	SymbolID    SymbolID `json:"symbol"`
 }
 
+// TypeField describes a field in a discovered type, including whether it is
+// exported or embedded.
 type TypeField struct {
 	Name     string `json:"name"`
 	Type     string `json:"type"`
@@ -52,11 +84,14 @@ type TypeField struct {
 	Embedded bool   `json:"embedded"`
 }
 
+// TypeImport records an import used while rendering a discovered type.
 type TypeImport struct {
 	Path  string `json:"path"`
 	Alias string `json:"alias"`
 }
 
+// TypeInfo describes a discovered type expression, its kind, element type,
+// imports, and fields.
 type TypeInfo struct {
 	Expression string       `json:"expression,omitempty"`
 	Imports    []TypeImport `json:"imports,omitempty"`
@@ -99,6 +134,8 @@ type BuildEnvironment struct {
 	SemanticFlags []string `json:"semanticFlags,omitempty"`
 }
 
+// CodeModel contains normalized discovery metadata for an effective Go build.
+// CallGraph and CallEdges are populated only when call analysis is requested.
 type CodeModel struct {
 	GoVersion        string              `json:"goVersion"`
 	ModuleRoot       string              `json:"moduleRoot"`
@@ -109,6 +146,7 @@ type CodeModel struct {
 	Types            []TypeInfo          `json:"types,omitempty"`
 	Implements       []InterfaceRelation `json:"implements,omitempty"`
 	InterfaceMethods []InterfaceMethod   `json:"interfaceMethods,omitempty"`
+	CallGraph        *CallGraphInfo      `json:"callGraph,omitempty"`
 	CallEdges        []CallRelation      `json:"callEdges,omitempty"`
 	BuildTags        []string            `json:"buildTags,omitempty"`
 	GOOS             string              `json:"goos,omitempty"`
@@ -116,6 +154,9 @@ type CodeModel struct {
 	EffectiveBuild   BuildEnvironment    `json:"effectiveBuild"`
 }
 
+// Symbol returns the exact symbol with id from the model, or false when the
+// model has no such canonical identity. A found pointer refers to the model
+// slice; modifying the symbol changes the model.
 func (m *CodeModel) Symbol(id SymbolID) (*Symbol, bool) {
 	for i := range m.Symbols {
 		if m.Symbols[i].ID == id {
@@ -126,6 +167,8 @@ func (m *CodeModel) Symbol(id SymbolID) (*Symbol, bool) {
 	return nil, false
 }
 
+// Implementors returns relations for the named interface package and type.
+// The result preserves the relation entries stored in the model.
 func (m *CodeModel) Implementors(interfacePath, interfaceName string) []InterfaceRelation {
 	var out []InterfaceRelation
 

@@ -1,5 +1,7 @@
 package model
 
+// Public schema and backend identifiers accepted by the policy and lockfile
+// formats.
 const (
 	APIVersionV1Alpha1      = "otelplan.io/v1alpha1"
 	KindInstrumentationPlan = "InstrumentationPlan"
@@ -7,13 +9,17 @@ const (
 	BackendNameOTelC        = "otelc"
 )
 
+// ContextMode selects whether a target requires a usable context argument or
+// may start a root span.
 type ContextMode string
 
+// Context modes supported by policy defaults.
 const (
 	ContextModeRequire ContextMode = "require"
 	ContextModeRoot    ContextMode = "root"
 )
 
+// ProjectConfig selects packages and build inputs for code discovery.
 type ProjectConfig struct {
 	Packages            []string `json:"packages,omitempty"            yaml:"packages,omitempty"`
 	IncludeTests        bool     `json:"includeTests,omitempty"        yaml:"includeTests,omitempty"`
@@ -21,24 +27,30 @@ type ProjectConfig struct {
 	BuildTags           []string `json:"buildTags,omitempty"           yaml:"buildTags,omitempty"`
 }
 
+// BackendConfig pins the backend name and version used to compile a plan.
 type BackendConfig struct {
 	Name    string `json:"name"    yaml:"name"`
 	Version string `json:"version" yaml:"version"`
 }
 
+// ContextDefaults sets the policy-wide context requirement for targets.
 type ContextDefaults struct {
 	Mode ContextMode `json:"mode,omitempty" yaml:"mode,omitempty"`
 }
 
+// ErrorDefaults sets whether selected returned errors are recorded by default.
 type ErrorDefaults struct {
 	Record bool `json:"record,omitempty" yaml:"record,omitempty"`
 }
 
+// CaptureDefaults controls the default argument and result capture settings.
+// Safe policy defaults leave both disabled.
 type CaptureDefaults struct {
 	Arguments bool `json:"arguments,omitempty" yaml:"arguments,omitempty"`
 	Results   bool `json:"results,omitempty"   yaml:"results,omitempty"`
 }
 
+// Defaults contains policy-wide span, context, error, and attribute settings.
 type Defaults struct {
 	SpanName   string          `json:"spanName,omitempty" yaml:"spanName,omitempty"`
 	Context    ContextDefaults `json:"context"            yaml:"context,omitempty"`
@@ -46,6 +58,8 @@ type Defaults struct {
 	Attributes CaptureDefaults `json:"attributes"         yaml:"attributes,omitempty"`
 }
 
+// Match contains the ANDed selector fields used to identify candidate symbols;
+// values within one field are alternatives.
 type Match struct {
 	Packages     []string  `json:"packages,omitempty"     yaml:"packages,omitempty"`
 	Files        []string  `json:"files,omitempty"        yaml:"files,omitempty"`
@@ -60,6 +74,7 @@ type Match struct {
 	Ownership    Ownership `json:"ownership,omitempty"    yaml:"ownership,omitempty"`
 }
 
+// IsEmpty reports whether the match contains no selector criteria.
 func (m Match) IsEmpty() bool {
 	return len(m.Packages) == 0 && len(m.Files) == 0 && len(m.Symbols) == 0 &&
 		len(m.Functions) == 0 && len(m.Receivers) == 0 && len(m.Methods) == 0 &&
@@ -67,8 +82,11 @@ func (m Match) IsEmpty() bool {
 		m.ReturnsError == nil && m.Ownership == ""
 }
 
+// SafetyClassification describes the sensitivity category assigned to an
+// explicitly captured attribute.
 type SafetyClassification string
 
+// Safety classifications used by attribute validation.
 const (
 	ClassificationPublic   SafetyClassification = "public"
 	ClassificationInternal SafetyClassification = "internal"
@@ -76,32 +94,42 @@ const (
 	ClassificationSecret   SafetyClassification = "secret"
 )
 
+// Safety records an attribute's classification and whether the policy permits
+// that capture.
 type Safety struct {
 	Classification SafetyClassification `json:"classification,omitempty" yaml:"classification,omitempty"`
 	Allow          bool                 `json:"allow,omitempty"          yaml:"allow,omitempty"`
 }
 
+// AttributeSource identifies one argument, result, or constant value from
+// which a policy attribute is obtained.
 type AttributeSource struct {
 	Argument string `json:"argument,omitempty" yaml:"argument,omitempty"`
 	Result   string `json:"result,omitempty"   yaml:"result,omitempty"`
 	Constant any    `json:"constant,omitempty" yaml:"constant,omitempty"`
 }
 
+// AttributeRule maps an explicit telemetry key to a source and optional safety
+// acknowledgement.
 type AttributeRule struct {
 	Key    string          `json:"key"              yaml:"key"`
 	From   AttributeSource `json:"from"             yaml:"from"`
 	Safety *Safety         `json:"safety,omitempty" yaml:"safety,omitempty"`
 }
 
+// SpanConfig defines target span naming and kind overrides.
 type SpanConfig struct {
 	Name string `json:"name,omitempty" yaml:"name,omitempty"`
 	Kind string `json:"kind,omitempty" yaml:"kind,omitempty"`
 }
 
+// ErrorConfig overrides whether a rule records returned errors.
 type ErrorConfig struct {
 	Record bool `json:"record,omitempty" yaml:"record,omitempty"`
 }
 
+// Rule combines selectors with exclusions and instrumentation behavior for its
+// matching symbols.
 type Rule struct {
 	ID          string          `json:"id"                    yaml:"id"`
 	Description string          `json:"description,omitempty" yaml:"description,omitempty"`
@@ -112,11 +140,14 @@ type Rule struct {
 	Attributes  []AttributeRule `json:"attributes,omitempty"  yaml:"attributes,omitempty"`
 }
 
+// Exclusion removes matching symbols from policy selection.
 type Exclusion struct {
 	ID    string `json:"id"    yaml:"id"`
 	Match Match  `json:"match" yaml:"match"`
 }
 
+// Policy is the complete backend-independent instrumentation policy supplied by
+// the user.
 type Policy struct {
 	APIVersion string        `json:"apiVersion"           yaml:"apiVersion"`
 	Kind       string        `json:"kind"                 yaml:"kind"`

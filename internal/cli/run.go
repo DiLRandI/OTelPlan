@@ -35,6 +35,7 @@ type options struct {
 	outputSet, clean                                        bool
 	strict, offline, check, dryRun, allowLargePlan          bool
 	configSet                                               bool
+	callGraph                                               bool
 	root, config, format                                    string
 	quiet, verbose, noColor, dependencies, interfaces, help bool
 }
@@ -80,8 +81,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return fail(2, model.CodeInvalidPolicy, "cannot combine --check and --dry-run")
 	}
 
-	if (opts.dependencies || opts.interfaces) && command != "scan" {
-		return fail(2, model.CodeInvalidPolicy, "--dependencies and --interfaces are supported by scan")
+	if (opts.dependencies || opts.interfaces || opts.callGraph) && command != "scan" {
+		return fail(2, model.CodeInvalidPolicy, "--dependencies, --interfaces, and --calls are supported by scan")
 	}
 
 	policyCommand := command == "inspect" || command == "explain" || command == "validate" || command == "lock" || command == "diff" || command == "compile" || command == "build"
@@ -125,7 +126,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 		output.Data = map[string]string{"otelplan": Version, "go": runtime.Version()}
 	case "scan":
-		inventory, err := discovery.Load(discovery.Options{Root: opts.root, Patterns: rest, IncludeDependencies: opts.dependencies, Offline: opts.offline})
+		inventory, err := discovery.Load(discovery.Options{
+			Root: opts.root, Patterns: rest, IncludeDependencies: opts.dependencies,
+			CallGraph: opts.callGraph, Offline: opts.offline,
+		})
 		if err != nil {
 			return fail(4, model.CodeUnresolvedSymbol, err.Error())
 		}
@@ -262,6 +266,7 @@ func parse(args []string) (options, []string, error) {
 	flags.BoolVar(&opts.verbose, "verbose", false, "include selection details")
 	flags.BoolVar(&opts.noColor, "no-color", false, "disable color")
 	flags.BoolVar(&opts.dependencies, "dependencies", false, "include dependency code in scan")
+	flags.BoolVar(&opts.callGraph, "calls", false, "include conservative advisory calls in scan")
 	flags.BoolVar(&opts.interfaces, "interfaces", false, "show interface methods in text scans")
 
 	var (
@@ -392,6 +397,19 @@ func emit(out io.Writer, opts options, reply response) error {
 	case *model.CodeModel:
 		for _, symbol := range data.Symbols {
 			fmt.Fprintf(&text, "%s\n  signature %s\n  source %s:%d\n  context %v  errors %v\n", symbol.ID, symbol.Signature, symbol.Location.File, symbol.Location.Line, symbol.ContextIndexes, symbol.ErrorIndexes)
+		}
+
+		if data.CallGraph != nil {
+			fmt.Fprintf(&text, "CALLGRAPH %s conservative=%t scope=%s\n",
+				data.CallGraph.Algorithm, data.CallGraph.Conservative, data.CallGraph.Scope)
+
+			for _, limitation := range data.CallGraph.Limitations {
+				fmt.Fprintf(&text, "  limitation: %s\n", limitation)
+			}
+
+			for _, edge := range data.CallEdges {
+				fmt.Fprintf(&text, "CALL %s %s -> %s\n", edge.Precision, edge.Caller, edge.Callee)
+			}
 		}
 
 		if opts.interfaces {

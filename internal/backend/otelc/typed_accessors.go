@@ -236,7 +236,7 @@ func accessorTypeExpression(typ model.TypeInfo, ownPackage string, imports map[s
 		imports[dependency.Alias] = dependency.Path
 	}
 
-	expression = astutil.Apply(expression, func(cursor *astutil.Cursor) bool {
+	rewritten := astutil.Apply(expression, func(cursor *astutil.Cursor) bool {
 		selector, ok := cursor.Node().(*ast.SelectorExpr)
 		if !ok {
 			return true
@@ -250,11 +250,11 @@ func accessorTypeExpression(typ model.TypeInfo, ownPackage string, imports map[s
 		}
 
 		return true
-	}, nil).(ast.Expr)
+	}, nil)
 
 	var source bytes.Buffer
 
-	if err := format.Node(&source, token.NewFileSet(), expression); err != nil {
+	if err := format.Node(&source, token.NewFileSet(), rewritten); err != nil {
 		return "", fmt.Errorf("format attribute type expression: %w", err)
 	}
 

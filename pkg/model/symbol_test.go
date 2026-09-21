@@ -114,3 +114,34 @@ func TestSymbolPredicates(t *testing.T) {
 		t.Error("predicates should be false")
 	}
 }
+
+func TestParseSymbolIDErrorMessages(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		id      model.SymbolID
+		message string
+	}{
+		{id: "", message: "empty symbol id"},
+		{id: "pkg.(*Worker", message: `malformed method symbol id "pkg.(*Worker": unterminated receiver`},
+		{id: "pkg.(Worker)", message: `malformed method symbol id "pkg.(Worker)"`},
+		{id: "pkg.().Run", message: `malformed method symbol id "pkg.().Run": empty receiver type`},
+		{id: "no-separator", message: `malformed function symbol id "no-separator"`},
+	}
+	for _, testCase := range cases {
+		t.Run(string(testCase.id), func(t *testing.T) {
+			t.Parallel()
+
+			parsed, err := model.ParseSymbolID(testCase.id)
+			if err == nil || err.Error() != testCase.message {
+				t.Fatalf("error = %v, want %q", err, testCase.message)
+			}
+
+			var empty model.ParsedSymbolID
+
+			if parsed != empty {
+				t.Fatalf("parsed = %+v, want zero value", parsed)
+			}
+		})
+	}
+}

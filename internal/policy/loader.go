@@ -18,6 +18,7 @@ var errPolicyDocumentCount = errors.New("parse policy: expected exactly one YAML
 // Load reads the policy at path. Callers accepting untrusted paths must enforce
 // their own permitted filesystem scope.
 func Load(path string) (*model.Policy, error) {
+	// #nosec G304 -- Load intentionally accepts a caller-selected policy path.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read policy %s: %w", path, err)

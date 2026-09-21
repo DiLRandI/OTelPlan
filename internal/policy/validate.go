@@ -12,11 +12,11 @@ var ruleIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
 // Validate checks policy schema, selectors, and safety without modifying plan.
 // Rules and exclusions are checked in declaration order; symbols are not resolved.
-func Validate(plan *model.Policy) model.DiagnosticList {
-	var diags model.DiagnosticList
+func Validate(plan *model.Policy) model.DiagnosticErrorList {
+	var diags model.DiagnosticErrorList
 
 	if plan == nil {
-		return model.DiagnosticList{policyDiagnostic(model.CodeInvalidPolicy, "policy is required", "")}
+		return model.DiagnosticErrorList{policyDiagnostic(model.CodeInvalidPolicy, "policy is required", "")}
 	}
 
 	diags = append(diags, validatePolicySettings(plan)...)
@@ -67,8 +67,8 @@ func Validate(plan *model.Policy) model.DiagnosticList {
 	return diags
 }
 
-func validateExclusions(exclusions []model.Exclusion, seen map[string]bool) model.DiagnosticList {
-	var diags model.DiagnosticList
+func validateExclusions(exclusions []model.Exclusion, seen map[string]bool) model.DiagnosticErrorList {
+	var diags model.DiagnosticErrorList
 
 	for index := range exclusions {
 		exclusion := &exclusions[index]
@@ -105,8 +105,8 @@ func validateExclusions(exclusions []model.Exclusion, seen map[string]bool) mode
 	return diags
 }
 
-func validatePolicySettings(plan *model.Policy) model.DiagnosticList {
-	var diags model.DiagnosticList
+func validatePolicySettings(plan *model.Policy) model.DiagnosticErrorList {
+	var diags model.DiagnosticErrorList
 
 	diags = append(diags, validateDefaults(plan.Defaults)...)
 
@@ -161,8 +161,8 @@ func validatePolicySettings(plan *model.Policy) model.DiagnosticList {
 	return diags
 }
 
-func validateDefaults(defaults model.Defaults) model.DiagnosticList {
-	var diags model.DiagnosticList
+func validateDefaults(defaults model.Defaults) model.DiagnosticErrorList {
+	var diags model.DiagnosticErrorList
 
 	if defaults.Attributes.Arguments || defaults.Attributes.Results {
 		diags = append(diags, policyDiagnostic(
@@ -194,8 +194,8 @@ func validateDefaults(defaults model.Defaults) model.DiagnosticList {
 	return diags
 }
 
-func validateRule(rule *model.Rule) model.DiagnosticList {
-	var diags model.DiagnosticList
+func validateRule(rule *model.Rule) model.DiagnosticErrorList {
+	var diags model.DiagnosticErrorList
 
 	if rule.Match.IsEmpty() {
 		diags = append(diags, policyDiagnostic(
@@ -233,8 +233,8 @@ func validateRule(rule *model.Rule) model.DiagnosticList {
 	return diags
 }
 
-func validateRuleSpan(rule *model.Rule) model.DiagnosticList {
-	var diags model.DiagnosticList
+func validateRuleSpan(rule *model.Rule) model.DiagnosticErrorList {
+	var diags model.DiagnosticErrorList
 
 	if rule.Span != nil && rule.Span.Kind != "" && rule.Span.Kind != "internal" {
 		diags = append(diags, policyDiagnostic(
@@ -258,8 +258,8 @@ func validateRuleSpan(rule *model.Rule) model.DiagnosticList {
 	return diags
 }
 
-func validateAttribute(ruleID string, idx int, attr *model.AttributeRule) model.DiagnosticList {
-	var diags model.DiagnosticList
+func validateAttribute(ruleID string, idx int, attr *model.AttributeRule) model.DiagnosticErrorList {
+	var diags model.DiagnosticErrorList
 
 	loc := fmt.Sprintf("rule %q attributes[%d]", ruleID, idx)
 
@@ -297,8 +297,8 @@ func validateAttribute(ruleID string, idx int, attr *model.AttributeRule) model.
 	return diags
 }
 
-func validateAttributeSource(loc string, src model.AttributeSource) model.DiagnosticList {
-	var diags model.DiagnosticList
+func validateAttributeSource(loc string, src model.AttributeSource) model.DiagnosticErrorList {
+	var diags model.DiagnosticErrorList
 
 	set := 0
 
@@ -331,8 +331,8 @@ func hasReservedPrefix(key string) bool {
 	return strings.HasPrefix(strings.ToLower(key), "otel.")
 }
 
-func validateMatch(ruleID string, match model.Match) model.DiagnosticList {
-	var diags model.DiagnosticList
+func validateMatch(ruleID string, match model.Match) model.DiagnosticErrorList {
+	var diags model.DiagnosticErrorList
 
 	switch match.Ownership {
 	case "", model.OwnershipApplication, model.OwnershipDependency, model.OwnershipAny:
@@ -362,8 +362,8 @@ func validateMatch(ruleID string, match model.Match) model.DiagnosticList {
 	return diags
 }
 
-func policyDiagnostic(code model.Code, message, ruleID string) model.Diagnostic {
-	return model.Diagnostic{
+func policyDiagnostic(code model.Code, message, ruleID string) model.DiagnosticError {
+	return model.DiagnosticError{
 		Severity: model.SeverityError,
 		Code:     code,
 		Message:  message,

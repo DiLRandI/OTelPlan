@@ -24,9 +24,9 @@ type buildSummary struct {
 	Backend model.LockBackend `json:"backend"`
 }
 
-func buildCommand(opts options, args buildArguments, p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan) (any, int, model.DiagnosticList) {
-	fail := func(exit int, code model.Code, message string) (any, int, model.DiagnosticList) {
-		return nil, exit, model.DiagnosticList{{Severity: model.SeverityError, Code: code, Message: message}}
+func buildCommand(opts options, args buildArguments, p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan) (any, int, model.DiagnosticErrorList) {
+	fail := func(exit int, code model.Code, message string) (any, int, model.DiagnosticErrorList) {
+		return nil, exit, model.DiagnosticErrorList{{Severity: model.SeverityError, Code: code, Message: message}}
 	}
 	if code.EffectiveBuild.ModuleMode == "vendor" {
 		return fail(7, model.CodeBackendUnsupported, "vendor-mode build preparation is not implemented")

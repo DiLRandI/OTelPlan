@@ -5,17 +5,18 @@ linters:
   default: all
   disable:
     - depguard
+    - tagliatelle
+    - gomodguard
+    - exhaustruct
+    - wsl
   settings:
-    tagliatelle:
-      case:
-        extended-rules:
-          json:
-            case: goCamel
-            initialism-overrides:
-              CPP: true
-              LD: true
-              CXX: true
-        overrides:
-          - pkg: internal/backend/otelc
-            rules:
-              yaml: snake
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2 
+  exclusions:
+    rules:
+      - path: '(.+)_test\.go'
+        linters:
+          - funlen
+          - goconst

@@ -114,7 +114,7 @@ func RenderAccessors(code *model.CodeModel, target model.ResolvedTarget) ([]byte
 
 			fmt.Fprintf(&body, "func %s(_ any) (%s, bool) { return %s, true }\n", name, resultType, scalarLiteral(attribute.From.Constant))
 		} else {
-			rootType := ""
+			var rootType string
 			if access.Source == "argument" {
 				rootType = symbol.Parameters[access.Index].Type
 			} else {
@@ -261,7 +261,7 @@ func accessorTypeExpression(typ model.TypeInfo, ownPackage string, imports map[s
 	return source.String(), nil
 }
 
-func scalarType(kind string) (name, zero string) {
+func scalarType(kind string) (string, string) {
 	switch kind {
 	case "bool":
 		return "bool", "false"

@@ -46,7 +46,7 @@ type Backend interface {
 	Name() string
 	Version(ctx context.Context) (string, error)
 	Capabilities(ctx context.Context) (BackendCapabilities, error)
-	Validate(ctx context.Context, plan ResolvedPlan) DiagnosticList
+	Validate(ctx context.Context, plan ResolvedPlan) DiagnosticErrorList
 	Compile(ctx context.Context, plan ResolvedPlan, outDir string) (Artifacts, error)
 	Build(ctx context.Context, req BuildRequest) error
 }

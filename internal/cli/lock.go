@@ -16,9 +16,9 @@ type lockSummary struct {
 	DryRun  bool   `json:"dryRun"`
 }
 
-func lockCommand(command string, opts options, p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan) (any, int, model.DiagnosticList) {
-	fail := func(exit int, message string) (any, int, model.DiagnosticList) {
-		return nil, exit, model.DiagnosticList{{Severity: model.SeverityError, Code: model.CodeStaleLockfile, Message: message}}
+func lockCommand(command string, opts options, p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan) (any, int, model.DiagnosticErrorList) {
+	fail := func(exit int, message string) (any, int, model.DiagnosticErrorList) {
+		return nil, exit, model.DiagnosticErrorList{{Severity: model.SeverityError, Code: model.CodeStaleLockfile, Message: message}}
 	}
 
 	graph, err := lockfile.GraphDigest(code)
@@ -65,20 +65,20 @@ func lockCommand(command string, opts options, p *model.Policy, code *model.Code
 	switch command {
 	case "validate":
 		if exists && !diff.Empty() {
-			return diff, 6, model.DiagnosticList{{Severity: model.SeverityError, Code: model.CodeStaleLockfile, Message: "lockfile differs from current resolved state"}}
+			return diff, 6, model.DiagnosticErrorList{{Severity: model.SeverityError, Code: model.CodeStaleLockfile, Message: "lockfile differs from current resolved state"}}
 		}
 
 		return summary, 0, nil
 	case "diff":
 		if opts.check && !diff.Empty() {
-			return diff, 6, model.DiagnosticList{{Severity: model.SeverityError, Code: model.CodeStaleLockfile, Message: "lockfile is missing or differs from current resolved state"}}
+			return diff, 6, model.DiagnosticErrorList{{Severity: model.SeverityError, Code: model.CodeStaleLockfile, Message: "lockfile is missing or differs from current resolved state"}}
 		}
 
 		return diff, 0, nil
 	case "lock":
 		if opts.check {
 			if !exists || !diff.Empty() {
-				return diff, 6, model.DiagnosticList{{Severity: model.SeverityError, Code: model.CodeStaleLockfile, Message: "lockfile is missing or stale"}}
+				return diff, 6, model.DiagnosticErrorList{{Severity: model.SeverityError, Code: model.CodeStaleLockfile, Message: "lockfile is missing or stale"}}
 			}
 
 			return summary, 0, nil

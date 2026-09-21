@@ -23,20 +23,20 @@ func Identity(version string) (model.LockBackend, error) {
 	return model.LockBackend{Name: model.BackendNameOTelC, Version: version, Capabilities: model.BackendCapabilities{BeforeHook: true, AfterHook: true, ArgumentRead: true, ArgumentReplace: true, ResultRead: true, ContextReplacement: true, FunctionEntrySelection: true}}, nil
 }
 
-func Check(version string, code *model.CodeModel, plan model.ResolvedPlan) model.DiagnosticList {
+func Check(version string, code *model.CodeModel, plan model.ResolvedPlan) model.DiagnosticErrorList {
 	if _, err := Identity(version); err != nil {
-		return model.DiagnosticList{{Severity: model.SeverityError, Code: model.CodeBackendVersionMismatch, Message: err.Error()}}
+		return model.DiagnosticErrorList{{Severity: model.SeverityError, Code: model.CodeBackendVersionMismatch, Message: err.Error()}}
 	}
 
 	if code == nil {
-		return model.DiagnosticList{{Severity: model.SeverityError, Code: model.CodeBackendUnsupported, Message: "backend requires an analyzed code model"}}
+		return model.DiagnosticErrorList{{Severity: model.SeverityError, Code: model.CodeBackendUnsupported, Message: "backend requires an analyzed code model"}}
 	}
 
-	var diags model.DiagnosticList
+	var diags model.DiagnosticErrorList
 
 	for _, target := range plan.Targets {
 		add := func(message string) {
-			diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeBackendUnsupported, RuleID: target.RuleID, Symbol: target.SymbolID, Message: message})
+			diags = append(diags, model.DiagnosticError{Severity: model.SeverityError, Code: model.CodeBackendUnsupported, RuleID: target.RuleID, Symbol: target.SymbolID, Message: message})
 		}
 
 		symbol, ok := code.Symbol(target.SymbolID)

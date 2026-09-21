@@ -22,9 +22,9 @@ type Explanation struct {
 }
 
 type Result struct {
-	Plan         model.ResolvedPlan   `json:"plan"`
-	Diagnostics  model.DiagnosticList `json:"diagnostics"`
-	Explanations []Explanation        `json:"explanations"`
+	Plan         model.ResolvedPlan        `json:"plan"`
+	Diagnostics  model.DiagnosticErrorList `json:"diagnostics"`
+	Explanations []Explanation             `json:"explanations"`
 }
 
 func Resolve(p *model.Policy, code *model.CodeModel) Result {
@@ -34,7 +34,7 @@ func Resolve(p *model.Policy, code *model.CodeModel) Result {
 	}
 
 	if code == nil {
-		result.Diagnostics = append(result.Diagnostics, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, Message: "code model is required"})
+		result.Diagnostics = append(result.Diagnostics, model.DiagnosticError{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, Message: "code model is required"})
 
 		return result
 	}
@@ -49,12 +49,12 @@ func Resolve(p *model.Policy, code *model.CodeModel) Result {
 
 	check := func(id string, match model.Match) {
 		if _, err := Matches(code, model.Symbol{}, match); err != nil {
-			result.Diagnostics = append(result.Diagnostics, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeInvalidSelector, RuleID: id, Message: err.Error()})
+			result.Diagnostics = append(result.Diagnostics, model.DiagnosticError{Severity: model.SeverityError, Code: model.CodeInvalidSelector, RuleID: id, Message: err.Error()})
 		}
 
 		for _, symbol := range match.Symbols {
 			if _, ok := code.Symbol(model.SymbolID(symbol)); !ok {
-				result.Diagnostics = append(result.Diagnostics, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeUnresolvedSymbol, RuleID: id, Symbol: model.SymbolID(symbol), Message: "exact symbol does not exist"})
+				result.Diagnostics = append(result.Diagnostics, model.DiagnosticError{Severity: model.SeverityError, Code: model.CodeUnresolvedSymbol, RuleID: id, Symbol: model.SymbolID(symbol), Message: "exact symbol does not exist"})
 			}
 		}
 	}
@@ -149,14 +149,14 @@ func Resolve(p *model.Policy, code *model.CodeModel) Result {
 			}
 
 			previousID := chosen.RuleID
-			comparable := *chosen
+			chosenRule := *chosen
 
-			comparable.RuleID = target.RuleID
+			chosenRule.RuleID = target.RuleID
 
-			if !reflect.DeepEqual(comparable, target) {
+			if !reflect.DeepEqual(chosenRule, target) {
 				valid = false
 
-				result.Diagnostics = append(result.Diagnostics, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeConflictingRules, Symbol: symbol.ID, RuleID: rule.ID, Message: "instrumentation conflicts with rule " + previousID})
+				result.Diagnostics = append(result.Diagnostics, model.DiagnosticError{Severity: model.SeverityError, Code: model.CodeConflictingRules, Symbol: symbol.ID, RuleID: rule.ID, Message: "instrumentation conflicts with rule " + previousID})
 			}
 		}
 
@@ -174,7 +174,7 @@ func Resolve(p *model.Policy, code *model.CodeModel) Result {
 
 	for _, rule := range rules {
 		if !matchedRules[rule.ID] {
-			result.Diagnostics = append(result.Diagnostics, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeUnresolvedSymbol, RuleID: rule.ID, Message: "selector matches no symbols"})
+			result.Diagnostics = append(result.Diagnostics, model.DiagnosticError{Severity: model.SeverityError, Code: model.CodeUnresolvedSymbol, RuleID: rule.ID, Message: "selector matches no symbols"})
 		}
 	}
 
@@ -206,22 +206,22 @@ func matchReason(matched bool) string {
 	return "selector did not match"
 }
 
-func targetFor(p *model.Policy, rule model.Rule, symbol model.Symbol) (model.ResolvedTarget, model.DiagnosticList) {
+func targetFor(p *model.Policy, rule model.Rule, symbol model.Symbol) (model.ResolvedTarget, model.DiagnosticErrorList) {
 	target := model.ResolvedTarget{SymbolID: symbol.ID, RuleID: rule.ID, Signature: symbol.Signature}
 
-	var diags model.DiagnosticList
+	var diags model.DiagnosticErrorList
 
 	switch len(symbol.ContextIndexes) {
 	case 0:
 		if p.Defaults.Context.Mode == model.ContextModeRoot {
 			target.ContextStrategy.Strategy = model.ContextStrategyRoot
 		} else {
-			diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeMissingContext, RuleID: rule.ID, Symbol: symbol.ID, Message: "selected target has no context.Context argument"})
+			diags = append(diags, model.DiagnosticError{Severity: model.SeverityError, Code: model.CodeMissingContext, RuleID: rule.ID, Symbol: symbol.ID, Message: "selected target has no context.Context argument"})
 		}
 	case 1:
 		target.ContextStrategy = model.ContextStrategy{Strategy: model.ContextStrategyArgument, Index: symbol.ContextIndexes[0]}
 	default:
-		diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeMultipleContexts, RuleID: rule.ID, Symbol: symbol.ID, Message: "multiple context.Context arguments require an explicit supported selection strategy"})
+		diags = append(diags, model.DiagnosticError{Severity: model.SeverityError, Code: model.CodeMultipleContexts, RuleID: rule.ID, Symbol: symbol.ID, Message: "multiple context.Context arguments require an explicit supported selection strategy"})
 	}
 
 	template := p.Defaults.SpanName
@@ -250,7 +250,7 @@ func targetFor(p *model.Policy, rule model.Rule, symbol model.Symbol) (model.Res
 
 	name, err := policy.RenderTemplate(template, map[string]string{"symbol": string(symbol.ID), "package": symbol.PackageName, "import_path": symbol.PackageImportPath, "receiver": receiver, "method": method, "function": function})
 	if err != nil || name == "" {
-		diags = append(diags, model.Diagnostic{Severity: model.SeverityError, Code: model.CodeUnknownTemplateVar, RuleID: rule.ID, Symbol: symbol.ID, Message: "span template must produce a nonempty valid name"})
+		diags = append(diags, model.DiagnosticError{Severity: model.SeverityError, Code: model.CodeUnknownTemplateVar, RuleID: rule.ID, Symbol: symbol.ID, Message: "span template must produce a nonempty valid name"})
 	}
 
 	target.SpanName = name

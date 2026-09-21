@@ -76,10 +76,15 @@ type Match struct {
 
 // IsEmpty reports whether the match contains no selector criteria.
 func (m Match) IsEmpty() bool {
-	return len(m.Packages) == 0 && len(m.Files) == 0 && len(m.Symbols) == 0 &&
-		len(m.Functions) == 0 && len(m.Receivers) == 0 && len(m.Methods) == 0 &&
-		len(m.Implements) == 0 && m.Exported == nil && m.HasContext == nil &&
-		m.ReturnsError == nil && m.Ownership == ""
+	for _, selectors := range [][]string{
+		m.Packages, m.Files, m.Symbols, m.Functions, m.Receivers, m.Methods, m.Implements,
+	} {
+		if len(selectors) != 0 {
+			return false
+		}
+	}
+
+	return m.Exported == nil && m.HasContext == nil && m.ReturnsError == nil && m.Ownership == ""
 }
 
 // SafetyClassification describes the sensitivity category assigned to an

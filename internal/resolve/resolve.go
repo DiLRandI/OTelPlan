@@ -8,6 +8,7 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+// Decision records whether one rule or exclusion matched at a selection stage.
 type Decision struct {
 	RuleID  string `json:"rule"`
 	Stage   string `json:"stage"`
@@ -15,18 +16,24 @@ type Decision struct {
 	Reason  string `json:"reason"`
 }
 
+// Explanation records selection decisions for one symbol, including rejected candidates.
 type Explanation struct {
 	SymbolID  model.SymbolID `json:"symbol"`
 	Decisions []Decision     `json:"decisions"`
 	Selected  bool           `json:"selected"`
 }
 
+// Result contains the resolved plan, validation diagnostics, and per-symbol decisions.
+// Callers must check Diagnostics.HasErrors before using the plan for instrumentation.
 type Result struct {
 	Plan         model.ResolvedPlan        `json:"plan"`
 	Diagnostics  model.DiagnosticErrorList `json:"diagnostics"`
 	Explanations []Explanation             `json:"explanations"`
 }
 
+// Resolve applies a policy without mutating it or the code model.
+// Rule, exclusion, and symbol declaration order does not affect the result.
+// Invalid policies and missing code models produce error diagnostics.
 func Resolve(p *model.Policy, code *model.CodeModel) Result {
 	result := Result{Plan: model.ResolvedPlan{APIVersion: model.APIVersionV1Alpha1, Targets: []model.ResolvedTarget{}}, Diagnostics: policy.Validate(p)}
 	if result.Diagnostics.HasErrors() {

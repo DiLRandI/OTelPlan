@@ -208,55 +208,24 @@ func finiteConstant(value float64) bool {
 	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
-func lookupField(index map[string]model.TypeInfo, root, name string) ([]model.TypeField, error) {
-	type candidate struct {
-		typ     string
-		path    []model.TypeField
-		visited map[string]bool
-	}
+type fieldCandidate struct {
+	typ     string
+	path    []model.TypeField
+	visited map[string]bool
+}
 
-	layer := []candidate{{typ: root, visited: map[string]bool{}}}
+func lookupField(index map[string]model.TypeInfo, root, name string) ([]model.TypeField, error) {
+	layer := []fieldCandidate{{typ: root, path: nil, visited: map[string]bool{}}}
 	for len(layer) > 0 {
 		var (
-			next    []candidate
+			next    []fieldCandidate
 			matches [][]model.TypeField
 		)
 
 		for _, entry := range layer {
-			if entry.visited[entry.typ] {
-				continue
-			}
-
-			visited := map[string]bool{}
-			for typ := range entry.visited {
-				visited[typ] = true
-			}
-
-			visited[entry.typ] = true
-
-			shape, ok := index[entry.typ]
-			if ok && shape.Kind == "pointer" {
-				shape, ok = index[shape.Element]
-			}
-
-			if !ok || shape.Kind != "struct" {
-				continue
-			}
-
-			for _, field := range shape.Fields {
-				if !field.Exported {
-					continue
-				}
-
-				path := append(append([]model.TypeField(nil), entry.path...), field)
-				if field.Name == name {
-					matches = append(matches, path)
-				}
-
-				if field.Embedded {
-					next = append(next, candidate{typ: field.Type, path: path, visited: visited})
-				}
-			}
+			children, found := expandFieldCandidate(index, entry, name)
+			next = append(next, children...)
+			matches = append(matches, found...)
 		}
 
 		if len(matches) == 1 {
@@ -271,4 +240,55 @@ func lookupField(index map[string]model.TypeInfo, root, name string) ([]model.Ty
 	}
 
 	return nil, errAttributeFieldInaccessible
+}
+
+func expandFieldCandidate(
+	index map[string]model.TypeInfo, entry fieldCandidate, name string,
+) ([]fieldCandidate, [][]model.TypeField) {
+	var (
+		next    []fieldCandidate
+		matches [][]model.TypeField
+	)
+
+	if entry.visited[entry.typ] {
+		return nil, nil
+	}
+
+	visited := map[string]bool{}
+	for typ := range entry.visited {
+		visited[typ] = true
+	}
+
+	visited[entry.typ] = true
+
+	shape, ok := fieldStruct(index, entry.typ)
+	if !ok {
+		return nil, nil
+	}
+
+	for _, field := range shape.Fields {
+		if !field.Exported {
+			continue
+		}
+
+		path := append(append([]model.TypeField(nil), entry.path...), field)
+		if field.Name == name {
+			matches = append(matches, path)
+		}
+
+		if field.Embedded {
+			next = append(next, fieldCandidate{typ: field.Type, path: path, visited: visited})
+		}
+	}
+
+	return next, matches
+}
+
+func fieldStruct(index map[string]model.TypeInfo, typ string) (model.TypeInfo, bool) {
+	shape, ok := index[typ]
+	if ok && shape.Kind == "pointer" {
+		shape, ok = index[shape.Element]
+	}
+
+	return shape, ok && shape.Kind == "struct"
 }

@@ -1,9 +1,10 @@
-package resolve
+package resolve_test
 
 import (
 	"fmt"
 	"testing"
 
+	"github.com/DiLRandI/OTelPlan/internal/resolve"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
@@ -54,7 +55,7 @@ func BenchmarkResolveExactApplicationFunctions(b *testing.B) {
 		policy.Rules = append(policy.Rules, rule)
 	}
 
-	warm := Resolve(policy, code)
+	warm := resolve.Resolve(policy, code)
 	if warm.Diagnostics.HasErrors() {
 		b.Fatalf("synthetic policy resolution returned errors: %+v", warm.Diagnostics)
 	}
@@ -67,6 +68,6 @@ func BenchmarkResolveExactApplicationFunctions(b *testing.B) {
 	b.ResetTimer()
 
 	for range b.N {
-		Resolve(policy, code)
+		resolve.Resolve(policy, code)
 	}
 }

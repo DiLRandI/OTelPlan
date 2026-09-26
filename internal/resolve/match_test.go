@@ -1,12 +1,15 @@
-package resolve
+package resolve_test
 
 import (
 	"testing"
 
+	"github.com/DiLRandI/OTelPlan/internal/resolve"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
 func TestGlob(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		pattern, value string
 		want           bool
@@ -21,19 +24,23 @@ func TestGlob(t *testing.T) {
 		{"**/mock_*.go", "mock_x.go", true},
 	} {
 		t.Run(tc.pattern+tc.value, func(t *testing.T) {
-			got, err := Glob(tc.pattern, tc.value)
+			t.Parallel()
+
+			got, err := resolve.Glob(tc.pattern, tc.value)
 			if err != nil || got != tc.want {
 				t.Fatalf("got %v, %v", got, err)
 			}
 		})
 	}
 
-	if _, err := Glob("[", "a"); err == nil {
+	if _, err := resolve.Glob("[", "a"); err == nil {
 		t.Fatal("malformed pattern accepted")
 	}
 }
 
 func TestMatchSelectors(t *testing.T) {
+	t.Parallel()
+
 	s := model.Symbol{ID: "example.com/x.(*Worker).Run", Kind: model.SymbolMethod, Name: "Run", PackageImportPath: "example.com/x", Location: model.SourceLocation{File: "domain/work.go"}, Receiver: &model.Receiver{Type: "Worker", Pointer: true}, Visibility: model.VisibilityExported, Ownership: model.OwnershipApplication, ContextIndexes: []int{0}, ErrorIndexes: []int{0}}
 	m := &model.CodeModel{InterfaceMethods: []model.InterfaceMethod{{InterfaceID: "example.com/ports.Operation", SymbolID: s.ID}}}
 
@@ -59,7 +66,9 @@ func TestMatchSelectors(t *testing.T) {
 		{"and", model.Match{Methods: []string{"Run"}, HasContext: &no}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := Matches(m, s, tc.selector)
+			t.Parallel()
+
+			got, err := resolve.Matches(m, s, tc.selector)
 			if err != nil || got != tc.want {
 				t.Fatalf("got %v, %v", got, err)
 			}

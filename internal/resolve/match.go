@@ -10,15 +10,9 @@ import (
 
 // Glob treats ** as zero or more path segments; * and ? never cross a slash.
 func Glob(pattern, value string) (bool, error) {
-	parts := strings.Split(pattern, "/")
-	for _, part := range parts {
-		if part == "**" {
-			continue
-		}
-
-		if _, err := path.Match(part, ""); err != nil {
-			return false, fmt.Errorf("invalid glob %q: %w", pattern, err)
-		}
+	parts, err := validatedGlobParts(pattern)
+	if err != nil {
+		return false, err
 	}
 
 	values := strings.Split(value, "/")
@@ -30,8 +24,8 @@ func Glob(pattern, value string) (bool, error) {
 
 	var match func(int, int) bool
 
-	match = func(i, j int) bool {
-		key := position{i, j}
+	match = func(patternIndex, valueIndex int) bool {
+		key := position{patternIndex, valueIndex}
 		if visited[key] {
 			return memo[key]
 		}
@@ -41,13 +35,13 @@ func Glob(pattern, value string) (bool, error) {
 		result := false
 
 		switch {
-		case i == len(parts):
-			result = j == len(values)
-		case parts[i] == "**":
-			result = match(i+1, j) || (j < len(values) && match(i, j+1))
-		case j < len(values):
-			ok, _ := path.Match(parts[i], values[j])
-			result = ok && match(i+1, j+1)
+		case patternIndex == len(parts):
+			result = valueIndex == len(values)
+		case parts[patternIndex] == "**":
+			result = match(patternIndex+1, valueIndex) || (valueIndex < len(values) && match(patternIndex, valueIndex+1))
+		case valueIndex < len(values):
+			ok, _ := path.Match(parts[patternIndex], values[valueIndex])
+			result = ok && match(patternIndex+1, valueIndex+1)
 		}
 
 		memo[key] = result
@@ -56,6 +50,22 @@ func Glob(pattern, value string) (bool, error) {
 	}
 
 	return match(0, 0), nil
+}
+
+func validatedGlobParts(pattern string) ([]string, error) {
+	parts := strings.Split(pattern, "/")
+	for _, part := range parts {
+		if part == "**" {
+			continue
+		}
+
+		_, err := path.Match(part, "")
+		if err != nil {
+			return nil, fmt.Errorf("invalid glob %q: %w", pattern, err)
+		}
+	}
+
+	return parts, nil
 }
 
 func Matches(m *model.CodeModel, s model.Symbol, selector model.Match) (bool, error) {

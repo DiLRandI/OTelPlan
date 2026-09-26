@@ -23,7 +23,8 @@ type Category string
 type Details struct { Kind Category; password string }
 type Left struct { ID string }
 type Right struct { ID string }
-type Request struct { *Details; Left; Right; Count int; Payload []byte }
+type Cycle struct { *Cycle; Value string }
+type Request struct { *Details; Left; Right; *Cycle; Count int; Payload []byte }
 func Run(request *Request) (result bool) { return true }
 `}
 

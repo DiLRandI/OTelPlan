@@ -1,11 +1,17 @@
-package model
+package model_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/DiLRandI/OTelPlan/pkg/model"
+)
 
 func TestFunctionIDRoundTrip(t *testing.T) {
-	id := FunctionID("github.com/acme/shop/internal/payment", "ProcessPayment")
+	t.Parallel()
 
-	parsed, err := ParseSymbolID(id)
+	id := model.FunctionID("github.com/acme/shop/internal/payment", "ProcessPayment")
+
+	parsed, err := model.ParseSymbolID(id)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -24,33 +30,39 @@ func TestFunctionIDRoundTrip(t *testing.T) {
 }
 
 func TestMethodIDRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	const receiverType = "Processor"
+
 	cases := []struct {
 		name   string
-		recv   Receiver
+		recv   model.Receiver
 		method string
-		wantID SymbolID
+		wantID model.SymbolID
 	}{
 		{
 			name:   "value receiver",
-			recv:   Receiver{Name: "p", Type: "Processor"},
+			recv:   model.Receiver{Name: "p", Type: receiverType, Pointer: false},
 			method: "Authorize",
 			wantID: "github.com/acme/shop/internal/payment.(Processor).Authorize",
 		},
 		{
 			name:   "pointer receiver",
-			recv:   Receiver{Name: "p", Type: "Processor", Pointer: true},
+			recv:   model.Receiver{Name: "p", Type: receiverType, Pointer: true},
 			method: "Authorize",
 			wantID: "github.com/acme/shop/internal/payment.(*Processor).Authorize",
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			id := MethodID("github.com/acme/shop/internal/payment", tc.recv, tc.method)
-			if id != tc.wantID {
-				t.Fatalf("id = %q, want %q", id, tc.wantID)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			id := model.MethodID("github.com/acme/shop/internal/payment", testCase.recv, testCase.method)
+			if id != testCase.wantID {
+				t.Fatalf("id = %q, want %q", id, testCase.wantID)
 			}
 
-			parsed, err := ParseSymbolID(id)
+			parsed, err := model.ParseSymbolID(id)
 			if err != nil {
 				t.Fatalf("parse: %v", err)
 			}
@@ -59,15 +71,15 @@ func TestMethodIDRoundTrip(t *testing.T) {
 				t.Fatal("receiver = nil, want non-nil")
 			}
 
-			if parsed.Receiver.Type != "Processor" {
+			if parsed.Receiver.Type != receiverType {
 				t.Errorf("receiver type = %q", parsed.Receiver.Type)
 			}
 
-			if parsed.Receiver.Pointer != tc.recv.Pointer {
-				t.Errorf("receiver pointer = %v, want %v", parsed.Receiver.Pointer, tc.recv.Pointer)
+			if parsed.Receiver.Pointer != testCase.recv.Pointer {
+				t.Errorf("receiver pointer = %v, want %v", parsed.Receiver.Pointer, testCase.recv.Pointer)
 			}
 
-			if parsed.Name != tc.method {
+			if parsed.Name != testCase.method {
 				t.Errorf("method = %q", parsed.Name)
 			}
 		})
@@ -75,21 +87,61 @@ func TestMethodIDRoundTrip(t *testing.T) {
 }
 
 func TestParseSymbolIDRejectsMalformed(t *testing.T) {
-	for _, id := range []SymbolID{"", "no-separator", "pkg.()", "pkg.().method", "pkg.(Recv)."} {
-		if _, err := ParseSymbolID(id); err == nil {
+	t.Parallel()
+
+	for _, id := range []model.SymbolID{"", "no-separator", "pkg.()", "pkg.().method", "pkg.(Recv)."} {
+		_, err := model.ParseSymbolID(id)
+		if err == nil {
 			t.Errorf("ParseSymbolID(%q) = nil error, want error", id)
 		}
 	}
 }
 
 func TestSymbolPredicates(t *testing.T) {
-	s := Symbol{ContextIndexes: []int{0}, ErrorIndexes: []int{0}}
-	if !s.HasContext() || !s.ReturnsError() {
+	t.Parallel()
+
+	var symbol model.Symbol
+
+	symbol.ContextIndexes = []int{0}
+	symbol.ErrorIndexes = []int{0}
+
+	if !symbol.HasContext() || !symbol.ReturnsError() {
 		t.Error("predicates should be true")
 	}
 
-	empty := Symbol{}
+	var empty model.Symbol
 	if empty.HasContext() || empty.ReturnsError() {
 		t.Error("predicates should be false")
+	}
+}
+
+func TestParseSymbolIDErrorMessages(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		id      model.SymbolID
+		message string
+	}{
+		{id: "", message: "empty symbol id"},
+		{id: "pkg.(*Worker", message: `malformed method symbol id "pkg.(*Worker": unterminated receiver`},
+		{id: "pkg.(Worker)", message: `malformed method symbol id "pkg.(Worker)"`},
+		{id: "pkg.().Run", message: `malformed method symbol id "pkg.().Run": empty receiver type`},
+		{id: "no-separator", message: `malformed function symbol id "no-separator"`},
+	}
+	for _, testCase := range cases {
+		t.Run(string(testCase.id), func(t *testing.T) {
+			t.Parallel()
+
+			parsed, err := model.ParseSymbolID(testCase.id)
+			if err == nil || err.Error() != testCase.message {
+				t.Fatalf("error = %v, want %q", err, testCase.message)
+			}
+
+			var empty model.ParsedSymbolID
+
+			if parsed != empty {
+				t.Fatalf("parsed = %+v, want zero value", parsed)
+			}
+		})
 	}
 }

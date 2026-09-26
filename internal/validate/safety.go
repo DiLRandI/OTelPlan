@@ -22,113 +22,163 @@ type Options struct {
 	MaximumTargets int
 }
 
+const (
+	defaultWarningTargets   = 100
+	defaultMaximumTargets   = 2000
+	spanNoiseWarningTargets = 500
+)
+
 // Safety reports unresolved targets, unsafe attributes, and potential span noise.
 // It also warns whenever a plan exceeds 500 targets, independently of Options.
 // Attribute values are not included in diagnostics.
 func Safety(code *model.CodeModel, plan model.ResolvedPlan, opts Options) model.DiagnosticErrorList {
-	var diags model.DiagnosticErrorList
-
 	if code == nil {
 		return model.DiagnosticErrorList{safetyDiagnostic(
 			model.SeverityError, model.CodeUnresolvedSymbol, "code model is required",
 		)}
 	}
 
+	diags := planSizeDiagnostics(len(plan.Targets), opts)
+	secrets := append([]string{
+		"password", "passwd", "pwd", "secret", "token", "authorization",
+		"cookie", "apikey", "privatekey", "credential", "session",
+	}, opts.DenyPatterns...)
+
+	for _, target := range plan.Targets {
+		targetDiags := targetSafety(code, target, secrets)
+		for index := range targetDiags {
+			targetDiags[index].RuleID = target.RuleID
+			targetDiags[index].Symbol = target.SymbolID
+		}
+
+		diags = append(diags, targetDiags...)
+	}
+
+	return diags
+}
+
+func planSizeDiagnostics(count int, opts Options) model.DiagnosticErrorList {
+	var diags model.DiagnosticErrorList
+
 	if opts.WarningTargets <= 0 {
-		opts.WarningTargets = 100
+		opts.WarningTargets = defaultWarningTargets
 	}
 
 	if opts.MaximumTargets <= 0 {
-		opts.MaximumTargets = 2000
+		opts.MaximumTargets = defaultMaximumTargets
 	}
 
-	if len(plan.Targets) > opts.WarningTargets {
+	if count > opts.WarningTargets {
 		diags = append(diags, safetyDiagnostic(
 			model.SeverityWarning, model.CodeBroadPlan,
 			"policy selects many targets; review trace volume",
 		))
 	}
 
-	if len(plan.Targets) > 500 {
+	if count > spanNoiseWarningTargets {
 		diags = append(diags, safetyDiagnostic(
 			model.SeverityWarning, model.CodeBroadPlan,
 			"policy selects more than 500 targets; review span noise and telemetry cost carefully",
 		))
 	}
 
-	if len(plan.Targets) > opts.MaximumTargets && !opts.AllowLargePlan {
+	if count > opts.MaximumTargets && !opts.AllowLargePlan {
 		diags = append(diags, safetyDiagnostic(
 			model.SeverityError, model.CodeBroadPlan,
 			"plan exceeds target limit; explicit large-plan acknowledgment is required",
 		))
 	}
 
-	secrets := append([]string{"password", "passwd", "pwd", "secret", "token", "authorization", "cookie", "apikey", "privatekey", "credential", "session"}, opts.DenyPatterns...)
+	return diags
+}
 
-	for _, target := range plan.Targets {
-		add := func(severity model.Severity, code model.Code, message string) {
-			diagnostic := safetyDiagnostic(severity, code, message)
-			diagnostic.RuleID = target.RuleID
-			diagnostic.Symbol = target.SymbolID
-			diags = append(diags, diagnostic)
+func targetSafety(code *model.CodeModel, target model.ResolvedTarget, secrets []string) model.DiagnosticErrorList {
+	var diags model.DiagnosticErrorList
+
+	symbol, ok := code.Symbol(target.SymbolID)
+
+	if !ok {
+		diags = append(diags, safetyDiagnostic(
+			model.SeverityError, model.CodeUnresolvedSymbol,
+			"selected symbol is absent from the code model",
+		))
+
+		return diags
+	}
+
+	if symbol.Generated || symbol.TestFile {
+		diags = append(diags, safetyDiagnostic(
+			model.SeverityWarning, model.CodeBroadPlan,
+			"selection includes generated or test code",
+		))
+	}
+
+	if target.ContextStrategy.Strategy == model.ContextStrategyRoot {
+		diags = append(diags, safetyDiagnostic(
+			model.SeverityWarning, model.CodeMissingContext,
+			"explicit root span will not inherit caller context",
+		))
+	}
+
+	if target.ErrorStrategy.Record && len(target.ErrorStrategy.Indexes) == 0 {
+		diags = append(diags, safetyDiagnostic(
+			model.SeverityWarning, model.CodeInvalidPolicy,
+			"error recording requested but target has no error result",
+		))
+	}
+
+	for _, attr := range target.Attributes {
+		diags = append(diags, attributeSafety(code, *symbol, attr, secrets)...)
+	}
+
+	return diags
+}
+
+func attributeSafety(
+	code *model.CodeModel, symbol model.Symbol, attr model.AttributePlan, secrets []string,
+) model.DiagnosticErrorList {
+	var diags model.DiagnosticErrorList
+
+	_, err := AttributeAccessor(code, symbol, attr.From)
+	if err != nil {
+		diags = append(diags, safetyDiagnostic(model.SeverityError, model.CodeCaptureNotAllowed, err.Error()))
+	}
+
+	source := attr.Key + " " + attr.From.Argument + " " + attr.From.Result
+	if matchesAny(source, secrets) || attr.Classification == model.ClassificationSecret {
+		if !attr.Allow || attr.Classification != model.ClassificationSecret {
+			diags = append(diags, safetyDiagnostic(
+				model.SeverityError, model.CodeSecretAttribute,
+				"sensitive attribute requires explicit secret classification and acknowledgment",
+			))
 		}
+	}
 
-		symbol, ok := code.Symbol(target.SymbolID)
+	if piiNeedsAcknowledgment(source, attr) {
+		diags = append(diags, safetyDiagnostic(model.SeverityWarning, model.CodePIIAttribute,
+			"attribute may contain personal information; review classification and consent",
+		))
+	}
 
-		if !ok {
-			add(model.SeverityError, model.CodeUnresolvedSymbol, "selected symbol is absent from the code model")
-
-			continue
-		}
-
-		if symbol.Generated || symbol.TestFile {
-			add(model.SeverityWarning, model.CodeBroadPlan, "selection includes generated or test code")
-		}
-
-		if target.ContextStrategy.Strategy == model.ContextStrategyRoot {
-			add(model.SeverityWarning, model.CodeMissingContext, "explicit root span will not inherit caller context")
-		}
-
-		if target.ErrorStrategy.Record && len(target.ErrorStrategy.Indexes) == 0 {
-			add(model.SeverityWarning, model.CodeInvalidPolicy, "error recording requested but target has no error result")
-		}
-
-		for _, attr := range target.Attributes {
-			if _, err := AttributeAccessor(code, *symbol, attr.From); err != nil {
-				add(model.SeverityError, model.CodeCaptureNotAllowed, err.Error())
-			}
-
-			source := attr.Key + " " + attr.From.Argument + " " + attr.From.Result
-			if matchesAny(source, secrets) || attr.Classification == model.ClassificationSecret {
-				if !attr.Allow || attr.Classification != model.ClassificationSecret {
-					add(model.SeverityError, model.CodeSecretAttribute, "sensitive attribute requires explicit secret classification and acknowledgment")
-				}
-			}
-
-			if matchesAny(source, []string{"email", "phone", "address", "name", "userid", "customerid", "ipaddress", "deviceid"}) || hasIPToken(source) || attr.Classification == model.ClassificationPII {
-				if !attr.Allow || (attr.Classification != model.ClassificationPII && attr.Classification != model.ClassificationSecret) {
-					add(model.SeverityWarning, model.CodePIIAttribute, "attribute may contain personal information; review classification and consent")
-				}
-			}
-
-			if matchesAny(source, []string{"url", "query", "body", "uuid", "orderid", "userid", "timestamp", "message"}) {
-				add(model.SeverityWarning, model.CodeCardinalityWarning, "attribute may have unbounded cardinality; prefer a bounded category")
-			}
-		}
+	if matchesAny(source, []string{"url", "query", "body", "uuid", "orderid", "userid", "timestamp", "message"}) {
+		diags = append(diags, safetyDiagnostic(
+			model.SeverityWarning, model.CodeCardinalityWarning,
+			"attribute may have unbounded cardinality; prefer a bounded category",
+		))
 	}
 
 	return diags
 }
 
 func matchesAny(value string, patterns []string) bool {
-	normalize := func(s string) string {
+	normalize := func(text string) string {
 		return strings.Map(func(r rune) rune {
 			if r == '_' || r == '-' || r == '.' {
 				return -1
 			}
 
 			return r
-		}, strings.ToLower(s))
+		}, strings.ToLower(text))
 	}
 
 	value = normalize(value)
@@ -144,7 +194,11 @@ func matchesAny(value string, patterns []string) bool {
 }
 
 func hasIPToken(value string) bool {
-	return slices.Contains(strings.FieldsFunc(strings.ToLower(value), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }), "ip")
+	tokens := strings.FieldsFunc(strings.ToLower(value), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+
+	return slices.Contains(tokens, "ip")
 }
 
 func safetyDiagnostic(severity model.Severity, code model.Code, message string) model.DiagnosticError {
@@ -157,4 +211,15 @@ func safetyDiagnostic(severity model.Severity, code model.Code, message string) 
 		File:     "",
 		Line:     0,
 	}
+}
+
+func piiNeedsAcknowledgment(source string, attr model.AttributePlan) bool {
+	classified := attr.Classification == model.ClassificationPII || attr.Classification == model.ClassificationSecret
+	if attr.Allow && classified {
+		return false
+	}
+
+	patterns := []string{"email", "phone", "address", "name", "userid", "customerid", "ipaddress", "deviceid"}
+
+	return matchesAny(source, patterns) || hasIPToken(source) || attr.Classification == model.ClassificationPII
 }

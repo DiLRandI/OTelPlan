@@ -52,43 +52,7 @@ func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.
 	}
 
 	if source.Constant != nil {
-		kind := ""
-
-		switch source.Constant.(type) {
-		case bool:
-			kind = "bool"
-		case string:
-			kind = "string"
-		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-			kind = "integer"
-		case float32, float64:
-			kind = "float"
-		}
-
-		if kind == "" {
-			return Accessor{}, errConstantScalar
-		}
-
-		switch value := source.Constant.(type) {
-		case float64:
-			if math.IsNaN(value) || math.IsInf(value, 0) {
-				return Accessor{}, errConstantFinite
-			}
-		case float32:
-			if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
-				return Accessor{}, errConstantFinite
-			}
-		case uint64:
-			if value > math.MaxInt64 {
-				return Accessor{}, errConstantRange
-			}
-		case uint:
-			if uint64(value) > math.MaxInt64 {
-				return Accessor{}, errConstantRange
-			}
-		}
-
-		return Accessor{Source: "constant", Kind: kind}, nil
+		return constantAccessor(source.Constant)
 	}
 
 	access := Accessor{Source: "argument", Index: -1}
@@ -168,6 +132,62 @@ func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.
 	}
 
 	return access, nil
+}
+
+func constantAccessor(constant any) (Accessor, error) {
+	kind := constantKind(constant)
+	if kind == "" {
+		return Accessor{}, errConstantScalar
+	}
+
+	err := validateConstantRange(constant)
+	if err != nil {
+		return Accessor{}, err
+	}
+
+	return Accessor{Source: "constant", Index: 0, Fields: nil, Type: "", Kind: kind}, nil
+}
+
+func constantKind(constant any) string {
+	switch constant.(type) {
+	case bool:
+		return "bool"
+	case string:
+		return "string"
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return "integer"
+	case float32, float64:
+		return "float"
+	default:
+		return ""
+	}
+}
+
+func validateConstantRange(constant any) error {
+	switch value := constant.(type) {
+	case float64:
+		if !finiteConstant(value) {
+			return errConstantFinite
+		}
+	case float32:
+		if !finiteConstant(float64(value)) {
+			return errConstantFinite
+		}
+	case uint64:
+		if value > math.MaxInt64 {
+			return errConstantRange
+		}
+	case uint:
+		if uint64(value) > math.MaxInt64 {
+			return errConstantRange
+		}
+	}
+
+	return nil
+}
+
+func finiteConstant(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 func lookupField(index map[string]model.TypeInfo, root, name string) ([]model.TypeField, error) {

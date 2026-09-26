@@ -1,6 +1,7 @@
 package resolve
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
 
@@ -238,37 +239,62 @@ func matchReason(matched bool) string {
 	return "selector did not match"
 }
 
-func targetFor(p *model.Policy, rule model.Rule, symbol model.Symbol) (model.ResolvedTarget, model.DiagnosticErrorList) {
-	target := model.ResolvedTarget{SymbolID: symbol.ID, RuleID: rule.ID, Signature: symbol.Signature}
+func targetFor(
+	instrumentationPolicy *model.Policy, rule model.Rule, symbol model.Symbol,
+) (model.ResolvedTarget, model.DiagnosticErrorList) {
+	contextStrategy, diagnostics := targetContext(instrumentationPolicy.Defaults.Context.Mode, rule.ID, symbol)
 
-	var diags model.DiagnosticErrorList
-
-	switch len(symbol.ContextIndexes) {
-	case 0:
-		if p.Defaults.Context.Mode == model.ContextModeRoot {
-			target.ContextStrategy.Strategy = model.ContextStrategyRoot
-		} else {
-			diags = append(diags, resolutionDiagnostic(
-				model.CodeMissingContext,
-				rule.ID,
-				symbol.ID,
-				"selected target has no context.Context argument",
-			))
-		}
-	case 1:
-		target.ContextStrategy = model.ContextStrategy{Strategy: model.ContextStrategyArgument, Index: symbol.ContextIndexes[0]}
-	default:
-		diags = append(diags, resolutionDiagnostic(
-			model.CodeMultipleContexts,
-			rule.ID,
-			symbol.ID,
-			"multiple context.Context arguments require an explicit supported selection strategy",
+	name, err := targetSpanName(instrumentationPolicy.Defaults.SpanName, rule.Span, symbol)
+	if err != nil || name == "" {
+		diagnostics = append(diagnostics, resolutionDiagnostic(
+			model.CodeUnknownTemplateVar, rule.ID, symbol.ID,
+			"span template must produce a nonempty valid name",
 		))
 	}
 
-	template := p.Defaults.SpanName
-	if rule.Span != nil && rule.Span.Name != "" {
-		template = rule.Span.Name
+	target := model.ResolvedTarget{
+		SymbolID:        symbol.ID,
+		SpanName:        name,
+		ContextStrategy: contextStrategy,
+		ErrorStrategy:   targetErrors(instrumentationPolicy.Defaults.Errors.Record, rule.Errors, symbol.ErrorIndexes),
+		Attributes:      targetAttributes(rule.Attributes),
+		RuleID:          rule.ID,
+		Signature:       symbol.Signature,
+	}
+
+	return target, diagnostics
+}
+
+func targetContext(
+	mode model.ContextMode, ruleID string, symbol model.Symbol,
+) (model.ContextStrategy, model.DiagnosticErrorList) {
+	var strategy model.ContextStrategy
+
+	switch len(symbol.ContextIndexes) {
+	case 0:
+		if mode == model.ContextModeRoot {
+			return model.ContextStrategy{Strategy: model.ContextStrategyRoot, Index: 0}, nil
+		}
+
+		return strategy, model.DiagnosticErrorList{resolutionDiagnostic(
+			model.CodeMissingContext, ruleID, symbol.ID,
+			"selected target has no context.Context argument",
+		)}
+	case 1:
+		return model.ContextStrategy{
+			Strategy: model.ContextStrategyArgument, Index: symbol.ContextIndexes[0],
+		}, nil
+	default:
+		return strategy, model.DiagnosticErrorList{resolutionDiagnostic(
+			model.CodeMultipleContexts, ruleID, symbol.ID,
+			"multiple context.Context arguments require an explicit supported selection strategy",
+		)}
+	}
+}
+
+func targetSpanName(template string, span *model.SpanConfig, symbol model.Symbol) (string, error) {
+	if span != nil && span.Name != "" {
+		template = span.Name
 	}
 
 	receiver, function, method := "", "", ""
@@ -290,41 +316,50 @@ func targetFor(p *model.Policy, rule model.Rule, symbol model.Symbol) (model.Res
 		}
 	}
 
-	name, err := policy.RenderTemplate(template, map[string]string{"symbol": string(symbol.ID), "package": symbol.PackageName, "import_path": symbol.PackageImportPath, "receiver": receiver, "method": method, "function": function})
-	if err != nil || name == "" {
-		diags = append(diags, resolutionDiagnostic(
-			model.CodeUnknownTemplateVar,
-			rule.ID,
-			symbol.ID,
-			"span template must produce a nonempty valid name",
-		))
+	name, err := policy.RenderTemplate(template, map[string]string{
+		"symbol": string(symbol.ID), "package": symbol.PackageName, "import_path": symbol.PackageImportPath,
+		"receiver": receiver, "method": method, "function": function,
+	})
+	if err != nil {
+		return name, fmt.Errorf("render target span name: %w", err)
 	}
 
-	target.SpanName = name
+	return name, nil
+}
 
-	target.ErrorStrategy.Record = p.Defaults.Errors.Record
-
-	if rule.Errors != nil {
-		target.ErrorStrategy.Record = rule.Errors.Record
+func targetErrors(record bool, override *model.ErrorConfig, indexes []int) model.ErrorStrategy {
+	strategy := model.ErrorStrategy{Record: record, Indexes: nil}
+	if override != nil {
+		strategy.Record = override.Record
 	}
 
-	if target.ErrorStrategy.Record {
-		target.ErrorStrategy.Indexes = append([]int(nil), symbol.ErrorIndexes...)
+	if strategy.Record {
+		strategy.Indexes = append([]int(nil), indexes...)
 	}
 
-	for _, attr := range rule.Attributes {
-		plan := model.AttributePlan{Key: attr.Key, From: attr.From}
-		if attr.Safety != nil {
-			plan.Classification = attr.Safety.Classification
-			plan.Allow = attr.Safety.Allow
+	return strategy
+}
+
+func targetAttributes(attributes []model.AttributeRule) []model.AttributePlan {
+	if len(attributes) == 0 {
+		return nil
+	}
+
+	plans := make([]model.AttributePlan, 0, len(attributes))
+
+	for _, attribute := range attributes {
+		plan := model.AttributePlan{Key: attribute.Key, From: attribute.From, Classification: "", Allow: false}
+		if attribute.Safety != nil {
+			plan.Classification = attribute.Safety.Classification
+			plan.Allow = attribute.Safety.Allow
 		}
 
-		target.Attributes = append(target.Attributes, plan)
+		plans = append(plans, plan)
 	}
 
-	sort.Slice(target.Attributes, func(i, j int) bool { return target.Attributes[i].Key < target.Attributes[j].Key })
+	sort.Slice(plans, func(i, j int) bool { return plans[i].Key < plans[j].Key })
 
-	return target, diags
+	return plans
 }
 
 func resolutionDiagnostic(

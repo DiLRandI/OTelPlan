@@ -55,7 +55,16 @@ func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.
 		return constantAccessor(source.Constant)
 	}
 
-	access := Accessor{Source: "argument", Index: -1}
+	access, fields, err := sourceAccessor(symbol, source)
+	if err != nil {
+		return Accessor{}, err
+	}
+
+	return resolveAccessorFields(code, access, fields)
+}
+
+func sourceAccessor(symbol model.Symbol, source model.AttributeSource) (Accessor, []string, error) {
+	access := Accessor{Source: "argument", Index: -1, Fields: nil, Type: "", Kind: ""}
 	path := source.Argument
 
 	var names, types []string
@@ -76,24 +85,33 @@ func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.
 	}
 
 	parts := strings.Split(path, ".")
-	for i, name := range names {
-		if name != "" && name == parts[0] {
-			access.Index = i
+	access.Index = sourceIndex(names, parts[0])
 
-			break
+	if access.Index < 0 {
+		return Accessor{}, nil, errAttributeSourceMissing
+	}
+
+	access.Type = types[access.Index]
+
+	return access, parts[1:], nil
+}
+
+func sourceIndex(names []string, selector string) int {
+	for index, name := range names {
+		if name != "" && name == selector {
+			return index
 		}
 	}
 
-	if access.Index < 0 {
-		if index, err := strconv.Atoi(parts[0]); err == nil && index >= 0 && index < len(names) {
-			access.Index = index
-		}
+	index, err := strconv.Atoi(selector)
+	if err != nil || index < 0 || index >= len(names) {
+		return -1
 	}
 
-	if access.Index < 0 {
-		return Accessor{}, errAttributeSourceMissing
-	}
+	return index
+}
 
+func resolveAccessorFields(code *model.CodeModel, access Accessor, parts []string) (Accessor, error) {
 	typeIndex := map[string]model.TypeInfo{}
 
 	if code == nil {
@@ -104,8 +122,8 @@ func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.
 		typeIndex[typ.Type] = typ
 	}
 
-	current := types[access.Index]
-	for _, name := range parts[1:] {
+	current := access.Type
+	for _, name := range parts {
 		fields, err := lookupField(typeIndex, current, name)
 		if err != nil {
 			return Accessor{}, err

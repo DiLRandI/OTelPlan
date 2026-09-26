@@ -29,7 +29,9 @@ func Safety(code *model.CodeModel, plan model.ResolvedPlan, opts Options) model.
 	var diags model.DiagnosticErrorList
 
 	if code == nil {
-		return model.DiagnosticErrorList{{Severity: model.SeverityError, Code: model.CodeUnresolvedSymbol, Message: "code model is required"}}
+		return model.DiagnosticErrorList{safetyDiagnostic(
+			model.SeverityError, model.CodeUnresolvedSymbol, "code model is required",
+		)}
 	}
 
 	if opts.WarningTargets <= 0 {
@@ -41,22 +43,34 @@ func Safety(code *model.CodeModel, plan model.ResolvedPlan, opts Options) model.
 	}
 
 	if len(plan.Targets) > opts.WarningTargets {
-		diags = append(diags, model.DiagnosticError{Severity: model.SeverityWarning, Code: model.CodeBroadPlan, Message: "policy selects many targets; review trace volume"})
+		diags = append(diags, safetyDiagnostic(
+			model.SeverityWarning, model.CodeBroadPlan,
+			"policy selects many targets; review trace volume",
+		))
 	}
 
 	if len(plan.Targets) > 500 {
-		diags = append(diags, model.DiagnosticError{Severity: model.SeverityWarning, Code: model.CodeBroadPlan, Message: "policy selects more than 500 targets; review span noise and telemetry cost carefully"})
+		diags = append(diags, safetyDiagnostic(
+			model.SeverityWarning, model.CodeBroadPlan,
+			"policy selects more than 500 targets; review span noise and telemetry cost carefully",
+		))
 	}
 
 	if len(plan.Targets) > opts.MaximumTargets && !opts.AllowLargePlan {
-		diags = append(diags, model.DiagnosticError{Severity: model.SeverityError, Code: model.CodeBroadPlan, Message: "plan exceeds target limit; explicit large-plan acknowledgment is required"})
+		diags = append(diags, safetyDiagnostic(
+			model.SeverityError, model.CodeBroadPlan,
+			"plan exceeds target limit; explicit large-plan acknowledgment is required",
+		))
 	}
 
 	secrets := append([]string{"password", "passwd", "pwd", "secret", "token", "authorization", "cookie", "apikey", "privatekey", "credential", "session"}, opts.DenyPatterns...)
 
 	for _, target := range plan.Targets {
 		add := func(severity model.Severity, code model.Code, message string) {
-			diags = append(diags, model.DiagnosticError{Severity: severity, Code: code, RuleID: target.RuleID, Symbol: target.SymbolID, Message: message})
+			diagnostic := safetyDiagnostic(severity, code, message)
+			diagnostic.RuleID = target.RuleID
+			diagnostic.Symbol = target.SymbolID
+			diags = append(diags, diagnostic)
 		}
 
 		symbol, ok := code.Symbol(target.SymbolID)
@@ -131,4 +145,16 @@ func matchesAny(value string, patterns []string) bool {
 
 func hasIPToken(value string) bool {
 	return slices.Contains(strings.FieldsFunc(strings.ToLower(value), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }), "ip")
+}
+
+func safetyDiagnostic(severity model.Severity, code model.Code, message string) model.DiagnosticError {
+	return model.DiagnosticError{
+		Severity: severity,
+		Code:     code,
+		Message:  message,
+		RuleID:   "",
+		Symbol:   "",
+		File:     "",
+		Line:     0,
+	}
 }

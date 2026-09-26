@@ -1,3 +1,5 @@
+// Package validate checks resolved instrumentation targets and attribute access
+// against the discovered code model before backend generation.
 package validate
 
 import (
@@ -8,13 +10,21 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+// Options controls sensitive-name detection and plan-size limits.
 type Options struct {
-	DenyPatterns   []string
+	// DenyPatterns supplements the built-in sensitive-name patterns.
+	DenyPatterns []string
+	// AllowLargePlan acknowledges exceeding MaximumTargets; warnings still apply.
 	AllowLargePlan bool
+	// WarningTargets defaults to 100 when non-positive.
 	WarningTargets int
+	// MaximumTargets defaults to 2000 when non-positive.
 	MaximumTargets int
 }
 
+// Safety reports unresolved targets, unsafe attributes, and potential span noise.
+// It also warns whenever a plan exceeds 500 targets, independently of Options.
+// Attribute values are not included in diagnostics.
 func Safety(code *model.CodeModel, plan model.ResolvedPlan, opts Options) model.DiagnosticErrorList {
 	var diags model.DiagnosticErrorList
 

@@ -23,6 +23,9 @@ var (
 	errAttributeFieldInaccessible = errors.New("attribute field is missing or inaccessible")
 )
 
+// Accessor describes a validated scalar attribute source. Index addresses the
+// argument or result; Fields includes embedded fields needed to reach the value.
+// Constant sources have no field path or Go type and use Kind for their scalar type.
 type Accessor struct {
 	Source string   `json:"source"`
 	Index  int      `json:"index"`
@@ -31,6 +34,10 @@ type Accessor struct {
 	Kind   string   `json:"kind"`
 }
 
+// AttributeAccessor resolves exactly one constant, argument, or result source.
+// Constants must be finite scalars within the telemetry integer range. Field
+// access requires an unambiguous exported path ending in a scalar value.
+// Argument and result sources require type information in code; constants do not.
 func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.AttributeSource) (Accessor, error) {
 	sources := 0
 

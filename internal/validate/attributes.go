@@ -9,6 +9,20 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+var (
+	errAttributeSourceCount     = errors.New("attribute must have exactly one source")
+	errConstantScalar           = errors.New("constant must be a scalar")
+	errConstantFinite           = errors.New("constant must be finite")
+	errConstantRange            = errors.New("integer constant exceeds telemetry range")
+	errAttributeSourceMissing   = errors.New("attribute source parameter or result does not exist")
+	errAttributeTypeUnavailable = errors.New("attribute source type is unavailable")
+	errAttributeScalar          = errors.New(
+		"attribute source must be a scalar; objects, collections, pointers, and interfaces cannot be captured",
+	)
+	errAttributeFieldAmbiguous    = errors.New("attribute field is ambiguous")
+	errAttributeFieldInaccessible = errors.New("attribute field is missing or inaccessible")
+)
+
 type Accessor struct {
 	Source string   `json:"source"`
 	Index  int      `json:"index"`
@@ -27,7 +41,7 @@ func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.
 	}
 
 	if sources != 1 {
-		return Accessor{}, errors.New("attribute must have exactly one source")
+		return Accessor{}, errAttributeSourceCount
 	}
 
 	if source.Constant != nil {
@@ -45,25 +59,25 @@ func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.
 		}
 
 		if kind == "" {
-			return Accessor{}, errors.New("constant must be a scalar")
+			return Accessor{}, errConstantScalar
 		}
 
 		switch value := source.Constant.(type) {
 		case float64:
 			if math.IsNaN(value) || math.IsInf(value, 0) {
-				return Accessor{}, errors.New("constant must be finite")
+				return Accessor{}, errConstantFinite
 			}
 		case float32:
 			if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
-				return Accessor{}, errors.New("constant must be finite")
+				return Accessor{}, errConstantFinite
 			}
 		case uint64:
 			if value > math.MaxInt64 {
-				return Accessor{}, errors.New("integer constant exceeds telemetry range")
+				return Accessor{}, errConstantRange
 			}
 		case uint:
 			if uint64(value) > math.MaxInt64 {
-				return Accessor{}, errors.New("integer constant exceeds telemetry range")
+				return Accessor{}, errConstantRange
 			}
 		}
 
@@ -106,13 +120,13 @@ func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.
 	}
 
 	if access.Index < 0 {
-		return Accessor{}, errors.New("attribute source parameter or result does not exist")
+		return Accessor{}, errAttributeSourceMissing
 	}
 
 	typeIndex := map[string]model.TypeInfo{}
 
 	if code == nil {
-		return Accessor{}, errors.New("attribute source type is unavailable")
+		return Accessor{}, errAttributeTypeUnavailable
 	}
 
 	for _, typ := range code.Types {
@@ -136,14 +150,14 @@ func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.
 
 	typ, ok := typeIndex[current]
 	if !ok {
-		return Accessor{}, errors.New("attribute source type is unavailable")
+		return Accessor{}, errAttributeTypeUnavailable
 	}
 
 	switch typ.Kind {
 	case "bool", "integer", "float", "string":
 		access.Kind = typ.Kind
 	default:
-		return Accessor{}, errors.New("attribute source must be a scalar; objects, collections, pointers, and interfaces cannot be captured")
+		return Accessor{}, errAttributeScalar
 	}
 
 	return access, nil
@@ -205,11 +219,11 @@ func lookupField(index map[string]model.TypeInfo, root, name string) ([]model.Ty
 		}
 
 		if len(matches) > 1 {
-			return nil, errors.New("attribute field is ambiguous")
+			return nil, errAttributeFieldAmbiguous
 		}
 
 		layer = next
 	}
 
-	return nil, errors.New("attribute field is missing or inaccessible")
+	return nil, errAttributeFieldInaccessible
 }

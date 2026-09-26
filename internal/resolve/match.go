@@ -1,8 +1,10 @@
+// Package resolve selects instrumentation targets from a semantic Go code model.
 package resolve
 
 import (
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
@@ -68,26 +70,45 @@ func validatedGlobParts(pattern string) ([]string, error) {
 	return parts, nil
 }
 
-func Matches(m *model.CodeModel, s model.Symbol, selector model.Match) (bool, error) {
+// Matches applies selector fields as conjunctions and values within each field as alternatives.
+// Invalid glob patterns return an error even when another field does not match.
+func Matches(code *model.CodeModel, symbol model.Symbol, selector model.Match) (bool, error) {
+	matched, err := matchesGlobFields(symbol, selector)
+	if err != nil {
+		return false, err
+	}
+
+	if len(selector.Symbols) > 0 {
+		matched = matched && slices.Contains(selector.Symbols, string(symbol.ID))
+	}
+
+	if len(selector.Implements) > 0 {
+		matched = matched && matchesInterfaceMethod(code, symbol.ID, selector.Implements)
+	}
+
+	return matched && matchesProperties(symbol, selector), nil
+}
+
+func matchesGlobFields(symbol model.Symbol, selector model.Match) (bool, error) {
 	receiver, function, method := "", "", ""
-	if s.Receiver != nil {
-		receiver = s.Receiver.Type
+	if symbol.Receiver != nil {
+		receiver = symbol.Receiver.Type
 	}
 
-	if s.Kind == model.SymbolFunction {
-		function = s.Name
+	if symbol.Kind == model.SymbolFunction {
+		function = symbol.Name
 	}
 
-	if s.Kind == model.SymbolMethod {
-		method = s.Name
+	if symbol.Kind == model.SymbolMethod {
+		method = symbol.Name
 	}
 
 	fields := []struct {
 		patterns []string
 		value    string
 	}{
-		{selector.Packages, s.PackageImportPath},
-		{selector.Files, s.Location.File},
+		{selector.Packages, symbol.PackageImportPath},
+		{selector.Files, symbol.Location.File},
 		{selector.Functions, function},
 		{selector.Methods, method},
 		{selector.Receivers, receiver},
@@ -95,63 +116,57 @@ func Matches(m *model.CodeModel, s model.Symbol, selector model.Match) (bool, er
 	matched := true
 
 	for _, field := range fields {
-		if len(field.patterns) == 0 {
-			continue
-		}
-
-		fieldMatch := false
-
-		for _, pattern := range field.patterns {
-			ok, err := Glob(pattern, field.value)
-			if err != nil {
-				return false, err
-			}
-
-			fieldMatch = fieldMatch || (ok && field.value != "")
+		fieldMatch, err := matchesPatterns(field.patterns, field.value)
+		if err != nil {
+			return false, err
 		}
 
 		matched = matched && fieldMatch
 	}
 
-	if len(selector.Symbols) > 0 {
-		found := false
-		for _, id := range selector.Symbols {
-			found = found || id == string(s.ID)
+	return matched, nil
+}
+
+func matchesInterfaceMethod(code *model.CodeModel, symbolID model.SymbolID, interfaces []string) bool {
+	for _, binding := range code.InterfaceMethods {
+		if binding.SymbolID == symbolID && slices.Contains(interfaces, string(binding.InterfaceID)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func matchesProperties(symbol model.Symbol, selector model.Match) bool {
+	if selector.Exported != nil && *selector.Exported != (symbol.Visibility == model.VisibilityExported) {
+		return false
+	}
+
+	if selector.HasContext != nil && *selector.HasContext != symbol.HasContext() {
+		return false
+	}
+
+	if selector.ReturnsError != nil && *selector.ReturnsError != symbol.ReturnsError() {
+		return false
+	}
+
+	return selector.Ownership == "" || selector.Ownership == model.OwnershipAny || selector.Ownership == symbol.Ownership
+}
+
+func matchesPatterns(patterns []string, value string) (bool, error) {
+	if len(patterns) == 0 {
+		return true, nil
+	}
+
+	matched := false
+
+	for _, pattern := range patterns {
+		patternMatch, err := Glob(pattern, value)
+		if err != nil {
+			return false, err
 		}
 
-		matched = matched && found
-	}
-
-	if len(selector.Implements) > 0 {
-		found := false
-
-		for _, binding := range m.InterfaceMethods {
-			if binding.SymbolID != s.ID {
-				continue
-			}
-
-			for _, id := range selector.Implements {
-				found = found || id == string(binding.InterfaceID)
-			}
-		}
-
-		matched = matched && found
-	}
-
-	if selector.Exported != nil {
-		matched = matched && *selector.Exported == (s.Visibility == model.VisibilityExported)
-	}
-
-	if selector.HasContext != nil {
-		matched = matched && *selector.HasContext == s.HasContext()
-	}
-
-	if selector.ReturnsError != nil {
-		matched = matched && *selector.ReturnsError == s.ReturnsError()
-	}
-
-	if selector.Ownership != "" && selector.Ownership != model.OwnershipAny {
-		matched = matched && selector.Ownership == s.Ownership
+		matched = matched || (patternMatch && value != "")
 	}
 
 	return matched, nil

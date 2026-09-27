@@ -96,50 +96,14 @@ func GraphDigest(code *model.CodeModel) (string, error) {
 
 	sort.Slice(snapshot.Modules, func(i, j int) bool { return snapshot.Modules[i].Path < snapshot.Modules[j].Path })
 
-	if code.WorkspaceFile != "" {
-		data, err := os.ReadFile(code.WorkspaceFile)
-		if err != nil {
-			return "", fmt.Errorf("read workspace manifest: %w", err)
-		}
-
-		work, err := modfile.ParseWork(code.WorkspaceFile, data, nil)
-		if err != nil {
-			return "", fmt.Errorf("parse workspace manifest: %w", err)
-		}
-
-		for _, use := range work.Use {
-			dir := use.Path
-			if !filepath.IsAbs(dir) {
-				dir = filepath.Join(filepath.Dir(code.WorkspaceFile), dir)
-			}
-
-			data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
-			if err != nil {
-				return "", fmt.Errorf("read workspace module: %w", err)
-			}
-
-			module, err := modfile.Parse("go.mod", data, nil)
-			if err != nil || module.Module == nil {
-				return "", errInvalidWorkspaceModule
-			}
-
-			tokens := use.Syntax.Token
-			tokens[len(tokens)-1] = module.Module.Mod.Path
-		}
-
-		normalizeReplacements(work.Replace)
-		snapshot.Workspace = manifestLines(work.Syntax)
-
-		snapshot.WorkspaceSums, err = optionalLines(code.WorkspaceFile + ".sum")
-		if err != nil {
-			return "", err
-		}
-
-		snapshot.WorkspaceVendor, err = optionalLines(filepath.Join(filepath.Dir(code.WorkspaceFile), "vendor", "modules.txt"))
-		if err != nil {
-			return "", err
-		}
+	workspace, err := fingerprintWorkspace(code.WorkspaceFile)
+	if err != nil {
+		return "", err
 	}
+
+	snapshot.Workspace = workspace.Manifest
+	snapshot.WorkspaceSums = workspace.Sums
+	snapshot.WorkspaceVendor = workspace.Vendor
 
 	data, err := json.Marshal(snapshot)
 	if err != nil {
@@ -389,4 +353,72 @@ func fingerprintModule(module model.ModuleInfo, alternateManifest string) (graph
 	}
 
 	return entry, nil
+}
+
+type graphWorkspace struct {
+	Manifest []string
+	Sums     []string
+	Vendor   []string
+}
+
+func fingerprintWorkspace(filename string) (graphWorkspace, error) {
+	var workspace graphWorkspace
+	if filename == "" {
+		return workspace, nil
+	}
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return workspace, fmt.Errorf("read workspace manifest: %w", err)
+	}
+
+	work, err := modfile.ParseWork(filename, data, nil)
+	if err != nil {
+		return workspace, fmt.Errorf("parse workspace manifest: %w", err)
+	}
+
+	directory := filepath.Dir(filename)
+	for _, use := range work.Use {
+		err := normalizeWorkspaceUse(use, directory)
+		if err != nil {
+			return workspace, err
+		}
+	}
+
+	normalizeReplacements(work.Replace)
+	workspace.Manifest = manifestLines(work.Syntax)
+
+	workspace.Sums, err = optionalLines(filename + ".sum")
+	if err != nil {
+		return workspace, err
+	}
+
+	workspace.Vendor, err = optionalLines(filepath.Join(directory, "vendor", "modules.txt"))
+	if err != nil {
+		return workspace, err
+	}
+
+	return workspace, nil
+}
+
+func normalizeWorkspaceUse(use *modfile.Use, workspaceDirectory string) error {
+	directory := use.Path
+	if !filepath.IsAbs(directory) {
+		directory = filepath.Join(workspaceDirectory, directory)
+	}
+
+	data, err := os.ReadFile(filepath.Join(directory, "go.mod"))
+	if err != nil {
+		return fmt.Errorf("read workspace module: %w", err)
+	}
+
+	module, err := modfile.Parse("go.mod", data, nil)
+	if err != nil || module.Module == nil {
+		return errInvalidWorkspaceModule
+	}
+
+	tokens := use.Syntax.Token
+	tokens[len(tokens)-1] = module.Module.Mod.Path
+
+	return nil
 }

@@ -1,4 +1,4 @@
-package resolve
+package resolve_test
 
 import (
 	"encoding/json"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/DiLRandI/OTelPlan/internal/discovery"
 	"github.com/DiLRandI/OTelPlan/internal/policy"
+	"github.com/DiLRandI/OTelPlan/internal/resolve"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
@@ -20,10 +21,12 @@ func resolverInputs() (*model.Policy, *model.CodeModel) {
 }
 
 func TestResolveConflictExclusionAndProvenance(t *testing.T) {
+	t.Parallel()
+
 	p, code := resolverInputs()
 	p.Rules = append(p.Rules, model.Rule{ID: "another", Match: p.Rules[0].Match})
 
-	result := Resolve(p, code)
+	result := resolve.Resolve(p, code)
 	if result.Diagnostics.HasErrors() || len(result.Plan.Targets) != 1 {
 		t.Fatalf("identical overlap: %+v", result)
 	}
@@ -34,14 +37,14 @@ func TestResolveConflictExclusionAndProvenance(t *testing.T) {
 
 	p.Rules[1].Span = &model.SpanConfig{Name: "different"}
 
-	result = Resolve(p, code)
+	result = resolve.Resolve(p, code)
 	if !result.Diagnostics.HasErrors() || len(result.Plan.Targets) != 0 {
 		t.Fatalf("conflict selected target: %+v", result)
 	}
 
 	p.Exclusions = []model.Exclusion{{ID: "exclude", Match: p.Rules[0].Match}}
 
-	result = Resolve(p, code)
+	result = resolve.Resolve(p, code)
 	if result.Diagnostics.HasErrors() || len(result.Plan.Targets) != 0 || len(result.Plan.Skipped) != 1 {
 		t.Fatalf("global exclusion must precede conflict: %+v", result)
 	}
@@ -49,15 +52,17 @@ func TestResolveConflictExclusionAndProvenance(t *testing.T) {
 	p.Exclusions = nil
 	p.Rules[1].Exclude = &p.Rules[1].Match
 
-	result = Resolve(p, code)
+	result = resolve.Resolve(p, code)
 	if result.Diagnostics.HasErrors() || len(result.Plan.Targets) != 1 || result.Plan.Targets[0].SpanName != "app.Run" {
 		t.Fatalf("local exclusion: %+v", result)
 	}
 }
 
 func TestResolveContextAndErrors(t *testing.T) {
+	t.Parallel()
+
 	p, code := resolverInputs()
-	result := Resolve(p, code)
+	result := resolve.Resolve(p, code)
 
 	target := result.Plan.Targets[0]
 	if target.ContextStrategy.Strategy != model.ContextStrategyArgument || !reflect.DeepEqual(target.ErrorStrategy.Indexes, []int{0}) {
@@ -66,7 +71,7 @@ func TestResolveContextAndErrors(t *testing.T) {
 
 	code.Symbols[0].ContextIndexes = nil
 
-	result = Resolve(p, code)
+	result = resolve.Resolve(p, code)
 	if !result.Diagnostics.HasErrors() || result.Diagnostics[0].Code != model.CodeMissingContext || len(result.Plan.Targets) != 0 {
 		t.Fatalf("missing context accepted: %+v", result)
 	}
@@ -74,25 +79,27 @@ func TestResolveContextAndErrors(t *testing.T) {
 	p.Defaults.Context.Mode = model.ContextModeRoot
 	p.Rules[0].Errors = &model.ErrorConfig{Record: false}
 
-	result = Resolve(p, code)
+	result = resolve.Resolve(p, code)
 	if result.Diagnostics.HasErrors() || result.Plan.Targets[0].ContextStrategy.Strategy != model.ContextStrategyRoot || result.Plan.Targets[0].ErrorStrategy.Record {
 		t.Fatalf("explicit root/error opt-out: %+v", result)
 	}
 
 	code.Symbols[0].ContextIndexes = []int{0, 1}
 
-	result = Resolve(p, code)
+	result = resolve.Resolve(p, code)
 	if !result.Diagnostics.HasErrors() || result.Diagnostics[0].Code != model.CodeMultipleContexts {
 		t.Fatalf("ambiguous context accepted: %+v", result)
 	}
 }
 
 func TestResolveMissingAndMalformedSelectors(t *testing.T) {
+	t.Parallel()
+
 	for _, match := range []model.Match{{Symbols: []string{"example.com/app.Missing", "example.com/app.Run"}}, {Functions: []string{"Missing"}}, {Functions: []string{"["}}} {
 		p, code := resolverInputs()
 		p.Rules[0].Match = match
 
-		result := Resolve(p, code)
+		result := resolve.Resolve(p, code)
 		if !result.Diagnostics.HasErrors() {
 			t.Fatalf("invalid selector accepted: %+v", match)
 		}
@@ -100,25 +107,37 @@ func TestResolveMissingAndMalformedSelectors(t *testing.T) {
 }
 
 func TestResolveDoesNotMutateInputAndIgnoresRuleOrder(t *testing.T) {
+	t.Parallel()
+
 	p, code := resolverInputs()
 	p.Rules = append(p.Rules, model.Rule{ID: "a", Match: p.Rules[0].Match})
-	before, _ := json.Marshal(p)
-	first := Resolve(p, code)
+	before, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("encode policy before resolution: %v", err)
+	}
 
-	after, _ := json.Marshal(p)
+	first := resolve.Resolve(p, code)
+
+	after, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("encode policy after resolution: %v", err)
+	}
+
 	if string(before) != string(after) {
 		t.Fatal("policy mutated")
 	}
 
 	p.Rules[0], p.Rules[1] = p.Rules[1], p.Rules[0]
 
-	second := Resolve(p, code)
+	second := resolve.Resolve(p, code)
 	if !reflect.DeepEqual(first, second) {
 		t.Fatal("rule order changed resolution")
 	}
 }
 
 func TestResolveArchitectureFixtures(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name                   string
 		files                  map[string]string
@@ -129,6 +148,8 @@ func TestResolveArchitectureFixtures(t *testing.T) {
 		{"hexagonal", map[string]string{"ports/port.go": "package ports\nimport \"context\"\ntype Boundary interface { Execute(context.Context) error }\n", "adapter/work.go": "package adapter\nimport \"context\"\ntype Local struct{}\nfunc (Local) Execute(ctx context.Context) error { return nil }\nfunc (Local) Other(ctx context.Context) error { return nil }\n"}, "implements: [example.com/app/ports.Boundary]", "example.com/app/adapter.(Local).Execute", "adapter.Local.Execute"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			root := t.TempDir()
 
 			tc.files["go.mod"] = "module example.com/app\n\ngo 1.27\n"
@@ -157,7 +178,7 @@ func TestResolveArchitectureFixtures(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			result := Resolve(p, code)
+			result := resolve.Resolve(p, code)
 			if result.Diagnostics.HasErrors() {
 				t.Fatalf("diagnostics: %+v", result.Diagnostics)
 			}

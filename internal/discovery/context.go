@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -14,6 +15,8 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 	"golang.org/x/mod/modfile"
 )
+
+const buildTagsFlag = "-tags"
 
 type buildEnvironment struct {
 	GOOS         string `json:"GOOS"`
@@ -135,7 +138,7 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 
 	for _, flag := range opts.BuildFlags {
 		name, _, _ := strings.Cut(flag, "=")
-		if name == "-tags" || name == "--tags" {
+		if name == buildTagsFlag || name == "--tags" {
 			opts.BuildTags = nil
 		}
 	}
@@ -285,57 +288,10 @@ func parseGOFLAGS(raw string, overrides ...string) (goFlags, error) {
 
 	var out goFlags
 
-	for i := range tokens {
-		token := tokens[i]
-
-		name, value, hasValue := strings.Cut(token, "=")
-		if strings.HasPrefix(name, "--") {
-			name = name[1:]
-		}
-
-		if !hasValue && (name == "-mod" || name == "-modfile" || name == "-tags") {
-			return goFlags{}, fmt.Errorf("%w: %s requires =value", errInvalidGoFlags, name)
-		}
-
-		if out.semanticBy == nil {
-			out.semanticBy = make(map[string]string)
-		}
-
-		switch name {
-		case "-mod":
-			if value != "mod" && value != "readonly" && value != "vendor" {
-				return goFlags{}, errUnsupportedModuleMode
-			}
-
-			out.moduleMode = value
-		case "-modfile":
-			if value == "" {
-				return goFlags{}, errEmptyModuleManifest
-			}
-
-			out.modFile = value
-		case "-tags":
-			out.tags = strings.Split(value, ",")
-		case "-race", "-msan", "-asan", "-trimpath", "-buildvcs":
-			if !hasValue {
-				value = "true"
-			}
-
-			if value != "true" && value != "false" && (name != "-buildvcs" || value != "auto") {
-				return goFlags{}, fmt.Errorf("%w: boolean option %s", errInvalidGoFlags, name)
-			}
-
-			out.semanticBy[name] = value
-		case "", "-n", "-v", "-x", "-work", "-json", "-p", "-modcacherw":
-			// Output, diagnostic, or cache flags do not affect package selection.
-		case "-gcflags", "-asmflags", "-ldflags", "-gccgoflags", "-overlay", "-toolexec", "-pkgdir", "-exec", "-installsuffix":
-			return goFlags{}, fmt.Errorf("%w %s", errUnsupportedGoFlag, name)
-		default:
-			if strings.HasPrefix(name, "-") {
-				return goFlags{}, fmt.Errorf("%w %s", errUnsupportedGoFlag, name)
-			}
-
-			return goFlags{}, errInvalidFlagToken
+	for _, token := range tokens {
+		err := applyGoFlag(&out, token)
+		if err != nil {
+			return goFlags{}, err
 		}
 	}
 
@@ -416,4 +372,76 @@ func normalizeTags(tags []string) []string {
 	sort.Strings(out)
 
 	return out
+}
+
+func applyGoFlag(flags *goFlags, token string) error {
+	name, value, hasValue := strings.Cut(token, "=")
+	if strings.HasPrefix(name, "--") {
+		name = name[1:]
+	}
+
+	if !hasValue && slices.Contains([]string{"-mod", "-modfile", buildTagsFlag}, name) {
+		return fmt.Errorf("%w: %s requires =value", errInvalidGoFlags, name)
+	}
+
+	if flags.semanticBy == nil {
+		flags.semanticBy = make(map[string]string)
+	}
+
+	switch name {
+	case "-mod":
+		return applyModuleMode(flags, value)
+	case "-modfile":
+		if value == "" {
+			return errEmptyModuleManifest
+		}
+
+		flags.modFile = value
+	case buildTagsFlag:
+		flags.tags = strings.Split(value, ",")
+	default:
+		return applyNonModuleFlag(flags, name, value, hasValue)
+	}
+
+	return nil
+}
+
+func applyModuleMode(flags *goFlags, value string) error {
+	if value != "mod" && value != "readonly" && value != "vendor" {
+		return errUnsupportedModuleMode
+	}
+
+	flags.moduleMode = value
+
+	return nil
+}
+
+func applyNonModuleFlag(flags *goFlags, name, value string, hasValue bool) error {
+	switch name {
+	case "-race", "-msan", "-asan", "-trimpath", "-buildvcs":
+		return applyBooleanFlag(flags, name, value, hasValue)
+	case "", "-n", "-v", "-x", "-work", "-json", "-p", "-modcacherw":
+		// Output, diagnostic, or cache flags do not affect package selection.
+		return nil
+	default:
+		if strings.HasPrefix(name, "-") {
+			return fmt.Errorf("%w %s", errUnsupportedGoFlag, name)
+		}
+
+		return errInvalidFlagToken
+	}
+}
+
+func applyBooleanFlag(flags *goFlags, name, value string, hasValue bool) error {
+	if !hasValue {
+		value = "true"
+	}
+
+	if value != "true" && value != "false" && (name != "-buildvcs" || value != "auto") {
+		return fmt.Errorf("%w: boolean option %s", errInvalidGoFlags, name)
+	}
+
+	flags.semanticBy[name] = value
+
+	return nil
 }

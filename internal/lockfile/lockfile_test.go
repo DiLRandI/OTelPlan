@@ -13,11 +13,46 @@ import (
 func fixtureLock(t *testing.T) model.Lockfile {
 	t.Helper()
 
-	p := &model.Policy{Backend: model.BackendConfig{Name: "otelc", Version: "v1.1.0"}}
-	code := &model.CodeModel{GoVersion: "go1.27.0", Symbols: []model.Symbol{{ID: "example.com/app.Run", Signature: "func()", Location: model.SourceLocation{File: "app.go", Line: 1}}}}
-	plan := model.ResolvedPlan{Targets: []model.ResolvedTarget{{SymbolID: code.Symbols[0].ID, Signature: code.Symbols[0].Signature, SpanName: "app.Run", RuleID: "run", ContextStrategy: model.ContextStrategy{Strategy: model.ContextStrategyRoot}, Attributes: []model.AttributePlan{{Key: "category", From: model.AttributeSource{Constant: 1}}}}}}
+	var (
+		defaults     model.Defaults
+		environment  model.BuildEnvironment
+		capabilities model.BackendCapabilities
+	)
 
-	lock, err := lockfile.Create(p, code, plan, model.LockBackend{Name: "otelc", Version: "v1.1.0"}, lockfile.Digest([]byte("module graph")), nil)
+	policy := &model.Policy{
+		APIVersion: "", Kind: "", Project: model.ProjectConfig{
+			Packages: nil, BuildTags: nil, IncludeTests: false, IncludeDependencies: false,
+		},
+		Backend:  model.BackendConfig{Name: "otelc", Version: "v1.1.0"},
+		Defaults: defaults, Rules: nil, Exclusions: nil,
+	}
+	code := &model.CodeModel{
+		GoVersion: "go1.27.0", ModuleRoot: "", WorkspaceFile: "", Modules: nil, Packages: nil,
+		Types: nil, Implements: nil, InterfaceMethods: nil, CallGraph: nil, CallEdges: nil,
+		BuildTags: nil, GOOS: "", GOARCH: "", EffectiveBuild: environment,
+		Symbols: []model.Symbol{{
+			ID: "example.com/app.Run", Signature: "func()",
+			Location: model.SourceLocation{File: "app.go", Line: 1, Column: 0},
+			Kind:     "", PackageImportPath: "", PackageName: "", Name: "", Receiver: nil, Visibility: "",
+			Parameters: nil, Results: nil, ContextIndexes: nil, ErrorIndexes: nil, Generics: nil,
+			Generated: false, TestFile: false, Ownership: "", HasBody: false, Variadic: false,
+		}},
+	}
+	plan := model.ResolvedPlan{
+		APIVersion: "", Skipped: nil,
+		Targets: []model.ResolvedTarget{{
+			SymbolID: code.Symbols[0].ID, Signature: code.Symbols[0].Signature, SpanName: "app.Run", RuleID: "run",
+			ContextStrategy: model.ContextStrategy{Strategy: model.ContextStrategyRoot, Index: 0},
+			ErrorStrategy:   model.ErrorStrategy{Record: false, Indexes: nil},
+			Attributes: []model.AttributePlan{{
+				Key: "category", From: model.AttributeSource{Constant: 1, Argument: "", Result: ""},
+				Classification: "", Allow: false,
+			}},
+		}},
+	}
+	backend := model.LockBackend{Name: "otelc", Version: "v1.1.0", Digest: "", Capabilities: capabilities}
+
+	lock, err := lockfile.Create(policy, code, plan, backend, lockfile.Digest([]byte("module graph")), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,13 +83,40 @@ func TestLockRoundTripAndWrite(t *testing.T) {
 	if !lockfile.Diff(lock, parsed).Empty() {
 		t.Fatal("numeric decoding caused false diff")
 	}
+}
 
-	filename := filepath.Join(t.TempDir(), "otelplan.lock")
-	if err := lockfile.Write(filename, lock); err != nil {
+func TestLockWrite(t *testing.T) {
+	t.Parallel()
+
+	lock := fixtureLock(t)
+
+	data, err := lockfile.Marshal(lock)
+	if err != nil {
+		t.Fatalf("marshal expected lockfile: %v", err)
+	}
+
+	directory := t.TempDir()
+
+	filename := filepath.Join(directory, "otelplan.lock")
+
+	err = lockfile.Write(filename, lock)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := os.ReadFile(filename)
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		t.Fatalf("open lockfile fixture directory: %v", err)
+	}
+
+	t.Cleanup(func() {
+		err := root.Close()
+		if err != nil {
+			t.Errorf("close lockfile fixture directory: %v", err)
+		}
+	})
+
+	got, err := root.ReadFile("otelplan.lock")
 	if err != nil || string(got) != string(data) {
 		t.Fatal("lockfile contents differ")
 	}
@@ -70,15 +132,26 @@ func TestLockRejectsMalformedAndTampered(t *testing.T) {
 
 	lock := fixtureLock(t)
 
-	data, _ := lockfile.Marshal(lock)
-	for _, contents := range [][]byte{[]byte("{}"), append(append([]byte(nil), data...), []byte("{}")...), []byte(strings.Replace(string(data), "func()", "func(int)", 1))} {
-		if _, err := lockfile.Parse(contents); err == nil {
+	data, err := lockfile.Marshal(lock)
+	if err != nil {
+		t.Fatalf("marshal valid lock fixture: %v", err)
+	}
+
+	for _, contents := range [][]byte{
+		[]byte("{}"),
+		append(append([]byte(nil), data...), []byte("{}")...),
+		[]byte(strings.Replace(string(data), "func()", "func(int)", 1)),
+	} {
+		_, err := lockfile.Parse(contents)
+		if err == nil {
 			t.Fatal("invalid lockfile accepted")
 		}
 	}
 
 	lock.Targets = append(lock.Targets, lock.Targets[0])
-	if _, err := lockfile.Marshal(lock); err == nil {
+
+	_, err = lockfile.Marshal(lock)
+	if err == nil {
 		t.Fatal("duplicate target accepted")
 	}
 }
@@ -116,7 +189,8 @@ func TestRejectUnpinnedVersionAndUnsafePaths(t *testing.T) {
 
 		lock.Backend.Version = version
 
-		if _, err := lockfile.Marshal(lock); err == nil {
+		_, err := lockfile.Marshal(lock)
+		if err == nil {
 			t.Fatalf("unpinned version %s accepted", version)
 		}
 	}
@@ -126,7 +200,8 @@ func TestRejectUnpinnedVersionAndUnsafePaths(t *testing.T) {
 
 		lock.Targets[0].Location.File = name
 
-		if _, err := lockfile.Marshal(lock); err == nil {
+		_, err := lockfile.Marshal(lock)
+		if err == nil {
 			t.Fatalf("noncanonical path %s accepted", name)
 		}
 	}
@@ -135,7 +210,7 @@ func TestRejectUnpinnedVersionAndUnsafePaths(t *testing.T) {
 func TestDiffClassifications(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
+	for _, testCase := range []struct {
 		name   string
 		kind   model.DiffClassification
 		change func(*model.Lockfile)
@@ -143,7 +218,9 @@ func TestDiffClassifications(t *testing.T) {
 		{"policy", model.DiffPolicy, func(l *model.Lockfile) { l.PolicyDigest = lockfile.Digest([]byte("other")) }},
 		{"backend", model.DiffBackend, func(l *model.Lockfile) { l.Backend.Version = "v1.2.0" }},
 		{"build", model.DiffBuild, func(l *model.Lockfile) { l.GoVersion = "go1.27.1" }},
-		{"signature", model.DiffSignature, func(l *model.Lockfile) { l.Targets[0].SignatureDigest = lockfile.Digest([]byte("other")) }},
+		{"signature", model.DiffSignature, func(l *model.Lockfile) {
+			l.Targets[0].SignatureDigest = lockfile.Digest([]byte("other"))
+		}},
 		{"span", model.DiffSpanName, func(l *model.Lockfile) { l.Targets[0].SpanName = "other" }},
 		{"context", model.DiffContext, func(l *model.Lockfile) { l.Targets[0].Context.Strategy = "argument" }},
 		{"errors", model.DiffErrorStrategy, func(l *model.Lockfile) { l.Targets[0].Errors.Record = true }},
@@ -159,14 +236,14 @@ func TestDiffClassifications(t *testing.T) {
 			l.Artifacts = []model.ArtifactFile{{Path: "rules.yaml", Digest: lockfile.Digest(nil)}}
 		}},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			before, after := fixtureLock(t), fixtureLock(t)
-			tc.change(&after)
+			testCase.change(&after)
 
 			diff := lockfile.Diff(before, after)
-			if len(diff.Entries) != 1 || diff.Entries[0].Classification != tc.kind {
+			if len(diff.Entries) != 1 || diff.Entries[0].Classification != testCase.kind {
 				t.Fatalf("unexpected diff: %+v", diff)
 			}
 		})

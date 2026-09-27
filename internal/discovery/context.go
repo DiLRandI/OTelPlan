@@ -3,7 +3,6 @@ package discovery
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -73,7 +72,7 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 	}
 
 	if driver != "" && driver != "off" {
-		return nil, nil, errors.New("custom GOPACKAGESDRIVER is unsupported for reproducible analysis")
+		return nil, nil, errCustomPackageDriver
 	}
 
 	env = replaceEnv(env, "GOPACKAGESDRIVER", "off")
@@ -149,7 +148,7 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 
 	if parsed.modFile != "" {
 		if !strings.HasSuffix(parsed.modFile, ".mod") {
-			return nil, nil, errors.New("alternate module manifest must have a .mod extension")
+			return nil, nil, errModuleManifestExtension
 		}
 
 		if !filepath.IsAbs(parsed.modFile) {
@@ -295,7 +294,7 @@ func parseGOFLAGS(raw string, overrides ...string) (goFlags, error) {
 		}
 
 		if !hasValue && (name == "-mod" || name == "-modfile" || name == "-tags") {
-			return goFlags{}, fmt.Errorf("invalid GOFLAGS: %s requires =value", name)
+			return goFlags{}, fmt.Errorf("%w: %s requires =value", errInvalidGoFlags, name)
 		}
 
 		if out.semanticBy == nil {
@@ -305,13 +304,13 @@ func parseGOFLAGS(raw string, overrides ...string) (goFlags, error) {
 		switch name {
 		case "-mod":
 			if value != "mod" && value != "readonly" && value != "vendor" {
-				return goFlags{}, errors.New("invalid GOFLAGS: unsupported module mode")
+				return goFlags{}, errUnsupportedModuleMode
 			}
 
 			out.moduleMode = value
 		case "-modfile":
 			if value == "" {
-				return goFlags{}, errors.New("invalid GOFLAGS: empty modfile")
+				return goFlags{}, errEmptyModuleManifest
 			}
 
 			out.modFile = value
@@ -323,20 +322,20 @@ func parseGOFLAGS(raw string, overrides ...string) (goFlags, error) {
 			}
 
 			if value != "true" && value != "false" && (name != "-buildvcs" || value != "auto") {
-				return goFlags{}, fmt.Errorf("invalid GOFLAGS: boolean option %s", name)
+				return goFlags{}, fmt.Errorf("%w: boolean option %s", errInvalidGoFlags, name)
 			}
 
 			out.semanticBy[name] = value
 		case "", "-n", "-v", "-x", "-work", "-json", "-p", "-modcacherw":
 			// Output, diagnostic, or cache flags do not affect package selection.
 		case "-gcflags", "-asmflags", "-ldflags", "-gccgoflags", "-overlay", "-toolexec", "-pkgdir", "-exec", "-installsuffix":
-			return goFlags{}, fmt.Errorf("unsupported GOFLAGS option %s", name)
+			return goFlags{}, fmt.Errorf("%w %s", errUnsupportedGoFlag, name)
 		default:
 			if strings.HasPrefix(name, "-") {
-				return goFlags{}, fmt.Errorf("unsupported GOFLAGS option %s", name)
+				return goFlags{}, fmt.Errorf("%w %s", errUnsupportedGoFlag, name)
 			}
 
-			return goFlags{}, errors.New("invalid GOFLAGS token")
+			return goFlags{}, errInvalidFlagToken
 		}
 	}
 
@@ -365,7 +364,7 @@ func splitQuoted(raw string) ([]string, error) {
 
 			i := strings.IndexByte(raw, quote)
 			if i < 0 {
-				return nil, errors.New("unterminated quoted string")
+				return nil, errUnterminatedQuote
 			}
 
 			out = append(out, raw[:i])

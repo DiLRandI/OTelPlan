@@ -17,6 +17,20 @@ func TestValidationErrorsDescribeRejectedState(t *testing.T) {
 		message string
 	}{
 		{
+			name: "source before context", message: "source path must be module-relative",
+			change: func(lock *model.Lockfile) {
+				lock.Targets[0].Location.File = "../outside.go"
+				lock.Targets[0].Context.Strategy = "unsupported"
+			},
+		},
+		{
+			name: "attribute before target identity", message: "invalid attribute key",
+			change: func(lock *model.Lockfile) {
+				lock.Targets[0].Attributes[0].Key = ""
+				lock.Targets[0].Symbol = ""
+			},
+		},
+		{
 			name: "context index", message: "invalid context index",
 			change: func(lock *model.Lockfile) { lock.Targets[0].Context.Index = -1 },
 		},

@@ -138,7 +138,9 @@ func createTarget(code *model.CodeModel, target model.ResolvedTarget) (model.Loc
 // It does not reorder the caller's target, attribute, or artifact slices.
 func Marshal(lock model.Lockfile) ([]byte, error) {
 	lock = canonical(lock)
-	if err := check(lock); err != nil {
+
+	err := check(lock)
+	if err != nil {
 		return nil, err
 	}
 
@@ -194,17 +196,20 @@ func Write(path string, lock model.Lockfile) error {
 
 	defer func() { _ = os.Remove(file.Name()) }()
 
-	if _, err := file.Write(data); err != nil {
+	_, err = file.Write(data)
+	if err != nil {
 		_ = file.Close()
 
 		return fmt.Errorf("write lockfile: %w", err)
 	}
 
-	if err := file.Close(); err != nil {
+	err = file.Close()
+	if err != nil {
 		return fmt.Errorf("close lockfile: %w", err)
 	}
 
-	if err := os.Rename(file.Name(), path); err != nil {
+	err = os.Rename(file.Name(), path)
+	if err != nil {
 		return fmt.Errorf("replace lockfile: %w", err)
 	}
 

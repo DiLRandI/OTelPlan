@@ -12,61 +12,35 @@ import (
 func TestEffectiveAnalysisFingerprint(t *testing.T) {
 	t.Parallel()
 
-	makeProject := func() string {
-		root := t.TempDir()
-		for name, contents := range map[string]string{
-			"go.mod":        "module example.com/app\n\ngo 1.27\n",
-			"alternate.mod": "module example.com/app\n\ngo 1.27\n",
-			"app.go":        "package app\nfunc Run() {}\n",
-		} {
-			err := os.WriteFile(filepath.Join(root, name), []byte(contents), 0o600)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+	root, moved := environmentProject(t), environmentProject(t)
 
-		return root
-	}
-	digest := func(root, flags string) string {
-		code, err := discovery.Load(discovery.Options{Root: root, Offline: true, Env: []string{"GOWORK=off", "GOFLAGS=" + flags}})
-		if err != nil {
-			t.Fatal(err)
-		}
+	base := analysisDigest(t, root, "-mod=readonly")
 
-		got, err := lockfile.GraphDigest(code)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		return got
-	}
-	root, moved := makeProject(), makeProject()
-
-	base := digest(root, "-mod=readonly")
-
-	if digest(root, "-mod=readonly") != base || digest(moved, "-mod=readonly") != base {
+	if analysisDigest(t, root, "-mod=readonly") != base || analysisDigest(t, moved, "-mod=readonly") != base {
 		t.Fatal("repeat or relocation changed fingerprint")
 	}
 
-	if digest(root, "-mod=mod") == base {
+	if analysisDigest(t, root, "-mod=mod") == base {
 		t.Fatal("module mode ignored")
 	}
 
-	if digest(root, "-tags=production") == base {
+	if analysisDigest(t, root, "-tags=production") == base {
 		t.Fatal("ambient tags ignored")
 	}
 
-	alternate := digest(root, "-modfile="+filepath.Join(root, "alternate.mod"))
-	if digest(moved, "-modfile="+filepath.Join(moved, "alternate.mod")) != alternate {
+	alternate := analysisDigest(t, root, "-modfile="+filepath.Join(root, "alternate.mod"))
+	if analysisDigest(t, moved, "-modfile="+filepath.Join(moved, "alternate.mod")) != alternate {
 		t.Fatal("absolute modfile location caused drift")
 	}
 
-	err := os.WriteFile(filepath.Join(root, "alternate.mod"), []byte("module example.com/app\n\ngo 1.27\n\nexclude example.com/unused v1.0.0\n"), 0o600)
+	contents := "module example.com/app\n\ngo 1.27\n\nexclude example.com/unused v1.0.0\n"
+
+	err := os.WriteFile(filepath.Join(root, "alternate.mod"), []byte(contents), 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if digest(root, "-modfile="+filepath.Join(root, "alternate.mod")) == alternate {
+	if analysisDigest(t, root, "-modfile="+filepath.Join(root, "alternate.mod")) == alternate {
 		t.Fatal("alternate manifest change ignored")
 	}
 }
@@ -83,7 +57,20 @@ func TestAlternateManifestSumFingerprint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(code.EffectiveBuild.ModFile, original, 0o600); err != nil {
+	directory, err := os.OpenRoot(code.Modules[0].Dir)
+	if err != nil {
+		t.Fatalf("open alternate manifest fixture directory: %v", err)
+	}
+
+	t.Cleanup(func() {
+		err := directory.Close()
+		if err != nil {
+			t.Errorf("close alternate manifest fixture directory: %v", err)
+		}
+	})
+
+	err = directory.WriteFile("alternate.mod", original, 0o600)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -92,7 +79,10 @@ func TestAlternateManifestSumFingerprint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(filepath.Join(code.Modules[0].Dir, "alternate.sum"), []byte("example.com/unused v1.0.0 h1:example\n"), 0o600); err != nil {
+	contents := "example.com/unused v1.0.0 h1:example\n"
+
+	err = os.WriteFile(filepath.Join(code.Modules[0].Dir, "alternate.sum"), []byte(contents), 0o600)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -138,4 +128,42 @@ func TestEffectiveEnvironmentInputs(t *testing.T) {
 	if err != nil || cgo == after {
 		t.Fatal("cgo configuration ignored")
 	}
+}
+
+func environmentProject(t *testing.T) string {
+	t.Helper()
+
+	root := t.TempDir()
+	for name, contents := range map[string]string{
+		"go.mod":        "module example.com/app\n\ngo 1.27\n",
+		"alternate.mod": "module example.com/app\n\ngo 1.27\n",
+		"app.go":        "package app\nfunc Run() {}\n",
+	} {
+		err := os.WriteFile(filepath.Join(root, name), []byte(contents), 0o600)
+		if err != nil {
+			t.Fatalf("write environment fixture %s: %v", name, err)
+		}
+	}
+
+	return root
+}
+
+func analysisDigest(t *testing.T, root, flags string) string {
+	t.Helper()
+
+	code, err := discovery.Load(discovery.Options{
+		Root: root, Offline: true, Env: []string{"GOWORK=off", "GOFLAGS=" + flags},
+		Patterns: nil, BuildTags: nil, BuildFlags: nil, CallGraph: false, IncludeTests: false,
+		IncludeDependencies: false, GOOS: "", GOARCH: "",
+	})
+	if err != nil {
+		t.Fatalf("load environment fixture: %v", err)
+	}
+
+	digest, err := lockfile.GraphDigest(code)
+	if err != nil {
+		t.Fatalf("fingerprint environment fixture: %v", err)
+	}
+
+	return digest
 }

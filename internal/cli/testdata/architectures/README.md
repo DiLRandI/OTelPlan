@@ -19,3 +19,5 @@ OTELPLAN_OTELC=/absolute/path/to/otelc go test ./internal/cli \
 ```
 
 Both scenarios run when the parent test is selected. They retain the fixture's pinned module versions and checksum verification during online preparation. The network controls cover dependency downloads and proxy-aware HTTP clients; they are not an operating-system network sandbox.
+
+The other offline CLI build and compile integration tests use the same cache isolation and network controls. They prepare fixture and OTelPlan build dependencies from disposable copies of the pinned manifests, so they can also run individually without a previously populated module cache.

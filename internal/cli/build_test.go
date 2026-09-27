@@ -19,6 +19,7 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 	}
 
 	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prepareOfflineIntegration(t)
 
 	fixture, err := filepath.Abs("../backend/otelc/testdata/accessors")
 	if err != nil {
@@ -236,6 +237,7 @@ func TestBuildCLILibraryWithoutOutput(t *testing.T) {
 	}
 
 	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prepareOfflineIntegration(t)
 	root, original := cliFixture(t)
 
 	var out, errout bytes.Buffer
@@ -266,6 +268,8 @@ func TestBuildCLIFromWorkspaceRoot(t *testing.T) {
 	}
 
 	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prepareOfflineIntegration(t)
+	t.Setenv("GOWORK", "")
 
 	fixture, err := filepath.Abs("../backend/otelc/testdata/accessors")
 	if err != nil {

@@ -37,7 +37,7 @@ func TestArchitectureTracesWithPinnedBackend(t *testing.T) {
 		t.Run(mode.name, func(t *testing.T) {
 			cache := t.TempDir()
 			t.Setenv("GOMODCACHE", cache)
-			configureArchitectureCache(t, cache)
+			configureIntegrationCache(t, cache)
 
 			if mode.offline {
 				prepareOfflineArchitectureCache(t)
@@ -258,7 +258,7 @@ func architectureFixture(t *testing.T, architecture string) string {
 	return root
 }
 
-func configureArchitectureCache(t *testing.T, cache string) {
+func configureIntegrationCache(t *testing.T, cache string) {
 	t.Helper()
 
 	t.Setenv("GOENV", "off")
@@ -285,7 +285,7 @@ func configureArchitectureCache(t *testing.T, cache string) {
 
 		output, err := command.CombinedOutput()
 		if err != nil {
-			t.Errorf("clean architecture module cache: %v: %s", err, output)
+			t.Errorf("clean integration module cache: %v: %s", err, output)
 		}
 	})
 }
@@ -311,10 +311,10 @@ func prepareOfflineArchitectureCache(t *testing.T) {
 		t.Fatalf("prepare pinned architecture dependencies: %v: %s", err, output)
 	}
 
-	denyArchitectureNetwork(t)
+	denyIntegrationNetwork(t)
 }
 
-func denyArchitectureNetwork(t *testing.T) {
+func denyIntegrationNetwork(t *testing.T) {
 	t.Helper()
 
 	var requests atomic.Int64
@@ -329,7 +329,7 @@ func denyArchitectureNetwork(t *testing.T) {
 		server.Close()
 
 		if count := requests.Load(); count != 0 {
-			t.Errorf("offline architecture workflow made %d network requests", count)
+			t.Errorf("offline integration workflow made %d network requests", count)
 		}
 	})
 
@@ -374,4 +374,61 @@ func invokeArchitecture(t *testing.T, root string, offline bool, want int, args 
 	}
 
 	return reply
+}
+
+func prepareOfflineIntegration(t *testing.T) {
+	t.Helper()
+
+	cache := t.TempDir()
+	t.Setenv("GOMODCACHE", cache)
+	configureIntegrationCache(t, cache)
+	prepareIntegrationModules(t, "../..")
+	prepareIntegrationModules(t, filepath.Join("testdata", "architectures", "common"))
+	denyIntegrationNetwork(t)
+}
+
+func prepareIntegrationModules(t *testing.T, source string) {
+	t.Helper()
+
+	original := openIntegrationDirectory(t, source)
+	seed := t.TempDir()
+	destination := openIntegrationDirectory(t, seed)
+
+	for _, name := range []string{"go.mod", "go.sum"} {
+		data, err := original.ReadFile(name)
+		if err != nil {
+			t.Fatalf("read integration dependency manifest %s: %v", name, err)
+		}
+
+		err = destination.WriteFile(name, data, 0o600)
+		if err != nil {
+			t.Fatalf("write integration dependency manifest %s: %v", name, err)
+		}
+	}
+
+	command := exec.CommandContext(t.Context(), "go", "mod", "download", "all")
+	command.Dir = seed
+
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("prepare integration dependencies: %v: %s", err, output)
+	}
+}
+
+func openIntegrationDirectory(t *testing.T, directory string) *os.Root {
+	t.Helper()
+
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		t.Fatalf("open integration directory: %v", err)
+	}
+
+	t.Cleanup(func() {
+		err := root.Close()
+		if err != nil {
+			t.Errorf("close integration directory: %v", err)
+		}
+	})
+
+	return root
 }

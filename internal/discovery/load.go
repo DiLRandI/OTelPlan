@@ -10,6 +10,9 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
+// Options selects the project, packages, and effective Go build environment to analyze.
+// Env entries override the process environment; Offline disables module downloads
+// and automatic toolchain selection. Go build caches may still be populated.
 type Options struct {
 	Root      string
 	Patterns  []string
@@ -39,8 +42,13 @@ func (o *Options) applyDefaults() {
 	}
 }
 
+// Load discovers packages and type information using a background context.
+// Module and workspace metadata are isolated to avoid rewriting project inputs.
 func Load(opts Options) (*model.CodeModel, error) { return LoadContext(context.Background(), opts) }
 
+// LoadContext discovers packages and type information with cancellable Go commands
+// and package loading. Callers must permit the project and its Go build inputs,
+// including workspace modules and local replacements, to be read.
 func LoadContext(ctx context.Context, opts Options) (*model.CodeModel, error) {
 	env, flags, err := prepare(ctx, &opts)
 	if err != nil {

@@ -37,18 +37,31 @@ func TestRefreshBuildIdentityOwnership(t *testing.T) {
 	if previous.Artifacts[0].Path != "rules.yaml" || current.Backend.Digest != "" || len(current.Artifacts) != 0 {
 		t.Fatal("refresh mutated caller state")
 	}
+}
+
+func TestRefreshBuildIdentityDrift(t *testing.T) {
+	t.Parallel()
+
+	previous, current := fixtureLock(t), fixtureLock(t)
+	previous.Backend.Digest = lockfile.Digest([]byte("executable"))
+	previous.Artifacts = []model.ArtifactFile{{Path: "rules.yaml", Digest: lockfile.Digest(nil)}}
 
 	current.Targets[0].Location.Line++
-	if _, err := lockfile.RefreshResolution(previous, current); err != nil {
-		t.Fatal("diagnostic coordinates invalidated build identity")
+
+	_, err := lockfile.RefreshResolution(previous, current)
+	if err != nil {
+		t.Fatalf("diagnostic coordinates invalidated build identity: %v", err)
 	}
 
 	current.Targets[0].SpanName = "changed"
-	if _, err := lockfile.RefreshResolution(previous, current); err == nil {
+
+	_, err = lockfile.RefreshResolution(previous, current)
+	if err == nil {
 		t.Fatal("old build identity retained across meaningful drift")
 	}
 
-	if _, err := lockfile.RefreshResolution(fixtureLock(t), previous); err == nil {
+	_, err = lockfile.RefreshResolution(fixtureLock(t), previous)
+	if err == nil {
 		t.Fatal("resolution phase supplied build identity")
 	}
 }

@@ -1,10 +1,11 @@
-package lockfile
+package lockfile_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/DiLRandI/OTelPlan/internal/lockfile"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
@@ -39,6 +40,8 @@ func graphFixture(t *testing.T) *model.CodeModel {
 }
 
 func TestGraphDigestRelocationAndImmutability(t *testing.T) {
+	t.Parallel()
+
 	first, second := graphFixture(t), graphFixture(t)
 
 	original, err := os.ReadFile(filepath.Join(first.Modules[0].Dir, "go.mod"))
@@ -46,12 +49,12 @@ func TestGraphDigestRelocationAndImmutability(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a, err := GraphDigest(first)
+	a, err := lockfile.GraphDigest(first)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	b, err := GraphDigest(second)
+	b, err := lockfile.GraphDigest(second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,13 +70,15 @@ func TestGraphDigestRelocationAndImmutability(t *testing.T) {
 
 	second.Modules[0], second.Modules[1] = second.Modules[1], second.Modules[0]
 
-	reordered, err := GraphDigest(second)
+	reordered, err := lockfile.GraphDigest(second)
 	if err != nil || reordered != a {
 		t.Fatal("module order affected digest")
 	}
 }
 
 func TestGraphDigestTracksBuildInputs(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name   string
 		change func(*testing.T, *model.CodeModel)
@@ -107,16 +112,18 @@ func TestGraphDigestTracksBuildInputs(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			code := graphFixture(t)
 
-			before, err := GraphDigest(code)
+			before, err := lockfile.GraphDigest(code)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			tc.change(t, code)
 
-			after, err := GraphDigest(code)
+			after, err := lockfile.GraphDigest(code)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -129,7 +136,9 @@ func TestGraphDigestTracksBuildInputs(t *testing.T) {
 }
 
 func TestGraphDigestMissingMetadata(t *testing.T) {
-	if _, err := GraphDigest(nil); err == nil {
+	t.Parallel()
+
+	if _, err := lockfile.GraphDigest(nil); err == nil {
 		t.Fatal("nil code model accepted")
 	}
 
@@ -137,7 +146,7 @@ func TestGraphDigestMissingMetadata(t *testing.T) {
 
 	code.Modules[0].Dir = filepath.Join(t.TempDir(), "missing")
 
-	if _, err := GraphDigest(code); err == nil {
+	if _, err := lockfile.GraphDigest(code); err == nil {
 		t.Fatal("missing module manifest accepted")
 	}
 }

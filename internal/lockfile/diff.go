@@ -1,3 +1,4 @@
+// Package lockfile records and compares reproducible instrumentation resolution state.
 package lockfile
 
 import (
@@ -8,6 +9,9 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+// Diff reports changes in resolution and build-owned identity in deterministic order.
+// Source file changes are significant; line and column changes are ignored.
+// Both inputs must be valid lockfiles. Neither input is modified.
 func Diff(previous, current model.Lockfile) model.LockDiff {
 	previous = canonical(previous)
 	current = canonical(current)

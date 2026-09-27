@@ -1,10 +1,11 @@
-package lockfile
+package lockfile_test
 
 import (
 	"encoding/json"
 	"slices"
 	"testing"
 
+	"github.com/DiLRandI/OTelPlan/internal/lockfile"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
@@ -23,7 +24,7 @@ func policyDigestFixture() *model.Policy {
 func digestPolicy(t *testing.T, p *model.Policy) string {
 	t.Helper()
 
-	lock, err := Create(p, &model.CodeModel{GoVersion: "go1.27.0"}, model.ResolvedPlan{}, model.LockBackend{Name: p.Backend.Name, Version: p.Backend.Version}, Digest(nil), nil)
+	lock, err := lockfile.Create(p, &model.CodeModel{GoVersion: "go1.27.0"}, model.ResolvedPlan{}, model.LockBackend{Name: p.Backend.Name, Version: p.Backend.Version}, lockfile.Digest(nil), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,6 +33,8 @@ func digestPolicy(t *testing.T, p *model.Policy) string {
 }
 
 func TestPolicyDigestIgnoresSetOrdering(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name   string
 		change func(*model.Policy)
@@ -50,6 +53,8 @@ func TestPolicyDigestIgnoresSetOrdering(t *testing.T) {
 		{"duplicate selectors", func(p *model.Policy) { p.Rules[0].Match.Functions = append(p.Rules[0].Match.Functions, "First") }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			p := policyDigestFixture()
 			before := digestPolicy(t, p)
 			tc.change(p)
@@ -62,6 +67,8 @@ func TestPolicyDigestIgnoresSetOrdering(t *testing.T) {
 }
 
 func TestPolicyDigestPreservesSemanticsAndCaller(t *testing.T) {
+	t.Parallel()
+
 	p := policyDigestFixture()
 
 	original, err := json.Marshal(p)

@@ -1,4 +1,4 @@
-package lockfile
+package lockfile_test
 
 import (
 	"os"
@@ -6,9 +6,12 @@ import (
 	"testing"
 
 	"github.com/DiLRandI/OTelPlan/internal/discovery"
+	"github.com/DiLRandI/OTelPlan/internal/lockfile"
 )
 
 func TestEffectiveAnalysisFingerprint(t *testing.T) {
+	t.Parallel()
+
 	makeProject := func() string {
 		root := t.TempDir()
 		for name, contents := range map[string]string{
@@ -30,7 +33,7 @@ func TestEffectiveAnalysisFingerprint(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		got, err := GraphDigest(code)
+		got, err := lockfile.GraphDigest(code)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -69,6 +72,8 @@ func TestEffectiveAnalysisFingerprint(t *testing.T) {
 }
 
 func TestAlternateManifestSumFingerprint(t *testing.T) {
+	t.Parallel()
+
 	code := graphFixture(t)
 	code.WorkspaceFile = ""
 	code.EffectiveBuild.ModFile = filepath.Join(code.Modules[0].Dir, "alternate.mod")
@@ -82,16 +87,16 @@ func TestAlternateManifestSumFingerprint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	before, err := GraphDigest(code)
+	before, err := lockfile.GraphDigest(code)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(companionSum(code.EffectiveBuild.ModFile), []byte("example.com/unused v1.0.0 h1:example\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(code.Modules[0].Dir, "alternate.sum"), []byte("example.com/unused v1.0.0 h1:example\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	after, err := GraphDigest(code)
+	after, err := lockfile.GraphDigest(code)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,32 +107,34 @@ func TestAlternateManifestSumFingerprint(t *testing.T) {
 }
 
 func TestEffectiveEnvironmentInputs(t *testing.T) {
+	t.Parallel()
+
 	code := graphFixture(t)
 	code.EffectiveBuild.CGOEnabled = "1"
 	code.EffectiveBuild.GOAMD64 = "v1"
 
-	before, err := GraphDigest(code)
+	before, err := lockfile.GraphDigest(code)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	code.EffectiveBuild.GOARM = "5"
 
-	irrelevant, err := GraphDigest(code)
+	irrelevant, err := lockfile.GraphDigest(code)
 	if err != nil || irrelevant != before {
 		t.Fatal("inactive architecture affected fingerprint")
 	}
 
 	code.EffectiveBuild.GOAMD64 = "v2"
 
-	after, err := GraphDigest(code)
+	after, err := lockfile.GraphDigest(code)
 	if err != nil || before == after {
 		t.Fatal("architecture feature level ignored")
 	}
 
 	code.EffectiveBuild.CGOCFLAGS = "-DAPP_LAYOUT=2"
 
-	cgo, err := GraphDigest(code)
+	cgo, err := lockfile.GraphDigest(code)
 	if err != nil || cgo == after {
 		t.Fatal("cgo configuration ignored")
 	}

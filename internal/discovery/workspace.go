@@ -39,7 +39,7 @@ func isolateWorkspace(filename string) (string, func(), error) {
 		if replacement.New.Version == "" {
 			err := work.AddReplace(replacement.Old.Path, replacement.Old.Version, absolute(replacement.New.Path), "")
 			if err != nil {
-				return "", nil, err
+				return "", nil, fmt.Errorf("resolve workspace replacement: %w", err)
 			}
 		}
 	}
@@ -48,7 +48,7 @@ func isolateWorkspace(filename string) (string, func(), error) {
 
 	dir, err := os.MkdirTemp("", "otelplan-workspace-*")
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("create isolated workspace directory: %w", err)
 	}
 
 	cleanup := func() { _ = os.RemoveAll(dir) }
@@ -61,17 +61,17 @@ func isolateWorkspace(filename string) (string, func(), error) {
 	target := filepath.Join(dir, "go.work")
 
 	if err := os.WriteFile(target, modfile.Format(work.Syntax), 0o600); err != nil {
-		return fail(err)
+		return fail(fmt.Errorf("write isolated workspace manifest: %w", err))
 	}
 
 	sums, err := os.ReadFile(filename + ".sum")
 	if err == nil {
 		err := os.WriteFile(target+".sum", sums, 0o600)
 		if err != nil {
-			return fail(err)
+			return fail(fmt.Errorf("write isolated workspace checksums: %w", err))
 		}
 	} else if !os.IsNotExist(err) {
-		return fail(err)
+		return fail(fmt.Errorf("read workspace checksums: %w", err))
 	}
 
 	vendor := filepath.Join(filepath.Dir(filename), "vendor")
@@ -81,7 +81,7 @@ func isolateWorkspace(filename string) (string, func(), error) {
 			return fail(fmt.Errorf("isolate workspace vendor directory: %w", err))
 		}
 	} else if !os.IsNotExist(err) {
-		return fail(err)
+		return fail(fmt.Errorf("inspect workspace vendor directory: %w", err))
 	}
 
 	return target, cleanup, nil

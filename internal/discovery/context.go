@@ -16,32 +16,32 @@ import (
 )
 
 type buildEnvironment struct {
-	GOOS         string
-	GOARCH       string
-	GOVERSION    string
-	GOWORK       string
-	GOFLAGS      string
-	CGO_ENABLED  string
-	GOEXPERIMENT string
-	GOFIPS140    string
-	GOAMD64      string
-	GOARM        string
-	GO386        string
-	GOMIPS       string
-	GOMIPS64     string
-	GOPPC64      string
-	GORISCV64    string
-	GOWASM       string
-	CGO_CFLAGS   string
-	CGO_CPPFLAGS string
-	CGO_LDFLAGS  string
-	CGO_FFLAGS   string
-	GOTOOLCHAIN  string
-	GOARM64      string
-	GOMOD        string
-	CC           string
-	CXX          string
-	CGO_CXXFLAGS string
+	GOOS         string `json:"GOOS"`
+	GOARCH       string `json:"GOARCH"`
+	GOVERSION    string `json:"GOVERSION"`
+	GOWORK       string `json:"GOWORK"`
+	GOFLAGS      string `json:"GOFLAGS"`
+	CGOEnabled   string `json:"CGO_ENABLED"`
+	GOEXPERIMENT string `json:"GOEXPERIMENT"`
+	GOFIPS140    string `json:"GOFIPS140"`
+	GOAMD64      string `json:"GOAMD64"`
+	GOARM        string `json:"GOARM"`
+	GO386        string `json:"GO386"`
+	GOMIPS       string `json:"GOMIPS"`
+	GOMIPS64     string `json:"GOMIPS64"`
+	GOPPC64      string `json:"GOPPC64"`
+	GORISCV64    string `json:"GORISCV64"`
+	GOWASM       string `json:"GOWASM"`
+	CGOCFLAGS    string `json:"CGO_CFLAGS"`
+	CGOCPPFLAGS  string `json:"CGO_CPPFLAGS"`
+	CGOLDFLAGS   string `json:"CGO_LDFLAGS"`
+	CGOFFLAGS    string `json:"CGO_FFLAGS"`
+	GOTOOLCHAIN  string `json:"GOTOOLCHAIN"`
+	GOARM64      string `json:"GOARM64"`
+	GOMOD        string `json:"GOMOD"`
+	CC           string `json:"CC"`
+	CXX          string `json:"CXX"`
+	CGOCXXFLAGS  string `json:"CGO_CXXFLAGS"`
 }
 
 type goFlags struct {
@@ -214,13 +214,13 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 		GoVersion: build.GOVERSION, GOOS: build.GOOS, GOARCH: build.GOARCH,
 		BuildTags: append([]string(nil), opts.BuildTags...), ModuleMode: mode,
 		ModFile: opts.effectiveBuild.ModFile, Workspace: build.GOWORK != "" && build.GOWORK != "off",
-		CGOEnabled: build.CGO_ENABLED, GOEXPERIMENT: build.GOEXPERIMENT, GOFIPS140: build.GOFIPS140,
+		CGOEnabled: build.CGOEnabled, GOEXPERIMENT: build.GOEXPERIMENT, GOFIPS140: build.GOFIPS140,
 		GOAMD64: build.GOAMD64, GOARM: build.GOARM, GOARM64: build.GOARM64, GO386: build.GO386, GOMIPS: build.GOMIPS,
 		GOMIPS64: build.GOMIPS64, GOPPC64: build.GOPPC64, GORISCV64: build.GORISCV64,
-		GOWASM: build.GOWASM, CGOCFLAGS: build.CGO_CFLAGS, CGOCPPFLAGS: build.CGO_CPPFLAGS,
-		CGOLDFLAGS: build.CGO_LDFLAGS, CGOFFLAGS: build.CGO_FFLAGS,
+		GOWASM: build.GOWASM, CGOCFLAGS: build.CGOCFLAGS, CGOCPPFLAGS: build.CGOCPPFLAGS,
+		CGOLDFLAGS: build.CGOLDFLAGS, CGOFFLAGS: build.CGOFFLAGS,
 		SemanticFlags: append([]string(nil), parsed.semantic...),
-		CC:            build.CC, CXX: build.CXX, CGOCXXFLAGS: build.CGO_CXXFLAGS,
+		CC:            build.CC, CXX: build.CXX, CGOCXXFLAGS: build.CGOCXXFLAGS,
 	}
 	if _, err := os.Stat(filepath.Join(root, "go.mod")); os.IsNotExist(err) && filepath.Dir(build.GOWORK) == root && len(opts.Patterns) == 1 && opts.Patterns[0] == "./..." {
 		data, err := os.ReadFile(build.GOWORK)

@@ -61,6 +61,11 @@ func GraphDigest(code *model.CodeModel) (string, error) {
 		return "", errMissingModuleMetadata
 	}
 
+	effectiveBuild, err := graphEnvironment(code)
+	if err != nil {
+		return "", err
+	}
+
 	snapshot := struct {
 		GOOS            string                `json:"goos"`
 		GOARCH          string                `json:"goarch"`
@@ -70,108 +75,13 @@ func GraphDigest(code *model.CodeModel) (string, error) {
 		WorkspaceSums   []string              `json:"workspaceSums,omitempty"`
 		WorkspaceVendor []string              `json:"workspaceVendor,omitempty"`
 		EffectiveBuild  graphBuildEnvironment `json:"effectiveBuild"`
-	}{GOOS: code.GOOS, GOARCH: code.GOARCH, Tags: append([]string{}, code.BuildTags...)}
-
-	build := code.EffectiveBuild
-	if build.GoVersion == "" {
-		build.GoVersion = code.GoVersion
-	}
-
-	if build.GOOS == "" {
-		build.GOOS = code.GOOS
-	}
-
-	if build.GOARCH == "" {
-		build.GOARCH = code.GOARCH
-	}
-
-	if len(build.BuildTags) == 0 {
-		build.BuildTags = append([]string(nil), code.BuildTags...)
-	}
-
-	if build.Workspace || code.WorkspaceFile != "" {
-		build.Workspace = true
-	}
-
-	snapshot.EffectiveBuild = graphBuildEnvironment{
-		GoVersion: build.GoVersion, GOOS: build.GOOS, GOARCH: build.GOARCH,
-		BuildTags: append([]string(nil), build.BuildTags...), ModuleMode: build.ModuleMode,
-		Workspace: build.Workspace, CGOEnabled: build.CGOEnabled, GOEXPERIMENT: build.GOEXPERIMENT,
-		GOFIPS140: build.GOFIPS140, GOAMD64: build.GOAMD64, GOARM: build.GOARM,
-		GO386: build.GO386, GOARM64: build.GOARM64, GOMIPS: build.GOMIPS, GOMIPS64: build.GOMIPS64,
-		GOPPC64: build.GOPPC64, GORISCV64: build.GORISCV64, GOWASM: build.GOWASM,
-		CGOCFLAGS: build.CGOCFLAGS, CGOCPPFLAGS: build.CGOCPPFLAGS,
-		CGOLDFLAGS: build.CGOLDFLAGS, CGOFFLAGS: build.CGOFFLAGS,
-		SemanticFlags: append([]string(nil), build.SemanticFlags...),
-		CC:            build.CC, CXX: build.CXX, CGOCXXFLAGS: build.CGOCXXFLAGS,
-	}
-
-	effective := &snapshot.EffectiveBuild
-	if build.GOARCH != "amd64" {
-		effective.GOAMD64 = ""
-	}
-
-	if build.GOARCH != "arm" {
-		effective.GOARM = ""
-	}
-
-	if build.GOARCH != "arm64" {
-		effective.GOARM64 = ""
-	}
-
-	if build.GOARCH != "386" {
-		effective.GO386 = ""
-	}
-
-	if build.GOARCH != "mips" && build.GOARCH != "mipsle" {
-		effective.GOMIPS = ""
-	}
-
-	if build.GOARCH != "mips64" && build.GOARCH != "mips64le" {
-		effective.GOMIPS64 = ""
-	}
-
-	if build.GOARCH != "ppc64" && build.GOARCH != "ppc64le" {
-		effective.GOPPC64 = ""
-	}
-
-	if build.GOARCH != "riscv64" {
-		effective.GORISCV64 = ""
-	}
-
-	if build.GOARCH != "wasm" {
-		effective.GOWASM = ""
-	}
-
-	for _, value := range []*string{&effective.CC, &effective.CXX, &effective.CGOCFLAGS, &effective.CGOCPPFLAGS, &effective.CGOCXXFLAGS, &effective.CGOLDFLAGS, &effective.CGOFFLAGS} {
-		if build.CGOEnabled == "0" {
-			*value = ""
-
-			continue
-		}
-
-		if code.ModuleRoot != "" {
-			*value = strings.ReplaceAll(*value, filepath.Clean(code.ModuleRoot), "${PROJECT}")
-		}
+	}{
+		GOOS: code.GOOS, GOARCH: code.GOARCH, Tags: append([]string{}, code.BuildTags...),
+		Modules: nil, Workspace: nil, WorkspaceSums: nil, WorkspaceVendor: nil,
+		EffectiveBuild: effectiveBuild,
 	}
 
 	sort.Strings(snapshot.Tags)
-	sort.Strings(snapshot.EffectiveBuild.BuildTags)
-	sort.Strings(snapshot.EffectiveBuild.SemanticFlags)
-
-	if build.ModFile != "" {
-		manifest, err := moduleManifest(build.ModFile)
-		if err != nil {
-			return "", err
-		}
-
-		snapshot.EffectiveBuild.ModFile = manifest
-
-		snapshot.EffectiveBuild.ModFileSums, err = optionalLines(companionSum(build.ModFile))
-		if err != nil {
-			return "", err
-		}
-	}
 
 	for _, module := range code.Modules {
 		entry := graphModule{Path: module.Path, Version: module.Version, Main: module.Main}
@@ -364,4 +274,103 @@ func optionalLines(filename string) ([]string, error) {
 	sort.Strings(lines)
 
 	return lines, nil
+}
+
+func graphEnvironment(code *model.CodeModel) (graphBuildEnvironment, error) {
+	build := code.EffectiveBuild
+	if build.GoVersion == "" {
+		build.GoVersion = code.GoVersion
+	}
+
+	if build.GOOS == "" {
+		build.GOOS = code.GOOS
+	}
+
+	if build.GOARCH == "" {
+		build.GOARCH = code.GOARCH
+	}
+
+	if len(build.BuildTags) == 0 {
+		build.BuildTags = append([]string(nil), code.BuildTags...)
+	}
+
+	if build.Workspace || code.WorkspaceFile != "" {
+		build.Workspace = true
+	}
+
+	environment := graphBuildEnvironment{
+		GoVersion: build.GoVersion, GOOS: build.GOOS, GOARCH: build.GOARCH,
+		BuildTags: append([]string(nil), build.BuildTags...), ModuleMode: build.ModuleMode,
+		Workspace: build.Workspace, CGOEnabled: build.CGOEnabled, GOEXPERIMENT: build.GOEXPERIMENT,
+		GOFIPS140: build.GOFIPS140, GOAMD64: build.GOAMD64, GOARM: build.GOARM,
+		GO386: build.GO386, GOARM64: build.GOARM64, GOMIPS: build.GOMIPS, GOMIPS64: build.GOMIPS64,
+		GOPPC64: build.GOPPC64, GORISCV64: build.GORISCV64, GOWASM: build.GOWASM,
+		CGOCFLAGS: build.CGOCFLAGS, CGOCPPFLAGS: build.CGOCPPFLAGS,
+		CGOLDFLAGS: build.CGOLDFLAGS, CGOFFLAGS: build.CGOFFLAGS,
+		SemanticFlags: append([]string(nil), build.SemanticFlags...),
+		CC:            build.CC, CXX: build.CXX, CGOCXXFLAGS: build.CGOCXXFLAGS,
+		ModFile: nil, ModFileSums: nil,
+	}
+
+	normalizeGraphArchitecture(&environment)
+	normalizeGraphCGO(&environment, code.ModuleRoot)
+
+	sort.Strings(environment.BuildTags)
+	sort.Strings(environment.SemanticFlags)
+
+	if build.ModFile != "" {
+		manifest, err := moduleManifest(build.ModFile)
+		if err != nil {
+			return environment, err
+		}
+
+		environment.ModFile = manifest
+
+		environment.ModFileSums, err = optionalLines(companionSum(build.ModFile))
+		if err != nil {
+			return environment, err
+		}
+	}
+
+	return environment, nil
+}
+
+func normalizeGraphArchitecture(effective *graphBuildEnvironment) {
+	architecture := effective.GOARCH
+
+	for _, setting := range []struct {
+		active bool
+		value  *string
+	}{
+		{active: architecture == "amd64", value: &effective.GOAMD64},
+		{active: architecture == "arm", value: &effective.GOARM},
+		{active: architecture == "arm64", value: &effective.GOARM64},
+		{active: architecture == "386", value: &effective.GO386},
+		{active: architecture == "mips" || architecture == "mipsle", value: &effective.GOMIPS},
+		{active: architecture == "mips64" || architecture == "mips64le", value: &effective.GOMIPS64},
+		{active: architecture == "ppc64" || architecture == "ppc64le", value: &effective.GOPPC64},
+		{active: architecture == "riscv64", value: &effective.GORISCV64},
+		{active: architecture == "wasm", value: &effective.GOWASM},
+	} {
+		if !setting.active {
+			*setting.value = ""
+		}
+	}
+}
+
+func normalizeGraphCGO(effective *graphBuildEnvironment, root string) {
+	for _, value := range []*string{
+		&effective.CC, &effective.CXX, &effective.CGOCFLAGS, &effective.CGOCPPFLAGS,
+		&effective.CGOCXXFLAGS, &effective.CGOLDFLAGS, &effective.CGOFFLAGS,
+	} {
+		if effective.CGOEnabled == "0" {
+			*value = ""
+
+			continue
+		}
+
+		if root != "" {
+			*value = strings.ReplaceAll(*value, filepath.Clean(root), "${PROJECT}")
+		}
+	}
 }

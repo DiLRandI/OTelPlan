@@ -342,14 +342,17 @@ func pinned(version string) bool {
 }
 
 func relative(name string) bool {
-	return name != "" && name != "." && name != ".." && !path.IsAbs(name) && !strings.ContainsAny(name, "\\:") && !strings.HasPrefix(name, "../") && path.Clean(name) == name
+	return name != "" && name != "." && name != ".." && !path.IsAbs(name) &&
+		!strings.ContainsAny(name, "\\:") && !strings.HasPrefix(name, "../") && path.Clean(name) == name
 }
 
 func canonical(lock model.Lockfile) model.Lockfile {
 	lock.Targets = append([]model.LockTarget{}, lock.Targets...)
 	for i := range lock.Targets {
 		lock.Targets[i].Attributes = append([]model.LockAttribute(nil), lock.Targets[i].Attributes...)
-		sort.Slice(lock.Targets[i].Attributes, func(a, b int) bool { return lock.Targets[i].Attributes[a].Key < lock.Targets[i].Attributes[b].Key })
+		sort.Slice(lock.Targets[i].Attributes, func(a, b int) bool {
+			return lock.Targets[i].Attributes[a].Key < lock.Targets[i].Attributes[b].Key
+		})
 	}
 
 	sort.Slice(lock.Targets, func(i, j int) bool { return lock.Targets[i].Symbol < lock.Targets[j].Symbol })

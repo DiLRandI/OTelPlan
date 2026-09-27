@@ -12,6 +12,8 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
+const localReplacement = "local"
+
 type graphModule struct {
 	Path               string   `json:"path"`
 	Version            string   `json:"version"`
@@ -84,49 +86,9 @@ func GraphDigest(code *model.CodeModel) (string, error) {
 	sort.Strings(snapshot.Tags)
 
 	for _, module := range code.Modules {
-		entry := graphModule{Path: module.Path, Version: module.Version, Main: module.Main}
-		local := module.Main
-
-		dir := module.Dir
-
-		if module.Replace != nil {
-			entry.Replacement = module.Replace.Path
-
-			entry.ReplacementVersion = module.Replace.Version
-
-			if module.Replace.Version == "" {
-				local = true
-				dir = module.Replace.Dir
-				entry.Replacement = "local"
-			}
-		}
-
-		if local {
-			if dir == "" {
-				return "", errMissingLocalModuleDirectory
-			}
-
-			manifestPath := filepath.Join(dir, "go.mod")
-			if module.Main && code.EffectiveBuild.ModFile != "" {
-				manifestPath = code.EffectiveBuild.ModFile
-			}
-
-			manifest, err := moduleManifest(manifestPath)
-			if err != nil {
-				return "", err
-			}
-
-			entry.Manifest = manifest
-
-			entry.Sums, err = optionalLines(companionSum(manifestPath))
-			if err != nil {
-				return "", err
-			}
-
-			entry.Vendor, err = optionalLines(filepath.Join(dir, "vendor", "modules.txt"))
-			if err != nil {
-				return "", err
-			}
+		entry, err := fingerprintModule(module, code.EffectiveBuild.ModFile)
+		if err != nil {
+			return "", err
 		}
 
 		snapshot.Modules = append(snapshot.Modules, entry)
@@ -219,7 +181,7 @@ func normalizeReplacements(replacements []*modfile.Replace) {
 
 		for i, token := range replacement.Syntax.Token {
 			if token == "=>" && i+1 < len(replacement.Syntax.Token) {
-				replacement.Syntax.Token[i+1] = "local"
+				replacement.Syntax.Token[i+1] = localReplacement
 
 				break
 			}
@@ -262,7 +224,7 @@ func optionalLines(filename string) ([]string, error) {
 		fields := strings.Fields(line)
 		for i, field := range fields {
 			if field == "=>" && i+2 == len(fields) {
-				fields[i+1] = "local"
+				fields[i+1] = localReplacement
 			}
 		}
 
@@ -373,4 +335,58 @@ func normalizeGraphCGO(effective *graphBuildEnvironment, root string) {
 			*value = strings.ReplaceAll(*value, filepath.Clean(root), "${PROJECT}")
 		}
 	}
+}
+
+func fingerprintModule(module model.ModuleInfo, alternateManifest string) (graphModule, error) {
+	entry := graphModule{
+		Path: module.Path, Version: module.Version, Main: module.Main,
+		Replacement: "", ReplacementVersion: "", Manifest: nil, Sums: nil, Vendor: nil,
+	}
+	local := module.Main
+
+	dir := module.Dir
+
+	if module.Replace != nil {
+		entry.Replacement = module.Replace.Path
+
+		entry.ReplacementVersion = module.Replace.Version
+
+		if module.Replace.Version == "" {
+			local = true
+			dir = module.Replace.Dir
+			entry.Replacement = localReplacement
+		}
+	}
+
+	if !local {
+		return entry, nil
+	}
+
+	if dir == "" {
+		return entry, errMissingLocalModuleDirectory
+	}
+
+	manifestPath := filepath.Join(dir, "go.mod")
+	if module.Main && alternateManifest != "" {
+		manifestPath = alternateManifest
+	}
+
+	manifest, err := moduleManifest(manifestPath)
+	if err != nil {
+		return entry, err
+	}
+
+	entry.Manifest = manifest
+
+	entry.Sums, err = optionalLines(companionSum(manifestPath))
+	if err != nil {
+		return entry, err
+	}
+
+	entry.Vendor, err = optionalLines(filepath.Join(dir, "vendor", "modules.txt"))
+	if err != nil {
+		return entry, err
+	}
+
+	return entry, nil
 }

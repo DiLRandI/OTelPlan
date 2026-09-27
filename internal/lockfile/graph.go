@@ -54,6 +54,8 @@ type graphBuildEnvironment struct {
 	ModFileSums   []string `json:"modFileSums,omitempty"`
 }
 
+// GraphDigest hashes module metadata and effective build inputs, normalizing local
+// module and workspace paths. It reads manifests and checksums without modifying them.
 func GraphDigest(code *model.CodeModel) (string, error) {
 	if code == nil || len(code.Modules) == 0 {
 		return "", errMissingModuleMetadata

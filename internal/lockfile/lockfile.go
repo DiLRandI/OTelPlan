@@ -18,8 +18,12 @@ import (
 	"golang.org/x/mod/semver"
 )
 
+// Digest returns the lowercase SHA-256 digest of data with a sha256: prefix.
 func Digest(data []byte) string { return fmt.Sprintf("sha256:%x", sha256.Sum256(data)) }
 
+// Create binds a resolved plan to its policy, analyzed symbols, and pinned backend.
+// It validates source paths and supplied digests without modifying the inputs.
+// Backend executable and artifact verification remain the caller's responsibility.
 func Create(p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan, backend model.LockBackend, moduleGraphDigest string, artifacts []model.ArtifactFile) (model.Lockfile, error) {
 	var lock model.Lockfile
 	if p == nil || code == nil || code.GoVersion == "" {
@@ -87,6 +91,8 @@ func Create(p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan, bac
 	return lock, nil
 }
 
+// Marshal validates a lockfile and returns canonical, indented JSON with a trailing newline.
+// It does not reorder the caller's target, attribute, or artifact slices.
 func Marshal(lock model.Lockfile) ([]byte, error) {
 	lock = canonical(lock)
 	if err := check(lock); err != nil {
@@ -101,6 +107,8 @@ func Marshal(lock model.Lockfile) ([]byte, error) {
 	return append(data, '\n'), nil
 }
 
+// Parse decodes and validates exactly one JSON lockfile, rejecting unknown fields.
+// Callers must discard the returned lockfile if an error is reported.
 func Parse(data []byte) (model.Lockfile, error) {
 	var lock model.Lockfile
 
@@ -128,6 +136,8 @@ func Parse(data []byte) (model.Lockfile, error) {
 	return lock, nil
 }
 
+// Write validates and writes canonical JSON to a temporary file in the destination
+// directory, then renames that file to path. The directory must already exist.
 func Write(path string, lock model.Lockfile) error {
 	data, err := Marshal(lock)
 	if err != nil {

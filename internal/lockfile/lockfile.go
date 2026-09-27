@@ -23,15 +23,15 @@ func Digest(data []byte) string { return fmt.Sprintf("sha256:%x", sha256.Sum256(
 func Create(p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan, backend model.LockBackend, moduleGraphDigest string, artifacts []model.ArtifactFile) (model.Lockfile, error) {
 	var lock model.Lockfile
 	if p == nil || code == nil || code.GoVersion == "" {
-		return lock, errors.New("policy and analyzed Go version are required")
+		return lock, errMissingAnalysis
 	}
 
 	if backend.Name != p.Backend.Name || backend.Version != p.Backend.Version || !pinned(backend.Version) {
-		return lock, errors.New("backend identity must match an exact pinned policy version")
+		return lock, errBackendPolicyMismatch
 	}
 
 	if !validDigest(moduleGraphDigest) {
-		return lock, errors.New("module graph digest is required")
+		return lock, errMissingGraphDigest
 	}
 
 	policyData, err := json.Marshal(canonicalPolicy(*p))
@@ -44,14 +44,14 @@ func Create(p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan, bac
 	seen := map[model.SymbolID]bool{}
 	for _, target := range plan.Targets {
 		if seen[target.SymbolID] {
-			return model.Lockfile{}, errors.New("duplicate lock target")
+			return model.Lockfile{}, errDuplicateTarget
 		}
 
 		seen[target.SymbolID] = true
 
 		symbol, ok := code.Symbol(target.SymbolID)
 		if !ok || symbol.Signature != target.Signature {
-			return model.Lockfile{}, errors.New("target signature does not match analyzed symbol")
+			return model.Lockfile{}, errTargetSignatureMismatch
 		}
 
 		location := symbol.Location
@@ -59,7 +59,7 @@ func Create(p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan, bac
 		location.File = filepath.ToSlash(location.File)
 
 		if !relative(location.File) {
-			return model.Lockfile{}, errors.New("source path must be module-relative")
+			return model.Lockfile{}, errNonrelativeSource
 		}
 
 		locked := model.LockTarget{Symbol: target.SymbolID, Signature: target.Signature, SignatureDigest: Digest([]byte(target.Signature)), SourceRule: target.RuleID, SpanName: target.SpanName, Context: model.LockContext{Strategy: target.ContextStrategy.Strategy, Index: target.ContextStrategy.Index}, Errors: model.LockErrors{Record: target.ErrorStrategy.Record, Indexes: append([]int(nil), target.ErrorStrategy.Indexes...)}, Location: location}
@@ -117,7 +117,7 @@ func Parse(data []byte) (model.Lockfile, error) {
 
 	err = decoder.Decode(&trailing)
 	if !errors.Is(err, io.EOF) {
-		return lock, errors.New("lockfile must contain one JSON document")
+		return lock, errMultipleDocuments
 	}
 
 	err = check(lock)
@@ -160,42 +160,42 @@ func Write(path string, lock model.Lockfile) error {
 
 func check(lock model.Lockfile) error {
 	if lock.APIVersion != model.LockAPIVersionV1Alpha1 || !validDigest(lock.PolicyDigest) || !validDigest(lock.ModuleGraphDigest) || lock.GoVersion == "" {
-		return errors.New("invalid lockfile identity")
+		return errInvalidIdentity
 	}
 
 	if lock.Backend.Name == "" || !pinned(lock.Backend.Version) {
-		return errors.New("invalid locked backend")
+		return errInvalidBackend
 	}
 
 	if lock.Backend.Digest != "" && !validDigest(lock.Backend.Digest) {
-		return errors.New("invalid backend digest")
+		return errInvalidBackendDigest
 	}
 
 	seen := map[model.SymbolID]bool{}
 
 	for _, target := range lock.Targets {
 		if !relative(target.Location.File) {
-			return errors.New("source path must be module-relative")
+			return errNonrelativeSource
 		}
 
 		if target.Context.Strategy != model.ContextStrategyArgument && target.Context.Strategy != model.ContextStrategyRoot {
-			return errors.New("invalid context strategy")
+			return errInvalidContextStrategy
 		}
 
 		if target.Context.Index < 0 {
-			return errors.New("invalid context index")
+			return errInvalidContextIndex
 		}
 
 		for _, index := range target.Errors.Indexes {
 			if index < 0 || !target.Errors.Record {
-				return errors.New("invalid error index")
+				return errInvalidErrorIndex
 			}
 		}
 
 		keys := map[string]bool{}
 		for _, attr := range target.Attributes {
 			if attr.Key == "" || keys[attr.Key] {
-				return errors.New("invalid attribute key")
+				return errInvalidAttributeKey
 			}
 
 			keys[attr.Key] = true
@@ -203,12 +203,12 @@ func check(lock model.Lockfile) error {
 			switch attr.Kind {
 			case "bool", "integer", "float", "string":
 			default:
-				return errors.New("invalid attribute kind")
+				return errInvalidAttributeKind
 			}
 		}
 
 		if target.Symbol == "" || seen[target.Symbol] || target.SourceRule == "" || target.SpanName == "" || target.SignatureDigest != Digest([]byte(target.Signature)) {
-			return errors.New("invalid or duplicate locked target")
+			return errInvalidTarget
 		}
 
 		seen[target.Symbol] = true
@@ -217,7 +217,7 @@ func check(lock model.Lockfile) error {
 	paths := map[string]bool{}
 	for _, artifact := range lock.Artifacts {
 		if !relative(artifact.Path) || paths[artifact.Path] || !validDigest(artifact.Digest) {
-			return errors.New("invalid artifact manifest")
+			return errInvalidArtifacts
 		}
 
 		paths[artifact.Path] = true

@@ -2,7 +2,6 @@ package lockfile
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,7 +56,7 @@ type graphBuildEnvironment struct {
 
 func GraphDigest(code *model.CodeModel) (string, error) {
 	if code == nil || len(code.Modules) == 0 {
-		return "", errors.New("module metadata is required")
+		return "", errMissingModuleMetadata
 	}
 
 	snapshot := struct {
@@ -192,7 +191,7 @@ func GraphDigest(code *model.CodeModel) (string, error) {
 
 		if local {
 			if dir == "" {
-				return "", errors.New("local module directory is unavailable")
+				return "", errMissingLocalModuleDirectory
 			}
 
 			manifestPath := filepath.Join(dir, "go.mod")
@@ -247,7 +246,7 @@ func GraphDigest(code *model.CodeModel) (string, error) {
 
 			module, err := modfile.Parse("go.mod", data, nil)
 			if err != nil || module.Module == nil {
-				return "", errors.New("workspace module has invalid manifest")
+				return "", errInvalidWorkspaceModule
 			}
 
 			tokens := use.Syntax.Token

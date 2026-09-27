@@ -169,7 +169,22 @@ func Write(path string, lock model.Lockfile) error {
 }
 
 func check(lock model.Lockfile) error {
-	if lock.APIVersion != model.LockAPIVersionV1Alpha1 || !validDigest(lock.PolicyDigest) || !validDigest(lock.ModuleGraphDigest) || lock.GoVersion == "" {
+	err := checkIdentity(lock)
+	if err != nil {
+		return err
+	}
+
+	err = checkTargets(lock.Targets)
+	if err != nil {
+		return err
+	}
+
+	return checkArtifacts(lock.Artifacts)
+}
+
+func checkIdentity(lock model.Lockfile) error {
+	if lock.APIVersion != model.LockAPIVersionV1Alpha1 || !validDigest(lock.PolicyDigest) ||
+		!validDigest(lock.ModuleGraphDigest) || lock.GoVersion == "" {
 		return errInvalidIdentity
 	}
 
@@ -181,51 +196,75 @@ func check(lock model.Lockfile) error {
 		return errInvalidBackendDigest
 	}
 
+	return nil
+}
+
+func checkTargets(targets []model.LockTarget) error {
 	seen := map[model.SymbolID]bool{}
 
-	for _, target := range lock.Targets {
-		if !relative(target.Location.File) {
-			return errNonrelativeSource
+	for _, target := range targets {
+		err := checkTarget(target)
+		if err != nil {
+			return err
 		}
 
-		if target.Context.Strategy != model.ContextStrategyArgument && target.Context.Strategy != model.ContextStrategyRoot {
-			return errInvalidContextStrategy
-		}
-
-		if target.Context.Index < 0 {
-			return errInvalidContextIndex
-		}
-
-		for _, index := range target.Errors.Indexes {
-			if index < 0 || !target.Errors.Record {
-				return errInvalidErrorIndex
-			}
-		}
-
-		keys := map[string]bool{}
-		for _, attr := range target.Attributes {
-			if attr.Key == "" || keys[attr.Key] {
-				return errInvalidAttributeKey
-			}
-
-			keys[attr.Key] = true
-
-			switch attr.Kind {
-			case "bool", "integer", "float", "string":
-			default:
-				return errInvalidAttributeKind
-			}
-		}
-
-		if target.Symbol == "" || seen[target.Symbol] || target.SourceRule == "" || target.SpanName == "" || target.SignatureDigest != Digest([]byte(target.Signature)) {
+		if target.Symbol == "" || seen[target.Symbol] || target.SourceRule == "" || target.SpanName == "" ||
+			target.SignatureDigest != Digest([]byte(target.Signature)) {
 			return errInvalidTarget
 		}
 
 		seen[target.Symbol] = true
 	}
 
+	return nil
+}
+
+func checkTarget(target model.LockTarget) error {
+	if !relative(target.Location.File) {
+		return errNonrelativeSource
+	}
+
+	if target.Context.Strategy != model.ContextStrategyArgument && target.Context.Strategy != model.ContextStrategyRoot {
+		return errInvalidContextStrategy
+	}
+
+	if target.Context.Index < 0 {
+		return errInvalidContextIndex
+	}
+
+	for _, index := range target.Errors.Indexes {
+		if index < 0 || !target.Errors.Record {
+			return errInvalidErrorIndex
+		}
+	}
+
+	return checkAttributes(target.Attributes)
+}
+
+func checkAttributes(attributes []model.LockAttribute) error {
+	keys := map[string]bool{}
+
+	for _, attribute := range attributes {
+		if attribute.Key == "" || keys[attribute.Key] {
+			return errInvalidAttributeKey
+		}
+
+		keys[attribute.Key] = true
+
+		switch attribute.Kind {
+		case "bool", "integer", "float", "string":
+		default:
+			return errInvalidAttributeKind
+		}
+	}
+
+	return nil
+}
+
+func checkArtifacts(artifacts []model.ArtifactFile) error {
 	paths := map[string]bool{}
-	for _, artifact := range lock.Artifacts {
+
+	for _, artifact := range artifacts {
 		if !relative(artifact.Path) || paths[artifact.Path] || !validDigest(artifact.Digest) {
 			return errInvalidArtifacts
 		}

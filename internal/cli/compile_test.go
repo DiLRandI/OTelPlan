@@ -19,6 +19,7 @@ func TestCompileCLI(t *testing.T) {
 	}
 
 	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prepareOfflineIntegration(t)
 	root, originals := cliFixture(t)
 
 	for _, format := range []string{"json", "text"} {
@@ -117,6 +118,8 @@ func TestCompileOfflineDisablesProxyBypass(t *testing.T) {
 	if executable == "" {
 		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
 	}
+
+	prepareOfflineIntegration(t)
 
 	realGo, err := exec.LookPath("go")
 	if err != nil {

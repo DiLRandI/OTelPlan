@@ -28,7 +28,9 @@ func TestUnsupportedBackendTargetsFailValidation(t *testing.T) {
 			for _, command := range []string{"validate", "inspect", "compile", "build"} {
 				for _, format := range []string{"text", "json"} {
 					var out, errout bytes.Buffer
-					if exit := Run([]string{command, "--root", root, "--offline", "--format=" + format}, &out, &errout); exit != 7 {
+
+					args := []string{command, "--root", root, "--offline", "--format=" + format}
+					if exit := Run(t.Context(), args, &out, &errout); exit != 7 {
 						t.Fatalf("%s %s exit=%d: %s %s", command, format, exit, &out, &errout)
 					}
 

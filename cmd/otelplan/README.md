@@ -23,6 +23,8 @@ otelplan explain --root /path/to/project 'example.com/app.(*Worker).Run'
 
 `lock --dry-run` previews without writing. `lock --check` and `diff --check` return 6 for drift. Plain `diff` reports drift with exit 0. Backend incompatibility returns 7. `--offline` disables Go dependency resolution and toolchain downloads. Constant values are redacted from inspection output; the lockfile preserves explicit policy constants.
 
+SIGINT or SIGTERM cancels active discovery, backend verification, generated-source compilation, and isolated builds.
+
 `compile` requires the pinned `otelc` executable on `PATH`. It resolves and validates the policy, verifies backend identity, compiles the generated Go package in temporary module state, and publishes rules, hooks, and a file-hash manifest. Output defaults to `.otelplan/build` relative to `--root`. Identical output is reused. Use `--clean` to replace changed output; edited generated files or unrelated files prevent replacement. Compilation failure returns 8; output failures return 1.
 
 `build` executes the pinned backend in copied module state and verifies the output digest before publication. Pass Go arguments after `--`. A single command without `-o` uses Go's default executable name; library and multi-package builds without `-o` do not publish a binary. Output paths are relative to `--root`. An existing directory or an output ending in a slash or backslash receives each resulting executable, for example `otelplan build -- -o bin/ ./cmd/...`. Directory output JSON lists each path and digest under `data.files`; single-file output retains `data.path` and `data.digest`. Files are verified and published individually, so an I/O failure during publication can leave earlier files published.

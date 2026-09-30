@@ -25,7 +25,7 @@ func TestCompileCLI(t *testing.T) {
 	for _, format := range []string{"json", "text"} {
 		var out, errout bytes.Buffer
 
-		code := Run([]string{"compile", "--root", root, "--format", format, "--offline"}, &out, &errout)
+		code := Run(t.Context(), []string{"compile", "--root", root, "--format", format, "--offline"}, &out, &errout)
 		if code != 0 {
 			t.Fatalf("compile exit=%d: %s %s", code, &out, &errout)
 		}
@@ -83,7 +83,9 @@ func TestCompileCLI(t *testing.T) {
 	}
 
 	var out, errout bytes.Buffer
-	if code := Run([]string{"compile", "--root", root, "--clean", "--format=json", "--offline"}, &out, &errout); code != 1 {
+
+	args := []string{"compile", "--root", root, "--clean", "--format=json", "--offline"}
+	if code := Run(t.Context(), args, &out, &errout); code != 1 {
 		t.Fatalf("clean exit=%d: %s", code, &out)
 	}
 
@@ -97,7 +99,7 @@ func TestCompileCLIUsage(t *testing.T) {
 	for _, args := range [][]string{{"compile", "extra"}, {"compile", "--output="}, {"inspect", "--output=build"}, {"scan", "--clean"}, {"compile", "--check"}} {
 		for _, format := range []string{"text", "json"} {
 			var out, errout bytes.Buffer
-			if code := Run(append(args, "--format="+format), &out, &errout); code != 2 {
+			if code := Run(t.Context(), append(args, "--format="+format), &out, &errout); code != 2 {
 				t.Fatalf("%v: exit=%d %s %s", args, code, &out, &errout)
 			}
 
@@ -141,7 +143,7 @@ func TestCompileOfflineDisablesProxyBypass(t *testing.T) {
 
 	var out, errout bytes.Buffer
 
-	if code := Run([]string{"compile", "--root", root, "--offline", "--format=json"}, &out, &errout); code != 0 {
+	if code := Run(t.Context(), []string{"compile", "--root", root, "--offline", "--format=json"}, &out, &errout); code != 0 {
 		t.Fatalf("offline compile exit=%d: %s %s", code, &out, &errout)
 	}
 

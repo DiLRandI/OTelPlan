@@ -20,7 +20,7 @@ func TestScanAdvisoryCallGraph(t *testing.T) {
 		var out, errout bytes.Buffer
 
 		args := []string{"scan", "--root", root, "--offline", "--calls", "--format=" + format}
-		if exit := cli.Run(args, &out, &errout); exit != 0 {
+		if exit := cli.Run(t.Context(), args, &out, &errout); exit != 0 {
 			t.Fatalf("exit=%d: %s %s", exit, &out, &errout)
 		}
 
@@ -85,7 +85,7 @@ func TestCallsFlagRequiresScan(t *testing.T) {
 	t.Parallel()
 
 	var out, errout bytes.Buffer
-	if exit := cli.Run([]string{"inspect", "--calls", "--format=json"}, &out, &errout); exit != 2 {
+	if exit := cli.Run(t.Context(), []string{"inspect", "--calls", "--format=json"}, &out, &errout); exit != 2 {
 		t.Fatalf("invalid applicability exit=%d: %s", exit, &out)
 	}
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -40,7 +41,7 @@ type options struct {
 	quiet, verbose, noColor, dependencies, interfaces, help bool
 }
 
-func Run(args []string, stdout, stderr io.Writer) int {
+func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	opts, positionals, err := parse(args)
 	if err != nil {
 		command := ""
@@ -126,7 +127,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 		output.Data = map[string]string{"otelplan": Version, "go": runtime.Version()}
 	case "scan":
-		inventory, err := discovery.Load(discovery.Options{
+		inventory, err := discovery.LoadContext(ctx, discovery.Options{
 			Root: opts.root, Patterns: rest, IncludeDependencies: opts.dependencies,
 			CallGraph: opts.callGraph, Offline: opts.offline,
 		})
@@ -179,7 +180,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			return 3
 		}
 
-		inventory, err := discovery.Load(discovery.Options{Root: opts.root, Patterns: p.Project.Packages, BuildFlags: buildArgs.AnalysisFlags, BuildTags: p.Project.BuildTags, IncludeTests: p.Project.IncludeTests, IncludeDependencies: p.Project.IncludeDependencies, Offline: opts.offline})
+		inventory, err := discovery.LoadContext(ctx, discovery.Options{Root: opts.root, Patterns: p.Project.Packages, BuildFlags: buildArgs.AnalysisFlags, BuildTags: p.Project.BuildTags, IncludeTests: p.Project.IncludeTests, IncludeDependencies: p.Project.IncludeDependencies, Offline: opts.offline})
 		if err != nil {
 			return fail(4, model.CodeUnresolvedSymbol, err.Error())
 		}
@@ -222,9 +223,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 			switch command {
 			case "build":
-				output.Data, exitCode, diags = buildCommand(opts, buildArgs, p, inventory, result.Plan)
+				output.Data, exitCode, diags = buildCommand(ctx, opts, buildArgs, p, inventory, result.Plan)
 			case "compile":
-				output.Data, exitCode, diags = compileCommand(opts, p, inventory, result.Plan)
+				output.Data, exitCode, diags = compileCommand(ctx, opts, p, inventory, result.Plan)
 			default:
 				output.Data, exitCode, diags = lockCommand(command, opts, p, inventory, result.Plan)
 			}

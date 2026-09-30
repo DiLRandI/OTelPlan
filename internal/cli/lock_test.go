@@ -15,7 +15,7 @@ func invoke(t *testing.T, root string, want int, args ...string) response {
 	var out, errout bytes.Buffer
 
 	arguments := append([]string{"--root", root, "--format=json", "--offline"}, args...)
-	if code := Run(arguments, &out, &errout); code != want {
+	if code := Run(t.Context(), arguments, &out, &errout); code != want {
 		t.Fatalf("%v exit=%d want=%d output=%s stderr=%s", args, code, want, &out, &errout)
 	}
 

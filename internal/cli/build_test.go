@@ -122,7 +122,7 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 		}
 
 		var out, errout bytes.Buffer
-		if exit := Run([]string{"build", "--root", root, "--format=json", "--offline", "--", "-buildvcs=false", "-o", argument, ".", "./cmd/second"}, &out, &errout); exit != 0 {
+		if exit := Run(t.Context(), []string{"build", "--root", root, "--format=json", "--offline", "--", "-buildvcs=false", "-o", argument, ".", "./cmd/second"}, &out, &errout); exit != 0 {
 			t.Fatalf("directory build exit=%d: %s %s", exit, &out, &errout)
 		}
 
@@ -182,7 +182,7 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 			out.Reset()
 			errout.Reset()
 
-			if exit := Run([]string{"build", "--root", root, "--format=json", "--offline", "--", "-buildvcs=false", "-o", argument, ".", "./cmd/second"}, &out, &errout); exit != 1 {
+			if exit := Run(t.Context(), []string{"build", "--root", root, "--format=json", "--offline", "--", "-buildvcs=false", "-o", argument, ".", "./cmd/second"}, &out, &errout); exit != 1 {
 				t.Fatalf("invalid destination exit=%d: %s", exit, &out)
 			}
 
@@ -200,7 +200,7 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 	}
 
 	var guarded, guardErr bytes.Buffer
-	if exit := Run([]string{"build", "--root", root, "--format=json", "--", "-o", "go.mod", "."}, &guarded, &guardErr); exit != 2 {
+	if exit := Run(t.Context(), []string{"build", "--root", root, "--format=json", "--", "-o", "go.mod", "."}, &guarded, &guardErr); exit != 2 {
 		t.Fatalf("source output exit=%d: %s", exit, &guarded)
 	}
 
@@ -217,7 +217,7 @@ func TestBuildCLIUsage(t *testing.T) {
 		var out, errout bytes.Buffer
 
 		args = append([]string{"--format=json"}, args...)
-		if code := Run(args, &out, &errout); code != 2 {
+		if code := Run(t.Context(), args, &out, &errout); code != 2 {
 			t.Fatalf("usage exit=%d: %s", code, &out)
 		}
 
@@ -242,7 +242,7 @@ func TestBuildCLILibraryWithoutOutput(t *testing.T) {
 
 	var out, errout bytes.Buffer
 
-	if exit := Run([]string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "."}, &out, &errout); exit != 0 {
+	if exit := Run(t.Context(), []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "."}, &out, &errout); exit != 0 {
 		t.Fatalf("library build exit=%d: %s %s", exit, &out, &errout)
 	}
 
@@ -317,7 +317,7 @@ func TestBuildCLIFromWorkspaceRoot(t *testing.T) {
 	}
 
 	var out, errout bytes.Buffer
-	if exit := Run([]string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "./app"}, &out, &errout); exit != 0 {
+	if exit := Run(t.Context(), []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "./app"}, &out, &errout); exit != 0 {
 		t.Fatalf("workspace build exit=%d: %s %s", exit, &out, &errout)
 	}
 
@@ -347,7 +347,7 @@ func TestBuildCLIFromWorkspaceRoot(t *testing.T) {
 	out.Reset()
 	errout.Reset()
 
-	if exit := Run([]string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false"}, &out, &errout); exit == 0 {
+	if exit := Run(t.Context(), []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false"}, &out, &errout); exit == 0 {
 		t.Fatal("workspace build without target silently selected a module")
 	}
 

@@ -60,6 +60,9 @@ func TestVendorBuildWithPinnedBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	prepareVendoredRuntime(t, backend, code, plan)
+
 	built, err := BuildResolved(t.Context(), ResolvedBuildRequest{Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: "test", WorkingDir: buildDir, Parent: t.TempDir(), Env: os.Environ(), GoArgs: []string{buildDir}, Packages: []string{buildDir}, DefaultOutput: true, Offline: true})
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +111,7 @@ func TestVendorBuildWithPinnedBackend(t *testing.T) {
 func prepareVendoredFixture(t *testing.T, source string) {
 	t.Helper()
 
-	for _, args := range [][]string{{"mod", "download"}, {"mod", "vendor"}} {
+	for _, args := range [][]string{{"mod", "download", "all"}, {"mod", "vendor"}} {
 		command := exec.CommandContext(t.Context(), "go", args...)
 		command.Dir = source
 
@@ -120,6 +123,28 @@ func prepareVendoredFixture(t *testing.T, source string) {
 		if output, err := command.CombinedOutput(); err != nil {
 			t.Fatalf("prepare fixture dependencies: %v\n%s", err, output)
 		}
+	}
+}
+
+func prepareVendoredRuntime(t *testing.T, backend model.LockBackend, code *model.CodeModel, plan model.ResolvedPlan) {
+	t.Helper()
+
+	files, err := otelc.RenderBundle(backend, "test", code, plan, "otelplan.local/generated")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runtime, err := StageArtifacts(t.TempDir(), files)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	command := exec.CommandContext(t.Context(), "go", "mod", "download", "all")
+	command.Dir = runtime.Dir
+
+	command.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("prepare generated runtime dependencies: %v\n%s", err, output)
 	}
 }
 

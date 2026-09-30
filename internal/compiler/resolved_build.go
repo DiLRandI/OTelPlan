@@ -3,6 +3,7 @@ package compiler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -134,12 +135,12 @@ func BuildResolved(ctx context.Context, request ResolvedBuildRequest) (BuildResu
 
 	runtimeSelection, err := ReadModuleSelection(ctx, runtime.Dir, append(append([]string(nil), env...), "GOWORK=off"))
 	if err != nil {
-		return BuildResult{}, err
+		return BuildResult{}, fmt.Errorf("read generated runtime module selection: %w", err)
 	}
 
 	applicationModules, err := applicationModuleSelection(ctx, prepared, copiedDir, env)
 	if err != nil {
-		return BuildResult{}, err
+		return BuildResult{}, fmt.Errorf("read isolated application module selection: %w", err)
 	}
 
 	if err := CheckModuleSelection(request.Code.Modules, applicationModules, prepared.Relocations); err != nil {

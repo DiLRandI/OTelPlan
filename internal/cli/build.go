@@ -28,9 +28,6 @@ func buildCommand(ctx context.Context, opts options, args buildArguments, p *mod
 	fail := func(exit int, code model.Code, message string) (any, int, model.DiagnosticErrorList) {
 		return nil, exit, model.DiagnosticErrorList{{Severity: model.SeverityError, Code: code, Message: message}}
 	}
-	if code.EffectiveBuild.ModuleMode == "vendor" {
-		return fail(7, model.CodeBackendUnsupported, "vendor-mode build preparation is not implemented")
-	}
 
 	executable, err := exec.LookPath("otelc")
 	if err != nil {

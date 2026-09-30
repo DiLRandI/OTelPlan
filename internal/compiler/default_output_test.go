@@ -22,7 +22,7 @@ func TestDefaultBuildOutput(t *testing.T) {
 	}
 
 	for _, tc := range []struct{ target, goos, want string }{{".", "linux", "tool"}, {".", "windows", "tool.exe"}, {"main.go", "linux", "main"}, {"./library", "linux", ""}, {"./...", "linux", ""}} {
-		got, err := defaultBuildOutput(t.Context(), root, append(os.Environ(), "GOWORK=off", "GOFLAGS="), nil, []string{tc.target}, tc.goos)
+		got, err := defaultBuildOutput(t.Context(), root, append(os.Environ(), "GOWORK=off", "GOFLAGS="), nil, []string{tc.target}, tc.goos, "readonly")
 		if err != nil || got != tc.want {
 			t.Fatalf("%s output=%s, %v; want %s", tc.target, got, err, tc.want)
 		}

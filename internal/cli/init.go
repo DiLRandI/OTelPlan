@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -44,7 +45,9 @@ type initSummary struct {
 	Suggestions []suggest.Suggestion `json:"suggestions"`
 }
 
-func initCommand(ctx context.Context, opts options, patterns []string) (any, int, model.DiagnosticErrorList) {
+func initCommand(ctx context.Context, opts options, patterns []string, stdin io.Reader,
+	prompts io.Writer,
+) (any, int, model.DiagnosticErrorList) {
 	fail := func(exit int, code model.Code, message string) (any, int, model.DiagnosticErrorList) {
 		diagnostic := new(model.DiagnosticError)
 		diagnostic.Severity, diagnostic.Code, diagnostic.Message = model.SeverityError, code, message
@@ -72,30 +75,48 @@ func initCommand(ctx context.Context, opts options, patterns []string) (any, int
 		return fail(exitAnalysis, model.CodeUnresolvedSymbol, fmt.Sprintf("analyze project for starter policy: %v", err))
 	}
 
-	starter, selected := starterPolicy(code, patterns)
+	selected := starterCandidates(code)
+	if opts.interactive {
+		selected, err = reviewStarterCandidates(ctx, stdin, prompts, selected)
+		if err != nil {
+			return fail(1, model.CodeArtifactOutput, err.Error())
+		}
+	}
+
 	if len(selected) == 0 {
 		return fail(exitValidation, model.CodeUnresolvedSymbol,
-			"no safe starter candidates have enough evidence; inspect symbols and write an explicit policy")
+			"no starter candidates selected; inspect symbols and write an explicit policy")
 	}
+
+	starter := starterPolicy(code, patterns, selected)
 
 	diagnostics, exit := validateStarterPolicy(starter, code, len(selected))
 	if exit != 0 {
 		return nil, exit, diagnostics
 	}
 
-	data, err := yaml.Marshal(starter)
+	err = ctx.Err()
 	if err != nil {
-		return fail(1, model.CodeArtifactOutput, fmt.Sprintf("encode starter policy: %v", err))
+		return fail(1, model.CodeArtifactOutput, fmt.Sprintf("starter policy generation canceled: %v", err))
 	}
 
-	data = append([]byte(starterHeader), data...)
-
-	err = writeStarterPolicy(path, data, opts.force)
+	err = writeStarter(starter, path, opts.force)
 	if err != nil {
 		return fail(1, model.CodeArtifactOutput, err.Error())
 	}
 
 	return initSummary{Path: path, Suggestions: selected}, 0, diagnostics
+}
+
+func writeStarter(starter *model.Policy, path string, force bool) error {
+	data, err := yaml.Marshal(starter)
+	if err != nil {
+		return fmt.Errorf("encode starter policy: %w", err)
+	}
+
+	data = append([]byte(starterHeader), data...)
+
+	return writeStarterPolicy(path, data, force)
 }
 
 func validateStarterPolicy(starter *model.Policy, code *model.CodeModel,
@@ -139,7 +160,20 @@ func normalizedStarterPatterns(patterns []string) []string {
 	return slices.Compact(result)
 }
 
-func starterPolicy(code *model.CodeModel, patterns []string) (*model.Policy, []suggest.Suggestion) {
+func starterCandidates(code *model.CodeModel) []suggest.Suggestion {
+	selected := make([]suggest.Suggestion, 0, maxStarterRules)
+	for _, candidate := range suggest.Rank(code) {
+		if candidate.Score < minStarterScore || len(selected) == maxStarterRules {
+			break
+		}
+
+		selected = append(selected, candidate)
+	}
+
+	return selected
+}
+
+func starterPolicy(code *model.CodeModel, patterns []string, selected []suggest.Suggestion) *model.Policy {
 	starter := new(model.Policy)
 	starter.APIVersion, starter.Kind = model.APIVersionV1Alpha1, model.KindInstrumentationPlan
 
@@ -149,12 +183,7 @@ func starterPolicy(code *model.CodeModel, patterns []string) (*model.Policy, []s
 	starter.Defaults.Context.Mode = model.ContextModeRequire
 	starter.Defaults.Errors.Record = true
 
-	selected := make([]suggest.Suggestion, 0, maxStarterRules)
-	for _, candidate := range suggest.Rank(code) {
-		if candidate.Score < minStarterScore || len(selected) == maxStarterRules {
-			break
-		}
-
+	for _, candidate := range selected {
 		match := new(model.Match)
 		match.Symbols = []string{string(candidate.SymbolID)}
 		rule := new(model.Rule)
@@ -163,10 +192,9 @@ func starterPolicy(code *model.CodeModel, patterns []string) (*model.Policy, []s
 			candidate.Confidence, candidate.Score, strings.Join(candidate.Evidence, "; "))
 		rule.Match = *match
 		starter.Rules = append(starter.Rules, *rule)
-		selected = append(selected, candidate)
 	}
 
-	return starter, selected
+	return starter
 }
 
 func starterRuleID(symbol model.SymbolID) string {

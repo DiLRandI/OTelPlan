@@ -23,6 +23,7 @@ const APIVersion = "otelplan.io/cli/v1alpha1"
 
 const (
 	initCommandName = "init"
+	jsonFormat      = "json"
 	exitUsage       = 2
 	commandUsage    = "usage: otelplan [global flags] " +
 		"<init|scan|inspect|explain|validate|lock|diff|compile|build|version> [arguments]"
@@ -42,7 +43,7 @@ type options struct {
 	output                                                  string
 	outputSet, clean                                        bool
 	strict, offline, check, dryRun, allowLargePlan, force   bool
-	nonInteractive                                          bool
+	interactive, nonInteractive                             bool
 	configSet                                               bool
 	callGraph                                               bool
 	root, config, format                                    string
@@ -50,6 +51,15 @@ type options struct {
 }
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	return run(ctx, args, nil, stdout, stderr)
+}
+
+// RunWithInput runs the CLI with explicit input for interactive commands.
+func RunWithInput(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	return run(ctx, args, stdin, stdout, stderr)
+}
+
+func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	opts, positionals, err := parse(args)
 	if err != nil {
 		command := ""
@@ -111,8 +121,20 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return fail(exitUsage, model.CodeInvalidPolicy, "--clean is supported by compile")
 	}
 
-	if (opts.force || opts.nonInteractive) && command != initCommandName {
-		return fail(exitUsage, model.CodeInvalidPolicy, "--force and --non-interactive are supported by init")
+	if (opts.force || opts.interactive || opts.nonInteractive) && command != initCommandName {
+		return fail(exitUsage, model.CodeInvalidPolicy, "--force, --interactive, and --non-interactive are supported by init")
+	}
+
+	if opts.interactive && opts.nonInteractive {
+		return fail(exitUsage, model.CodeInvalidPolicy, "cannot combine --interactive and --non-interactive")
+	}
+
+	if opts.interactive && opts.format == jsonFormat {
+		return fail(exitUsage, model.CodeInvalidPolicy, "--interactive requires text output")
+	}
+
+	if opts.interactive && stdin == nil {
+		return fail(exitUsage, model.CodeInvalidPolicy, "--interactive requires an input stream")
 	}
 
 	if opts.verbose {
@@ -157,7 +179,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	case initCommandName:
 		var diagnostics model.DiagnosticErrorList
 
-		output.Data, exitCode, diagnostics = initCommand(ctx, opts, rest)
+		output.Data, exitCode, diagnostics = initCommand(ctx, opts, rest, stdin, stderr)
 		output.Diagnostics = append(output.Diagnostics, diagnostics...)
 		output.OK = exitCode == 0
 	case "inspect", "explain", "validate", "lock", "diff", "compile", "build":
@@ -278,6 +300,7 @@ func parse(args []string) (options, []string, error) {
 	flags.StringVar(&opts.output, "output", ".otelplan/build", "artifact output relative to root")
 	flags.BoolVar(&opts.clean, "clean", false, "replace verified artifact output")
 	flags.BoolVar(&opts.force, "force", false, "replace an existing starter policy")
+	flags.BoolVar(&opts.interactive, "interactive", false, "review starter suggestions one by one")
 	flags.BoolVar(&opts.nonInteractive, "non-interactive", false, "generate a starter policy without prompts")
 	flags.StringVar(&opts.root, "root", ".", "project root")
 	flags.StringVar(&opts.config, "config", "otelplan.yaml", "policy path relative to root")
@@ -360,7 +383,7 @@ func parse(args []string) (options, []string, error) {
 		return opts, positionals, usageErr
 	}
 
-	if opts.format != "text" && opts.format != "json" {
+	if opts.format != "text" && opts.format != jsonFormat {
 		return opts, positionals, errors.New("format must be text or json")
 	}
 
@@ -378,7 +401,7 @@ func parse(args []string) (options, []string, error) {
 }
 
 func usageError(opts options, command, message string, stdout, stderr io.Writer) int {
-	if opts.format != "json" {
+	if opts.format != jsonFormat {
 		if _, err := fmt.Fprintln(stderr, message); err != nil {
 			return 1
 		}
@@ -399,7 +422,7 @@ func usageError(opts options, command, message string, stdout, stderr io.Writer)
 }
 
 func emit(out io.Writer, opts options, reply response) error {
-	if opts.format == "json" {
+	if opts.format == jsonFormat {
 		encoder := json.NewEncoder(out)
 		encoder.SetIndent("", "  ")
 

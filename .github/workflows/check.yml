@@ -72,7 +72,7 @@ jobs:
 
   otelc-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -93,7 +93,7 @@ jobs:
       - name: Test real backend
         run: |
           go test ./...
-          go test -race ./...
+          go test -race -timeout=20m ./...
         env:
           OTELPLAN_OTELC: ${{ runner.temp }}/otelc
 

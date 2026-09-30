@@ -3,6 +3,7 @@ Build with `go build -o bin/otelplan ./cmd/otelplan`. Requires Go 1.27.
 Implemented commands:
 
 ```sh
+otelplan init --root /path/to/project --non-interactive
 otelplan scan --root /path/to/project ./... --format=json
 otelplan scan --root /path/to/project --calls ./...
 otelplan inspect --root /path/to/project
@@ -14,6 +15,8 @@ otelplan compile --root /path/to/project --output .otelplan/build
 otelplan build --root /path/to/project -- -trimpath -o bin/api ./cmd/api
 otelplan explain --root /path/to/project 'example.com/app.(*Worker).Run'
 ```
+
+`init [packages...]` analyzes application symbols and writes `otelplan.yaml` with exact-symbol starter rules and the evidence for each suggestion. Review the policy before committing it. It does not capture arguments or results by default. Use `--output starter.yml` for another policy path or `--force` to replace an existing regular file. The default and `--non-interactive` modes do not prompt; interactive review is not yet available.
 
 `scan --calls` includes advisory calls and analysis limits in text or JSON output. Static edges identify a known callee; conservative edges are possible calls, not proof of runtime execution. This opt-in analysis does not select instrumentation targets.
 

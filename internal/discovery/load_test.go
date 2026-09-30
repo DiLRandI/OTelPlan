@@ -95,9 +95,15 @@ func AliasContext(ctx Alias) {}
 		t.Fatal(err)
 	}
 
-	firstJSON, _ := json.Marshal(m)
+	firstJSON, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("marshal first inventory: %v", err)
+	}
 
-	secondJSON, _ := json.Marshal(again)
+	secondJSON, err := json.Marshal(again)
+	if err != nil {
+		t.Fatalf("marshal second inventory: %v", err)
+	}
 
 	if string(firstJSON) != string(secondJSON) {
 		t.Fatal("inventory is not deterministic")

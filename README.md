@@ -116,3 +116,7 @@ go build -mod=readonly -trimpath -ldflags '-X go.opentelemetry.io/otelc/tool/uti
 ```
 
 Then, from OTelPlan, run `OTELPLAN_OTELC=/tmp/otelplan-otelc make check`. Without this variable, local checks skip the real-backend tests.
+
+## License
+
+OTelPlan is licensed under the [Apache License 2.0](LICENSE).

@@ -14,7 +14,12 @@ import (
 func TestUnsupportedBackendTargetsFailValidation(t *testing.T) {
 	for _, tc := range []struct{ name, source, message string }{
 		{"main", "package main\nimport \"context\"\nfunc Run(context.Context) error { return nil }\nfunc main(){}\n", "main package targets"},
-		{"variadic", "package app\nimport \"context\"\nfunc Run(context.Context, ...string) error { return nil }\n", "variadic targets"},
+		{
+			"variadic named type",
+			"package app\nimport \"context\"\ntype Value string\n" +
+				"func Run(context.Context, ...Value) error { return nil }\n",
+			"variadic targets",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, original := cliFixture(t)
@@ -28,7 +33,9 @@ func TestUnsupportedBackendTargetsFailValidation(t *testing.T) {
 			for _, command := range []string{"validate", "inspect", "compile", "build"} {
 				for _, format := range []string{"text", "json"} {
 					var out, errout bytes.Buffer
-					if exit := Run([]string{command, "--root", root, "--offline", "--format=" + format}, &out, &errout); exit != 7 {
+
+					args := []string{command, "--root", root, "--offline", "--format=" + format}
+					if exit := Run(t.Context(), args, &out, &errout); exit != 7 {
 						t.Fatalf("%s %s exit=%d: %s %s", command, format, exit, &out, &errout)
 					}
 

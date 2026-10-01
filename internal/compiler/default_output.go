@@ -15,8 +15,8 @@ import (
 	"golang.org/x/mod/module"
 )
 
-func defaultBuildOutput(ctx context.Context, dir string, env, flags, targets []string, goos string) (string, error) {
-	args := append([]string{"list", "-mod=readonly", "-json"}, flags...)
+func defaultBuildOutput(ctx context.Context, dir string, env, flags, targets []string, goos, moduleMode string) (string, error) {
+	args := append([]string{"list", "-mod=" + moduleMode, "-json"}, flags...)
 	args = append(args, targets...)
 	command := exec.CommandContext(ctx, "go", args...)
 	command.Dir, command.Env = dir, env

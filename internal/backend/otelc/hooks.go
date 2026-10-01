@@ -10,6 +10,8 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+var errUnsupportedVariadicHookElement = errors.New("variadic target has no supported hook element type")
+
 // RenderHooks generates lifecycle hooks for the exact bindings from RenderRules.
 // It returns source bytes only; writing artifacts and building are separate phases.
 func RenderHooks(version, runtimeVersion string, code *model.CodeModel, plan model.ResolvedPlan, hookImportPath string) ([]byte, error) {
@@ -82,12 +84,23 @@ func RenderHooks(version, runtimeVersion string, code *model.CodeModel, plan mod
 			offset = 1
 		}
 
+		beforeParameters := strings.Repeat(", _ any", parameters)
+
+		if symbol.Variadic {
+			element, supported := variadicElementType(symbol)
+			if !supported {
+				return nil, errUnsupportedVariadicHookElement
+			}
+
+			beforeParameters = strings.Repeat(", _ any", parameters-1) + ", _ ..." + element
+		}
+
 		for _, accessor := range accessors[binding.Symbol] {
 			resultType, _ := scalarType(accessor.Kind)
 			fmt.Fprintf(&source, "\n//go:linkname read_%s %s.%s\nfunc read_%s(any) (%s, bool)\n", accessor.Function, symbol.PackageImportPath, accessor.Function, accessor.Function, resultType)
 		}
 
-		fmt.Fprintf(&source, "\nfunc %s(h hook.HookContext%s) {\n", binding.Before, strings.Repeat(", _ any", parameters))
+		fmt.Fprintf(&source, "\nfunc %s(h hook.HookContext%s) {\n", binding.Before, beforeParameters)
 
 		if target.ContextStrategy.Strategy == model.ContextStrategyArgument {
 			fmt.Fprintf(&source, "ctx, _ := h.GetParam(%d).(context.Context)\nif ctx == nil { ctx = context.Background() }\n", target.ContextStrategy.Index+offset)

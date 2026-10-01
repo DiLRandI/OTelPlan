@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -20,6 +21,14 @@ import (
 
 const APIVersion = "otelplan.io/cli/v1alpha1"
 
+const (
+	initCommandName = "init"
+	jsonFormat      = "json"
+	exitUsage       = 2
+	commandUsage    = "usage: otelplan [global flags] " +
+		"<init|scan|inspect|explain|validate|lock|diff|compile|build|version> [arguments]"
+)
+
 var Version = "dev"
 
 type response struct {
@@ -33,14 +42,24 @@ type response struct {
 type options struct {
 	output                                                  string
 	outputSet, clean                                        bool
-	strict, offline, check, dryRun, allowLargePlan          bool
+	strict, offline, check, dryRun, allowLargePlan, force   bool
+	interactive, nonInteractive                             bool
 	configSet                                               bool
 	callGraph                                               bool
 	root, config, format                                    string
 	quiet, verbose, noColor, dependencies, interfaces, help bool
 }
 
-func Run(args []string, stdout, stderr io.Writer) int {
+func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	return run(ctx, args, nil, stdout, stderr)
+}
+
+// RunWithInput runs the CLI with explicit input for interactive commands.
+func RunWithInput(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	return run(ctx, args, stdin, stdout, stderr)
+}
+
+func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	opts, positionals, err := parse(args)
 	if err != nil {
 		command := ""
@@ -56,7 +75,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if len(positionals) == 0 {
-		return usageError(opts, "", "usage: otelplan [global flags] <scan|inspect|explain|validate|lock|diff|compile|build|version> [arguments]", stdout, stderr)
+		return usageError(opts, "", commandUsage, stdout, stderr)
 	}
 
 	command := positionals[0]
@@ -94,8 +113,28 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return fail(2, model.CodeInvalidPolicy, "--output must not be empty")
 	}
 
-	if (opts.outputSet || opts.clean) && command != "compile" {
-		return fail(2, model.CodeInvalidPolicy, "--output and --clean are supported by compile")
+	if opts.outputSet && command != "compile" && command != initCommandName {
+		return fail(exitUsage, model.CodeInvalidPolicy, "--output is supported by init and compile")
+	}
+
+	if opts.clean && command != "compile" {
+		return fail(exitUsage, model.CodeInvalidPolicy, "--clean is supported by compile")
+	}
+
+	if (opts.force || opts.interactive || opts.nonInteractive) && command != initCommandName {
+		return fail(exitUsage, model.CodeInvalidPolicy, "--force, --interactive, and --non-interactive are supported by init")
+	}
+
+	if opts.interactive && opts.nonInteractive {
+		return fail(exitUsage, model.CodeInvalidPolicy, "cannot combine --interactive and --non-interactive")
+	}
+
+	if opts.interactive && opts.format == jsonFormat {
+		return fail(exitUsage, model.CodeInvalidPolicy, "--interactive requires text output")
+	}
+
+	if opts.interactive && stdin == nil {
+		return fail(exitUsage, model.CodeInvalidPolicy, "--interactive requires an input stream")
 	}
 
 	if opts.verbose {
@@ -118,7 +157,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			return fail(2, model.CodeInvalidPolicy, "help takes no positional arguments")
 		}
 
-		output.Data = "usage: otelplan [--root path] [--config path] [--format text|json] <scan|inspect|explain|validate|lock|diff|compile|build|version>\nscan [packages...] lists Go symbols; inspect resolves policy; explain <symbol> shows rule decisions"
+		output.Data = commandUsage + "\ninit [packages...] writes a starter policy; " +
+			"scan [packages...] lists Go symbols; inspect resolves policy; " +
+			"explain <symbol> shows rule decisions"
 	case "version":
 		if len(rest) > 0 {
 			return fail(2, model.CodeInvalidPolicy, "version takes no positional arguments")
@@ -126,7 +167,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 		output.Data = map[string]string{"otelplan": Version, "go": runtime.Version()}
 	case "scan":
-		inventory, err := discovery.Load(discovery.Options{
+		inventory, err := discovery.LoadContext(ctx, discovery.Options{
 			Root: opts.root, Patterns: rest, IncludeDependencies: opts.dependencies,
 			CallGraph: opts.callGraph, Offline: opts.offline,
 		})
@@ -135,6 +176,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		}
 
 		output.Data = inventory
+	case initCommandName:
+		var diagnostics model.DiagnosticErrorList
+
+		output.Data, exitCode, diagnostics = initCommand(ctx, opts, rest, stdin, stderr)
+		output.Diagnostics = append(output.Diagnostics, diagnostics...)
+		output.OK = exitCode == 0
 	case "inspect", "explain", "validate", "lock", "diff", "compile", "build":
 		if command == "explain" && len(rest) != 1 {
 			return fail(2, model.CodeInvalidPolicy, "explain requires one canonical symbol")
@@ -179,7 +226,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			return 3
 		}
 
-		inventory, err := discovery.Load(discovery.Options{Root: opts.root, Patterns: p.Project.Packages, BuildFlags: buildArgs.AnalysisFlags, BuildTags: p.Project.BuildTags, IncludeTests: p.Project.IncludeTests, IncludeDependencies: p.Project.IncludeDependencies, Offline: opts.offline})
+		inventory, err := discovery.LoadContext(ctx, discovery.Options{Root: opts.root, Patterns: p.Project.Packages, BuildFlags: buildArgs.AnalysisFlags, BuildTags: p.Project.BuildTags, IncludeTests: p.Project.IncludeTests, IncludeDependencies: p.Project.IncludeDependencies, Offline: opts.offline})
 		if err != nil {
 			return fail(4, model.CodeUnresolvedSymbol, err.Error())
 		}
@@ -222,9 +269,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 			switch command {
 			case "build":
-				output.Data, exitCode, diags = buildCommand(opts, buildArgs, p, inventory, result.Plan)
+				output.Data, exitCode, diags = buildCommand(ctx, opts, buildArgs, p, inventory, result.Plan)
 			case "compile":
-				output.Data, exitCode, diags = compileCommand(opts, p, inventory, result.Plan)
+				output.Data, exitCode, diags = compileCommand(ctx, opts, p, inventory, result.Plan)
 			default:
 				output.Data, exitCode, diags = lockCommand(command, opts, p, inventory, result.Plan)
 			}
@@ -252,6 +299,9 @@ func parse(args []string) (options, []string, error) {
 	flags.SetOutput(io.Discard)
 	flags.StringVar(&opts.output, "output", ".otelplan/build", "artifact output relative to root")
 	flags.BoolVar(&opts.clean, "clean", false, "replace verified artifact output")
+	flags.BoolVar(&opts.force, "force", false, "replace an existing starter policy")
+	flags.BoolVar(&opts.interactive, "interactive", false, "review starter suggestions one by one")
+	flags.BoolVar(&opts.nonInteractive, "non-interactive", false, "generate a starter policy without prompts")
 	flags.StringVar(&opts.root, "root", ".", "project root")
 	flags.StringVar(&opts.config, "config", "otelplan.yaml", "policy path relative to root")
 	flags.StringVar(&opts.format, "format", "text", "text or json")
@@ -333,7 +383,7 @@ func parse(args []string) (options, []string, error) {
 		return opts, positionals, usageErr
 	}
 
-	if opts.format != "text" && opts.format != "json" {
+	if opts.format != "text" && opts.format != jsonFormat {
 		return opts, positionals, errors.New("format must be text or json")
 	}
 
@@ -351,7 +401,7 @@ func parse(args []string) (options, []string, error) {
 }
 
 func usageError(opts options, command, message string, stdout, stderr io.Writer) int {
-	if opts.format != "json" {
+	if opts.format != jsonFormat {
 		if _, err := fmt.Fprintln(stderr, message); err != nil {
 			return 1
 		}
@@ -372,7 +422,7 @@ func usageError(opts options, command, message string, stdout, stderr io.Writer)
 }
 
 func emit(out io.Writer, opts options, reply response) error {
-	if opts.format == "json" {
+	if opts.format == jsonFormat {
 		encoder := json.NewEncoder(out)
 		encoder.SetIndent("", "  ")
 
@@ -456,6 +506,14 @@ func emit(out io.Writer, opts options, reply response) error {
 		if data.Path == "" && len(data.Files) == 0 {
 			fmt.Fprintln(&text, "build succeeded; no executable output")
 		}
+	case initSummary:
+		fmt.Fprintf(&text, "wrote %s with %d suggested rule(s)\n", data.Path, len(data.Suggestions))
+
+		for _, candidate := range data.Suggestions {
+			fmt.Fprintf(&text, "SUGGESTED %s confidence=%s score=%d\n",
+				candidate.SymbolID, candidate.Confidence, candidate.Score)
+		}
+
 	case compileSummary:
 		fmt.Fprintf(&text, "%s artifacts=%d\n", data.Path, data.Files)
 	case lockSummary:

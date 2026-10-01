@@ -24,12 +24,9 @@ type buildSummary struct {
 	Backend model.LockBackend `json:"backend"`
 }
 
-func buildCommand(opts options, args buildArguments, p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan) (any, int, model.DiagnosticErrorList) {
+func buildCommand(ctx context.Context, opts options, args buildArguments, p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan) (any, int, model.DiagnosticErrorList) {
 	fail := func(exit int, code model.Code, message string) (any, int, model.DiagnosticErrorList) {
 		return nil, exit, model.DiagnosticErrorList{{Severity: model.SeverityError, Code: code, Message: message}}
-	}
-	if code.EffectiveBuild.ModuleMode == "vendor" {
-		return fail(7, model.CodeBackendUnsupported, "vendor-mode build preparation is not implemented")
 	}
 
 	executable, err := exec.LookPath("otelc")
@@ -37,7 +34,7 @@ func buildCommand(opts options, args buildArguments, p *model.Policy, code *mode
 		return fail(7, model.CodeBackendUnsupported, "cannot find pinned otelc executable on PATH")
 	}
 
-	backend, err := otelc.VerifyExecutable(context.Background(), executable, p.Backend.Version)
+	backend, err := otelc.VerifyExecutable(ctx, executable, p.Backend.Version)
 	if err != nil {
 		return fail(7, model.CodeBackendVersionMismatch, "backend executable does not match pinned version")
 	}
@@ -56,7 +53,7 @@ func buildCommand(opts options, args buildArguments, p *model.Policy, code *mode
 		return fail(2, model.CodeInvalidPolicy, "build output must not replace Go source or module files")
 	}
 
-	built, err := compiler.BuildResolved(context.Background(), compiler.ResolvedBuildRequest{Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: Version, Env: os.Environ(), GoArgs: args.GoArgs, Offline: opts.offline, DefaultOutput: destination == "", DirectoryOutput: directoryOutput, Packages: args.Packages})
+	built, err := compiler.BuildResolved(ctx, compiler.ResolvedBuildRequest{Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: Version, Env: os.Environ(), GoArgs: args.GoArgs, Offline: opts.offline, DefaultOutput: destination == "", DirectoryOutput: directoryOutput, Packages: args.Packages})
 	if err != nil {
 		return fail(8, model.CodeCompilationFailed, "isolated backend build failed")
 	}

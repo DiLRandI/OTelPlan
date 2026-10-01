@@ -96,6 +96,11 @@ func BuildPrepared(ctx context.Context, request PreparedBuildRequest) error {
 	}
 
 	args := append([]string{"--rules", rules, "go", "build"}, buildFlags...)
+
+	if request.BuildEnvironment.ModuleMode == "vendor" {
+		args = append(args, "-mod=vendor")
+	}
+
 	args = append(args, request.GoArgs...)
 	command := exec.CommandContext(ctx, executable, args...)
 	command.Dir = request.ModuleDir

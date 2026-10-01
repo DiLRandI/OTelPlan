@@ -3,6 +3,7 @@ Build with `go build -o bin/otelplan ./cmd/otelplan`. Requires Go 1.27.
 Implemented commands:
 
 ```sh
+otelplan init --root /path/to/project --non-interactive
 otelplan scan --root /path/to/project ./... --format=json
 otelplan scan --root /path/to/project --calls ./...
 otelplan inspect --root /path/to/project
@@ -15,6 +16,8 @@ otelplan build --root /path/to/project -- -trimpath -o bin/api ./cmd/api
 otelplan explain --root /path/to/project 'example.com/app.(*Worker).Run'
 ```
 
+`init [packages...]` analyzes application symbols and writes `otelplan.yaml` with exact-symbol starter rules and the evidence for each suggestion. Review the policy before committing it. It does not capture arguments or results by default. Use `--output starter.yml` for another policy path or `--force` to replace an existing regular file. The default and `--non-interactive` modes do not prompt. Use `--interactive` with text output to accept or decline each suggestion before the policy is written; declining all suggestions leaves the project unchanged.
+
 `scan --calls` includes advisory calls and analysis limits in text or JSON output. Static edges identify a known callee; conservative edges are possible calls, not proof of runtime execution. This opt-in analysis does not select instrumentation targets.
 
 `inspect` and `explain` read `otelplan.yaml` relative to `--root`; override it with `--config`. JSON responses use `otelplan.io/cli/v1alpha1`. Exit codes distinguish usage (2), policy (3), project loading (4), and resolution (5) failures.
@@ -22,6 +25,8 @@ otelplan explain --root /path/to/project 'example.com/app.(*Worker).Run'
 `validate` checks policy, static safety, pinned backend capabilities, and an existing lockfile. It does not require the backend binary; compile/build verify that executable separately. Pin `backend.version` to `v1.1.0`.
 
 `lock --dry-run` previews without writing. `lock --check` and `diff --check` return 6 for drift. Plain `diff` reports drift with exit 0. Backend incompatibility returns 7. `--offline` disables Go dependency resolution and toolchain downloads. Constant values are redacted from inspection output; the lockfile preserves explicit policy constants.
+
+SIGINT or SIGTERM cancels active discovery, backend verification, generated-source compilation, and isolated builds.
 
 `compile` requires the pinned `otelc` executable on `PATH`. It resolves and validates the policy, verifies backend identity, compiles the generated Go package in temporary module state, and publishes rules, hooks, and a file-hash manifest. Output defaults to `.otelplan/build` relative to `--root`. Identical output is reused. Use `--clean` to replace changed output; edited generated files or unrelated files prevent replacement. Compilation failure returns 8; output failures return 1.
 

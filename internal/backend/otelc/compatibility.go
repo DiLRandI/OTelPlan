@@ -15,6 +15,11 @@ import (
 
 const SupportedVersion = "v1.1.0"
 
+const (
+	variadicBoolType   = "bool"
+	variadicStringType = "string"
+)
+
 func Identity(version string) (model.LockBackend, error) {
 	if version != SupportedVersion {
 		return model.LockBackend{}, fmt.Errorf("unsupported otelc version; expected %s", SupportedVersion)
@@ -52,7 +57,9 @@ func Check(version string, code *model.CodeModel, plan model.ResolvedPlan) model
 		}
 
 		if symbol.Variadic {
-			add("variadic targets require typed hook signature generation")
+			if _, supported := variadicElementType(symbol); !supported {
+				add("variadic targets require a built-in element type that generated hooks can name safely")
+			}
 		}
 
 		if !symbol.HasBody {
@@ -90,6 +97,26 @@ func Check(version string, code *model.CodeModel, plan model.ResolvedPlan) model
 	}
 
 	return diags
+}
+
+func variadicElementType(symbol *model.Symbol) (string, bool) {
+	if !symbol.Variadic || len(symbol.Parameters) == 0 {
+		return "", false
+	}
+
+	element, ok := strings.CutPrefix(symbol.Parameters[len(symbol.Parameters)-1].Type, "[]")
+	if !ok {
+		return "", false
+	}
+
+	switch element {
+	case "any", variadicBoolType, "byte", "complex64", "complex128", "error", "float32", "float64",
+		"int", "int8", "int16", "int32", "int64", "interface{}", "rune", variadicStringType, "uint",
+		"uint8", "uint16", "uint32", "uint64", "uintptr":
+		return element, true
+	default:
+		return "", false
+	}
 }
 
 func VerifyExecutable(ctx context.Context, executable, version string) (model.LockBackend, error) {

@@ -3,6 +3,7 @@ package compiler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,10 +45,6 @@ func BuildResolved(ctx context.Context, request ResolvedBuildRequest) (BuildResu
 
 	if request.Code == nil {
 		return BuildResult{}, errors.New("build requires analysis")
-	}
-
-	if request.Code.EffectiveBuild.ModuleMode == "vendor" {
-		return BuildResult{}, errors.New("vendored builds require isolated vendor materialization")
 	}
 
 	if err := ValidateBuildArguments(request.GoArgs, request.Code.EffectiveBuild); err != nil {
@@ -129,14 +126,21 @@ func BuildResolved(ctx context.Context, request ResolvedBuildRequest) (BuildResu
 		env = append(env, "GOPROXY=off", "GONOPROXY=none", "GOSUMDB=off")
 	}
 
+	if request.Code.EffectiveBuild.ModuleMode == "vendor" {
+		originalVendor := filepath.Join(workspaceRequest.OriginalWorkspaceDir, "vendor")
+		if err := materializeVendorWorkspace(ctx, prepared, originalVendor, env); err != nil {
+			return BuildResult{}, err
+		}
+	}
+
 	runtimeSelection, err := ReadModuleSelection(ctx, runtime.Dir, append(append([]string(nil), env...), "GOWORK=off"))
 	if err != nil {
-		return BuildResult{}, err
+		return BuildResult{}, fmt.Errorf("read generated runtime module selection: %w", err)
 	}
 
 	applicationModules, err := applicationModuleSelection(ctx, prepared, copiedDir, env)
 	if err != nil {
-		return BuildResult{}, err
+		return BuildResult{}, fmt.Errorf("read isolated application module selection: %w", err)
 	}
 
 	if err := CheckModuleSelection(request.Code.Modules, applicationModules, prepared.Relocations); err != nil {
@@ -159,7 +163,7 @@ func BuildResolved(ctx context.Context, request ResolvedBuildRequest) (BuildResu
 			return BuildResult{}, err
 		}
 
-		defaultName, err = defaultBuildOutput(ctx, copiedDir, append(append([]string(nil), env...), "GOWORK="+prepared.WorkspaceFile), buildFlags, targets, request.Code.EffectiveBuild.GOOS)
+		defaultName, err = defaultBuildOutput(ctx, copiedDir, append(append([]string(nil), env...), "GOWORK="+prepared.WorkspaceFile), buildFlags, targets, request.Code.EffectiveBuild.GOOS, request.Code.EffectiveBuild.ModuleMode)
 		if err != nil {
 			return BuildResult{}, err
 		}

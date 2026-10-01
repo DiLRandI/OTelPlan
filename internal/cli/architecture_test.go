@@ -357,7 +357,7 @@ func invokeArchitecture(t *testing.T, root string, offline bool, want int, args 
 
 	var output, stderr bytes.Buffer
 
-	code := Run(arguments, &output, &stderr)
+	code := Run(t.Context(), arguments, &output, &stderr)
 	if code != want {
 		t.Fatalf("%v exit=%d want=%d output=%s stderr=%s", args, code, want, &output, &stderr)
 	}

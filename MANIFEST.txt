@@ -1,6 +1,6 @@
 .gitignore
 AGENTS.md
-LICENSE_DECISION.md
+LICENSE
 Makefile
 README.md
 SOURCES.md

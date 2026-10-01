@@ -32,7 +32,7 @@ func TestCLIUsageContracts(t *testing.T) {
 
 				var out, errout bytes.Buffer
 
-				if code := Run(args, &out, &errout); code != 2 {
+				if code := Run(t.Context(), args, &out, &errout); code != 2 {
 					t.Fatalf("usage exit=%d output=%s stderr=%s", code, &out, &errout)
 				}
 
@@ -60,7 +60,7 @@ func TestCLIUsageContracts(t *testing.T) {
 func TestJSONFormatAfterInvalidFlag(t *testing.T) {
 	for _, args := range [][]string{{"--unknown", "lock", "--format=json"}, {"lock", "--strict=invalid", "--format", "json"}} {
 		var out, errout bytes.Buffer
-		if code := Run(args, &out, &errout); code != 2 {
+		if code := Run(t.Context(), args, &out, &errout); code != 2 {
 			t.Fatalf("exit=%d", code)
 		}
 
@@ -84,7 +84,7 @@ func TestDiffCheckFailureHasDiagnostic(t *testing.T) {
 
 func TestUsageJSONOutputFailure(t *testing.T) {
 	var stderr bytes.Buffer
-	if got := Run([]string{"--format=json", "--unknown"}, failingWriter{}, &stderr); got != 1 {
+	if got := Run(t.Context(), []string{"--format=json", "--unknown"}, failingWriter{}, &stderr); got != 1 {
 		t.Fatalf("write failure exit=%d", got)
 	}
 }
@@ -94,7 +94,7 @@ func TestDiffCheckTextDiagnostic(t *testing.T) {
 
 	var out, errout bytes.Buffer
 
-	if got := Run([]string{"diff", "--check", "--root", root, "--offline"}, &out, &errout); got != 6 {
+	if got := Run(t.Context(), []string{"diff", "--check", "--root", root, "--offline"}, &out, &errout); got != 6 {
 		t.Fatalf("exit=%d output=%s stderr=%s", got, &out, &errout)
 	}
 
@@ -105,7 +105,7 @@ func TestDiffCheckTextDiagnostic(t *testing.T) {
 
 func TestUsageTextOutputFailure(t *testing.T) {
 	var stdout bytes.Buffer
-	if got := Run([]string{"--unknown"}, &stdout, failingWriter{}); got != 1 {
+	if got := Run(t.Context(), []string{"--unknown"}, &stdout, failingWriter{}); got != 1 {
 		t.Fatalf("diagnostic write failure exit=%d", got)
 	}
 }

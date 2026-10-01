@@ -17,7 +17,7 @@ type compileSummary struct {
 	Backend model.LockBackend `json:"backend"`
 }
 
-func compileCommand(opts options, p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan) (any, int, model.DiagnosticErrorList) {
+func compileCommand(ctx context.Context, opts options, p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan) (any, int, model.DiagnosticErrorList) {
 	fail := func(exit int, message string) (any, int, model.DiagnosticErrorList) {
 		code := model.CodeBackendUnsupported
 		if exit == 8 {
@@ -36,7 +36,7 @@ func compileCommand(opts options, p *model.Policy, code *model.CodeModel, plan m
 		return fail(7, "cannot find pinned otelc executable on PATH")
 	}
 
-	backend, err := otelc.VerifyExecutable(context.Background(), executable, p.Backend.Version)
+	backend, err := otelc.VerifyExecutable(ctx, executable, p.Backend.Version)
 	if err != nil {
 		return fail(7, "backend executable does not match the pinned version")
 	}
@@ -59,7 +59,7 @@ func compileCommand(opts options, p *model.Policy, code *model.CodeModel, plan m
 	}
 
 	args := append([]string{"test", "-mod=readonly"}, buildFlags...)
-	command := exec.Command("go", append(args, "./...")...)
+	command := exec.CommandContext(ctx, "go", append(args, "./...")...)
 	command.Dir = staged.Dir
 
 	command.Env = append(env, "GOWORK=off")

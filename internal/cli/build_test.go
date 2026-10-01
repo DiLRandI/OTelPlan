@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DiLRandI/OTelPlan/internal/compiler"
@@ -122,7 +123,7 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 		}
 
 		var out, errout bytes.Buffer
-		if exit := Run([]string{"build", "--root", root, "--format=json", "--offline", "--", "-buildvcs=false", "-o", argument, ".", "./cmd/second"}, &out, &errout); exit != 0 {
+		if exit := Run(t.Context(), []string{"build", "--root", root, "--format=json", "--offline", "--", "-buildvcs=false", "-o", argument, ".", "./cmd/second"}, &out, &errout); exit != 0 {
 			t.Fatalf("directory build exit=%d: %s %s", exit, &out, &errout)
 		}
 
@@ -182,7 +183,7 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 			out.Reset()
 			errout.Reset()
 
-			if exit := Run([]string{"build", "--root", root, "--format=json", "--offline", "--", "-buildvcs=false", "-o", argument, ".", "./cmd/second"}, &out, &errout); exit != 1 {
+			if exit := Run(t.Context(), []string{"build", "--root", root, "--format=json", "--offline", "--", "-buildvcs=false", "-o", argument, ".", "./cmd/second"}, &out, &errout); exit != 1 {
 				t.Fatalf("invalid destination exit=%d: %s", exit, &out)
 			}
 
@@ -200,7 +201,7 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 	}
 
 	var guarded, guardErr bytes.Buffer
-	if exit := Run([]string{"build", "--root", root, "--format=json", "--", "-o", "go.mod", "."}, &guarded, &guardErr); exit != 2 {
+	if exit := Run(t.Context(), []string{"build", "--root", root, "--format=json", "--", "-o", "go.mod", "."}, &guarded, &guardErr); exit != 2 {
 		t.Fatalf("source output exit=%d: %s", exit, &guarded)
 	}
 
@@ -217,7 +218,7 @@ func TestBuildCLIUsage(t *testing.T) {
 		var out, errout bytes.Buffer
 
 		args = append([]string{"--format=json"}, args...)
-		if code := Run(args, &out, &errout); code != 2 {
+		if code := Run(t.Context(), args, &out, &errout); code != 2 {
 			t.Fatalf("usage exit=%d: %s", code, &out)
 		}
 
@@ -242,7 +243,7 @@ func TestBuildCLILibraryWithoutOutput(t *testing.T) {
 
 	var out, errout bytes.Buffer
 
-	if exit := Run([]string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "."}, &out, &errout); exit != 0 {
+	if exit := Run(t.Context(), []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "."}, &out, &errout); exit != 0 {
 		t.Fatalf("library build exit=%d: %s %s", exit, &out, &errout)
 	}
 
@@ -317,7 +318,7 @@ func TestBuildCLIFromWorkspaceRoot(t *testing.T) {
 	}
 
 	var out, errout bytes.Buffer
-	if exit := Run([]string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "./app"}, &out, &errout); exit != 0 {
+	if exit := Run(t.Context(), []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "./app"}, &out, &errout); exit != 0 {
 		t.Fatalf("workspace build exit=%d: %s %s", exit, &out, &errout)
 	}
 
@@ -347,7 +348,7 @@ func TestBuildCLIFromWorkspaceRoot(t *testing.T) {
 	out.Reset()
 	errout.Reset()
 
-	if exit := Run([]string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false"}, &out, &errout); exit == 0 {
+	if exit := Run(t.Context(), []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false"}, &out, &errout); exit == 0 {
 		t.Fatal("workspace build without target silently selected a module")
 	}
 
@@ -373,6 +374,222 @@ func TestBuildSummaryText(t *testing.T) {
 		err := emit(&out, options{format: "text"}, response{OK: true, Data: tc.data})
 		if err != nil || out.String() != tc.want {
 			t.Fatalf("output=%q, %v; want %q", out.String(), err, tc.want)
+		}
+	}
+}
+
+func TestVariadicBuiltinWithPinnedBackend(t *testing.T) {
+	executable := os.Getenv("OTELPLAN_OTELC")
+	if executable == "" {
+		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
+	}
+
+	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prepareOfflineIntegration(t)
+
+	fixture, err := filepath.Abs("../backend/otelc/testdata/accessors")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	root, err := compiler.CopySourceTree(t.Context(), fixture, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	original := prepareVariadicFixture(t, root)
+
+	var stdout, stderr bytes.Buffer
+
+	args := []string{"build", "--root", root, "--offline", "--format=json", "--",
+		"-trimpath", "-buildvcs=false", "-o", "bin/variadic", "."}
+	if exit := Run(t.Context(), args, &stdout, &stderr); exit != 0 {
+		t.Fatalf("variadic build exit=%d: %s %s", exit, &stdout, &stderr)
+	}
+
+	var reply struct {
+		OK   bool         `json:"ok"`
+		Data buildSummary `json:"data"`
+	}
+
+	err = json.Unmarshal(stdout.Bytes(), &reply)
+	if err != nil || !reply.OK || reply.Data.Path == "" {
+		t.Fatalf("invalid variadic build response: %s (%v)", &stdout, err)
+	}
+
+	command := exec.CommandContext(t.Context(), "./bin/variadic")
+	command.Dir = root
+
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("run variadic build: %v", err)
+	}
+
+	checkVariadicTrace(t, output)
+	checkVariadicSourceUnchanged(t, root, original)
+}
+
+func prepareVariadicFixture(t *testing.T, root string) map[string][]byte {
+	t.Helper()
+
+	directory := openIntegrationDirectory(t, root)
+	defer func() { _ = directory.Close() }()
+
+	data, err := directory.ReadFile("ops/ops.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data = append(data, []byte(`
+func Variadic(ctx context.Context, values ...int) (int, error) {
+	_, child := otel.Tracer("probe").Start(ctx, "variadic-child")
+	child.End()
+	total := 0
+	for _, value := range values { total += value }
+	return total, nil
+}
+
+func VariadicString(ctx context.Context, values ...string) error {
+	_, child := otel.Tracer("probe").Start(ctx, "string-child")
+	child.End()
+	if len(values) != 2 { return errors.New("string arguments changed") }
+	return nil
+}
+
+func VariadicAny(ctx context.Context, values ...any) error {
+	_, child := otel.Tracer("probe").Start(ctx, "any-child")
+	child.End()
+	if len(values) != 2 { return errors.New("any arguments changed") }
+	return nil
+}
+
+func VariadicError(ctx context.Context, values ...error) error {
+	_, child := otel.Tracer("probe").Start(ctx, "error-child")
+	child.End()
+	if len(values) != 1 || values[0] == nil { return errors.New("error arguments changed") }
+	return nil
+}
+
+func VariadicByte(ctx context.Context, values ...byte) error {
+	_, child := otel.Tracer("probe").Start(ctx, "byte-child")
+	child.End()
+	if len(values) != 2 || values[0] != 1 || values[1] != 2 { return errors.New("byte arguments changed") }
+	return nil
+}
+`)...)
+
+	err = directory.WriteFile("ops/ops.go", data, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mainSource, err := directory.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	replacement := `	if total, err := ops.Variadic(ctx, 1, 2, 3); err != nil || total != 6 {
+		panic("variadic behavior changed")
+	}
+	if err := ops.VariadicString(ctx, "a", "b"); err != nil { panic(err) }
+	if err := ops.VariadicAny(ctx, 1, "b"); err != nil { panic(err) }
+	if err := ops.VariadicError(ctx, context.Canceled); err != nil { panic(err) }
+	if err := ops.VariadicByte(ctx, 1, 2); err != nil { panic(err) }
+	root.End()`
+
+	modified := strings.Replace(string(mainSource), "\troot.End()", replacement, 1)
+	if modified == string(mainSource) {
+		t.Fatal("variadic fixture insertion point missing")
+	}
+
+	err = directory.WriteFile("main.go", []byte(modified), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	policy := []byte(`apiVersion: otelplan.io/v1alpha1
+kind: InstrumentationPlan
+backend: {name: otelc, version: v1.1.0}
+project: {packages: [./ops]}
+rules:
+- id: variadic
+  match: {symbols: [example.com/probe/ops.Variadic]}
+  span: {name: variadic}
+- id: variadic-string
+  match: {symbols: [example.com/probe/ops.VariadicString]}
+  span: {name: variadic-string}
+- id: variadic-any
+  match: {symbols: [example.com/probe/ops.VariadicAny]}
+  span: {name: variadic-any}
+- id: variadic-error
+  match: {symbols: [example.com/probe/ops.VariadicError]}
+  span: {name: variadic-error}
+- id: variadic-byte
+  match: {symbols: [example.com/probe/ops.VariadicByte]}
+  span: {name: variadic-byte}
+`)
+
+	err = directory.WriteFile("otelplan.yaml", policy, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return map[string][]byte{"ops/ops.go": data, "main.go": []byte(modified), "otelplan.yaml": policy}
+}
+
+func checkVariadicSourceUnchanged(t *testing.T, root string, original map[string][]byte) {
+	t.Helper()
+
+	directory := openIntegrationDirectory(t, root)
+	defer func() { _ = directory.Close() }()
+
+	for name, want := range original {
+		actual, err := directory.ReadFile(name)
+		if err != nil || !bytes.Equal(actual, want) {
+			t.Fatalf("variadic build changed source file %s: %v", name, err)
+		}
+	}
+}
+
+func checkVariadicTrace(t *testing.T, output []byte) {
+	t.Helper()
+
+	var trace struct {
+		Spans []struct {
+			Name   string `json:"Name"`
+			ID     string `json:"ID"`
+			Parent string `json:"Parent"`
+			Trace  string `json:"Trace"`
+		} `json:"Spans"`
+	}
+
+	err := json.Unmarshal(output, &trace)
+	if err != nil {
+		t.Fatalf("decode variadic trace: %v", err)
+	}
+
+	spans := make(map[string]struct{ ID, Parent, Trace string }, len(trace.Spans))
+	for _, span := range trace.Spans {
+		spans[span.Name] = struct{ ID, Parent, Trace string }{span.ID, span.Parent, span.Trace}
+	}
+
+	root := spans["root"]
+	if root.ID == "" {
+		t.Fatalf("root span missing: %s", output)
+	}
+
+	for _, target := range []struct{ operation, child string }{
+		{operation: "variadic", child: "variadic-child"},
+		{operation: "variadic-string", child: "string-child"},
+		{operation: "variadic-any", child: "any-child"},
+		{operation: "variadic-error", child: "error-child"},
+		{operation: "variadic-byte", child: "byte-child"},
+	} {
+		operation, child := spans[target.operation], spans[target.child]
+		if operation.ID == "" || child.ID == "" ||
+			operation.Parent != root.ID || child.Parent != operation.ID ||
+			operation.Trace != root.Trace || child.Trace != root.Trace {
+			t.Fatalf("variadic spans have incorrect parent or trace: %s", output)
 		}
 	}
 }

@@ -9,7 +9,43 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - run: make test
+
+  race:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - run: make test-race
+
+  vet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - run: make vet
+
+  lint:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -32,6 +68,18 @@ jobs:
           sha256sum --check --ignore-missing "$checksums"
           tar -xzf "$archive" "golangci-lint-${GOLANGCI_LINT_VERSION}-linux-amd64/golangci-lint"
           echo "$RUNNER_TEMP/golangci-lint-${GOLANGCI_LINT_VERSION}-linux-amd64" >> "$GITHUB_PATH"
+      - run: make lint GOLANGCI_LINT=golangci-lint
+
+  otelc-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
       - name: Check out pinned backend
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -42,6 +90,37 @@ jobs:
       - name: Build pinned backend
         working-directory: .ci-otelc
         run: go build -mod=readonly -trimpath -ldflags '-X go.opentelemetry.io/otelc/tool/util.Version=v1.1.0' -o "$RUNNER_TEMP/otelc" ./tool/cmd/otelc
-      - run: make check
+      - name: Test real backend
+        run: |
+          go test ./...
+          go test -race -timeout=20m ./...
         env:
           OTELPLAN_OTELC: ${{ runner.temp }}/otelc
+
+  quality-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - run: make test-gates
+
+  check:
+    if: always()
+    needs: [unit, race, vet, lint, otelc-e2e, quality-gates]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      UNIT_RESULT: ${{ needs.unit.result }}
+      RACE_RESULT: ${{ needs.race.result }}
+      VET_RESULT: ${{ needs.vet.result }}
+      LINT_RESULT: ${{ needs.lint.result }}
+      OTELC_RESULT: ${{ needs.otelc-e2e.result }}
+      QUALITY_GATES_RESULT: ${{ needs.quality-gates.result }}
+    steps:
+      - name: Require every quality gate
+        run: |
+          for result in "$UNIT_RESULT" "$RACE_RESULT" "$VET_RESULT" "$LINT_RESULT" "$OTELC_RESULT" "$QUALITY_GATES_RESULT"; do
+            test "$result" = success || exit 1
+          done

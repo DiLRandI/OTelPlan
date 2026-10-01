@@ -448,6 +448,34 @@ func Variadic(ctx context.Context, values ...int) (int, error) {
 	for _, value := range values { total += value }
 	return total, nil
 }
+
+func VariadicString(ctx context.Context, values ...string) error {
+	_, child := otel.Tracer("probe").Start(ctx, "string-child")
+	child.End()
+	if len(values) != 2 { return errors.New("string arguments changed") }
+	return nil
+}
+
+func VariadicAny(ctx context.Context, values ...any) error {
+	_, child := otel.Tracer("probe").Start(ctx, "any-child")
+	child.End()
+	if len(values) != 2 { return errors.New("any arguments changed") }
+	return nil
+}
+
+func VariadicError(ctx context.Context, values ...error) error {
+	_, child := otel.Tracer("probe").Start(ctx, "error-child")
+	child.End()
+	if len(values) != 1 || values[0] == nil { return errors.New("error arguments changed") }
+	return nil
+}
+
+func VariadicByte(ctx context.Context, values ...byte) error {
+	_, child := otel.Tracer("probe").Start(ctx, "byte-child")
+	child.End()
+	if len(values) != 2 || values[0] != 1 || values[1] != 2 { return errors.New("byte arguments changed") }
+	return nil
+}
 `)...)
 
 	err = directory.WriteFile("ops/ops.go", data, 0o600)
@@ -463,6 +491,10 @@ func Variadic(ctx context.Context, values ...int) (int, error) {
 	replacement := `	if total, err := ops.Variadic(ctx, 1, 2, 3); err != nil || total != 6 {
 		panic("variadic behavior changed")
 	}
+	if err := ops.VariadicString(ctx, "a", "b"); err != nil { panic(err) }
+	if err := ops.VariadicAny(ctx, 1, "b"); err != nil { panic(err) }
+	if err := ops.VariadicError(ctx, context.Canceled); err != nil { panic(err) }
+	if err := ops.VariadicByte(ctx, 1, 2); err != nil { panic(err) }
 	root.End()`
 
 	modified := strings.Replace(string(mainSource), "\troot.End()", replacement, 1)
@@ -483,6 +515,18 @@ rules:
 - id: variadic
   match: {symbols: [example.com/probe/ops.Variadic]}
   span: {name: variadic}
+- id: variadic-string
+  match: {symbols: [example.com/probe/ops.VariadicString]}
+  span: {name: variadic-string}
+- id: variadic-any
+  match: {symbols: [example.com/probe/ops.VariadicAny]}
+  span: {name: variadic-any}
+- id: variadic-error
+  match: {symbols: [example.com/probe/ops.VariadicError]}
+  span: {name: variadic-error}
+- id: variadic-byte
+  match: {symbols: [example.com/probe/ops.VariadicByte]}
+  span: {name: variadic-byte}
 `)
 
 	err = directory.WriteFile("otelplan.yaml", policy, 0o600)
@@ -529,10 +573,23 @@ func checkVariadicTrace(t *testing.T, output []byte) {
 		spans[span.Name] = struct{ ID, Parent, Trace string }{span.ID, span.Parent, span.Trace}
 	}
 
-	root, operation, child := spans["root"], spans["variadic"], spans["variadic-child"]
-	if root.ID == "" || operation.ID == "" || child.ID == "" ||
-		operation.Parent != root.ID || child.Parent != operation.ID ||
-		operation.Trace != root.Trace || child.Trace != root.Trace {
-		t.Fatalf("variadic spans have incorrect parent or trace: %s", output)
+	root := spans["root"]
+	if root.ID == "" {
+		t.Fatalf("root span missing: %s", output)
+	}
+
+	for _, target := range []struct{ operation, child string }{
+		{operation: "variadic", child: "variadic-child"},
+		{operation: "variadic-string", child: "string-child"},
+		{operation: "variadic-any", child: "any-child"},
+		{operation: "variadic-error", child: "error-child"},
+		{operation: "variadic-byte", child: "byte-child"},
+	} {
+		operation, child := spans[target.operation], spans[target.child]
+		if operation.ID == "" || child.ID == "" ||
+			operation.Parent != root.ID || child.Parent != operation.ID ||
+			operation.Trace != root.Trace || child.Trace != root.Trace {
+			t.Fatalf("variadic spans have incorrect parent or trace: %s", output)
+		}
 	}
 }

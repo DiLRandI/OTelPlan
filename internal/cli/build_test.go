@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DiLRandI/OTelPlan/internal/compiler"
@@ -374,5 +375,164 @@ func TestBuildSummaryText(t *testing.T) {
 		if err != nil || out.String() != tc.want {
 			t.Fatalf("output=%q, %v; want %q", out.String(), err, tc.want)
 		}
+	}
+}
+
+func TestVariadicBuiltinWithPinnedBackend(t *testing.T) {
+	executable := os.Getenv("OTELPLAN_OTELC")
+	if executable == "" {
+		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
+	}
+
+	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prepareOfflineIntegration(t)
+
+	fixture, err := filepath.Abs("../backend/otelc/testdata/accessors")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	root, err := compiler.CopySourceTree(t.Context(), fixture, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	original := prepareVariadicFixture(t, root)
+
+	var stdout, stderr bytes.Buffer
+
+	args := []string{"build", "--root", root, "--offline", "--format=json", "--",
+		"-trimpath", "-buildvcs=false", "-o", "bin/variadic", "."}
+	if exit := Run(t.Context(), args, &stdout, &stderr); exit != 0 {
+		t.Fatalf("variadic build exit=%d: %s %s", exit, &stdout, &stderr)
+	}
+
+	var reply struct {
+		OK   bool         `json:"ok"`
+		Data buildSummary `json:"data"`
+	}
+
+	err = json.Unmarshal(stdout.Bytes(), &reply)
+	if err != nil || !reply.OK || reply.Data.Path == "" {
+		t.Fatalf("invalid variadic build response: %s (%v)", &stdout, err)
+	}
+
+	command := exec.CommandContext(t.Context(), "./bin/variadic")
+	command.Dir = root
+
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("run variadic build: %v", err)
+	}
+
+	checkVariadicTrace(t, output)
+	checkVariadicSourceUnchanged(t, root, original)
+}
+
+func prepareVariadicFixture(t *testing.T, root string) map[string][]byte {
+	t.Helper()
+
+	directory := openIntegrationDirectory(t, root)
+	defer func() { _ = directory.Close() }()
+
+	data, err := directory.ReadFile("ops/ops.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data = append(data, []byte(`
+func Variadic(ctx context.Context, values ...int) (int, error) {
+	_, child := otel.Tracer("probe").Start(ctx, "variadic-child")
+	child.End()
+	total := 0
+	for _, value := range values { total += value }
+	return total, nil
+}
+`)...)
+
+	err = directory.WriteFile("ops/ops.go", data, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mainSource, err := directory.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	replacement := `	if total, err := ops.Variadic(ctx, 1, 2, 3); err != nil || total != 6 {
+		panic("variadic behavior changed")
+	}
+	root.End()`
+
+	modified := strings.Replace(string(mainSource), "\troot.End()", replacement, 1)
+	if modified == string(mainSource) {
+		t.Fatal("variadic fixture insertion point missing")
+	}
+
+	err = directory.WriteFile("main.go", []byte(modified), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	policy := []byte(`apiVersion: otelplan.io/v1alpha1
+kind: InstrumentationPlan
+backend: {name: otelc, version: v1.1.0}
+project: {packages: [./ops]}
+rules:
+- id: variadic
+  match: {symbols: [example.com/probe/ops.Variadic]}
+  span: {name: variadic}
+`)
+
+	err = directory.WriteFile("otelplan.yaml", policy, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return map[string][]byte{"ops/ops.go": data, "main.go": []byte(modified), "otelplan.yaml": policy}
+}
+
+func checkVariadicSourceUnchanged(t *testing.T, root string, original map[string][]byte) {
+	t.Helper()
+
+	directory := openIntegrationDirectory(t, root)
+	defer func() { _ = directory.Close() }()
+
+	for name, want := range original {
+		actual, err := directory.ReadFile(name)
+		if err != nil || !bytes.Equal(actual, want) {
+			t.Fatalf("variadic build changed source file %s: %v", name, err)
+		}
+	}
+}
+
+func checkVariadicTrace(t *testing.T, output []byte) {
+	t.Helper()
+
+	var trace struct {
+		Spans []struct {
+			Name   string `json:"Name"`
+			ID     string `json:"ID"`
+			Parent string `json:"Parent"`
+			Trace  string `json:"Trace"`
+		} `json:"Spans"`
+	}
+
+	err := json.Unmarshal(output, &trace)
+	if err != nil {
+		t.Fatalf("decode variadic trace: %v", err)
+	}
+
+	spans := make(map[string]struct{ ID, Parent, Trace string }, len(trace.Spans))
+	for _, span := range trace.Spans {
+		spans[span.Name] = struct{ ID, Parent, Trace string }{span.ID, span.Parent, span.Trace}
+	}
+
+	root, operation, child := spans["root"], spans["variadic"], spans["variadic-child"]
+	if root.ID == "" || operation.ID == "" || child.ID == "" ||
+		operation.Parent != root.ID || child.Parent != operation.ID ||
+		operation.Trace != root.Trace || child.Trace != root.Trace {
+		t.Fatalf("variadic spans have incorrect parent or trace: %s", output)
 	}
 }

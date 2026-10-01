@@ -80,6 +80,45 @@ func TestRenderHooksMatchesRuleBindingsAndSignatureIndexes(t *testing.T) {
 	}
 }
 
+func TestRenderHooksUsesTypedVariadicParameter(t *testing.T) {
+	t.Parallel()
+
+	code, plan := compatibilityFixture()
+	code.Symbols[0].Variadic = true
+	code.Symbols[0].Kind = model.SymbolFunction
+	code.Symbols[0].Name = "Run"
+	code.Symbols[0].PackageImportPath = "example.com/app"
+	code.Symbols[0].Parameters = append(code.Symbols[0].Parameters,
+		model.Parameter{Name: "values", Type: "[]int"})
+	code.Symbols[0].Signature = "func(context.Context, ...int) error"
+	plan.Targets[0].Signature = code.Symbols[0].Signature
+	plan.Targets[0].SpanName = "Run"
+
+	source, err := RenderHooks(SupportedVersion, "runtime", code, plan, hookImportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	file := parseGeneratedHooks(t, source)
+
+	_, bindings, err := RenderRules(SupportedVersion, code, plan, hookImportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	before := findFunction(t, file, bindings[0].Before)
+	parameter := before.Type.Params.List[len(before.Type.Params.List)-1]
+
+	ellipsis, ok := parameter.Type.(*ast.Ellipsis)
+	if !ok {
+		t.Fatalf("variadic hook parameter is not typed: %s", source)
+	}
+
+	if name, ok := ellipsis.Elt.(*ast.Ident); !ok || name.Name != "int" {
+		t.Fatalf("variadic hook has wrong element type: %s", source)
+	}
+}
+
 func TestRenderHooksUsesMethodContextOffsetAndStableResultIndexes(t *testing.T) {
 	code, plan := hookFixture()
 	method := &code.Symbols[1]

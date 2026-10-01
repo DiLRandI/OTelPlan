@@ -58,6 +58,42 @@ func TestRejectUnsupportedTargets(t *testing.T) {
 	}
 }
 
+func TestVariadicBuiltinTargetCompatibility(t *testing.T) {
+	t.Parallel()
+
+	for _, element := range []string{"int", "string", "bool", "error", "any", "interface{}"} {
+		t.Run(element, func(t *testing.T) {
+			t.Parallel()
+
+			code, plan := compatibilityFixture()
+			code.Symbols[0].Variadic = true
+			code.Symbols[0].Parameters = append(code.Symbols[0].Parameters,
+				model.Parameter{Name: "values", Type: "[]" + element})
+			code.Symbols[0].Signature = "func(context.Context, ..." + element + ") error"
+			plan.Targets[0].Signature = code.Symbols[0].Signature
+
+			if diagnostics := Check(SupportedVersion, code, plan); diagnostics.HasErrors() {
+				t.Fatalf("builtin variadic target rejected: %+v", diagnostics)
+			}
+		})
+	}
+}
+
+func TestVariadicApplicationTypeRemainsRejected(t *testing.T) {
+	t.Parallel()
+
+	code, plan := compatibilityFixture()
+	code.Symbols[0].Variadic = true
+	code.Symbols[0].Parameters = append(code.Symbols[0].Parameters,
+		model.Parameter{Name: "values", Type: "[]example.com/app.Item"})
+	code.Symbols[0].Signature = "func(context.Context, ...Item) error"
+	plan.Targets[0].Signature = code.Symbols[0].Signature
+
+	if diagnostics := Check(SupportedVersion, code, plan); !diagnostics.HasErrors() {
+		t.Fatal("application type variadic target accepted without package-local hook support")
+	}
+}
+
 func TestMissingExecutable(t *testing.T) {
 	if _, err := VerifyExecutable(t.Context(), "/missing/otelc", SupportedVersion); err == nil {
 		t.Fatal("missing executable accepted")

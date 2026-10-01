@@ -14,7 +14,12 @@ import (
 func TestUnsupportedBackendTargetsFailValidation(t *testing.T) {
 	for _, tc := range []struct{ name, source, message string }{
 		{"main", "package main\nimport \"context\"\nfunc Run(context.Context) error { return nil }\nfunc main(){}\n", "main package targets"},
-		{"variadic", "package app\nimport \"context\"\nfunc Run(context.Context, ...string) error { return nil }\n", "variadic targets"},
+		{
+			"variadic named type",
+			"package app\nimport \"context\"\ntype Value string\n" +
+				"func Run(context.Context, ...Value) error { return nil }\n",
+			"variadic targets",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, original := cliFixture(t)

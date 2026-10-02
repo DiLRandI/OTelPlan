@@ -5,13 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
+
+	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
 func cliFixture(t *testing.T) (string, map[string]string) {
@@ -233,6 +237,12 @@ func waitForBlockingGo(t *testing.T, ready string, finished <-chan int, stdout, 
 }
 
 func TestMain(m *testing.M) {
+	if os.Getenv("OTELPLAN_TEST_VERBOSE_BACKEND") == "1" {
+		_, _ = fmt.Fprintln(os.Stderr, "private-backend-stderr-token")
+
+		os.Exit(23)
+	}
+
 	if os.Getenv("OTELPLAN_TEST_BLOCKING_GO") == "1" {
 		err := os.WriteFile("ready", []byte("ready"), 0o600)
 		if err != nil {
@@ -244,6 +254,104 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(m.Run())
+}
+
+func TestVerboseBackendFailureRedactsSubprocessOutput(t *testing.T) {
+	root, _ := cliFixture(t)
+	backendDir := copyVerboseTestBackend(t)
+	t.Setenv("PATH", backendDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("OTELPLAN_TEST_VERBOSE_BACKEND", "1")
+
+	for _, format := range []string{"text", "json"} {
+		var stdout, stderr bytes.Buffer
+
+		args := []string{"compile", "--root", root, "--offline", "--verbose", "--format=" + format}
+		if exit := Run(t.Context(), args, &stdout, &stderr); exit != 7 {
+			t.Fatalf("backend failure exit=%d: %s %s", exit, &stdout, &stderr)
+		}
+
+		if strings.Contains(stdout.String()+stderr.String(), "private-backend-stderr-token") ||
+			!strings.Contains(stdout.String(), "subprocess exited with status 23") ||
+			!strings.Contains(stdout.String(), "verify pinned backend") {
+			t.Fatalf("unsafe or unhelpful verbose failure: %s %s", &stdout, &stderr)
+		}
+	}
+}
+
+func copyVerboseTestBackend(t *testing.T) string {
+	t.Helper()
+
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	source := openIntegrationDirectory(t, filepath.Dir(executable))
+
+	data, err := source.ReadFile(filepath.Base(executable))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	destination := openIntegrationDirectory(t, t.TempDir())
+
+	name := "otelc"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+
+	err = destination.WriteFile(name, data, 0o700)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return destination.Name()
+}
+
+func TestSafeDiagnosticCausesOmitSensitiveValues(t *testing.T) {
+	t.Parallel()
+
+	pathError := &os.PathError{Op: "private-operation", Path: "/private-path", Err: syscall.EACCES}
+	cause := fmt.Errorf("private-wrapper: %w", pathError)
+
+	actual := strings.Join(safeDiagnosticCauses(cause), " ")
+	if strings.Contains(actual, "private") || !strings.Contains(actual, "operation failed") {
+		t.Fatalf("unsafe cause chain: %s", actual)
+	}
+
+	cycle := new(cyclicDiagnosticError)
+
+	causes := safeDiagnosticCauses(cycle)
+	if len(causes) != maximumDiagnosticCauses || causes[len(causes)-1] != "additional causes omitted" {
+		t.Fatalf("cyclic chain was not bounded: %v", causes)
+	}
+}
+
+type cyclicDiagnosticError struct{}
+
+func TestVerboseBuildContextOmitsSensitiveConfiguration(t *testing.T) {
+	t.Parallel()
+
+	opts := new(options)
+	opts.details = new(diagnosticDetails)
+	build := new(model.BuildEnvironment)
+	build.GOOS, build.GOARCH, build.ModuleMode = "linux", "amd64", "readonly"
+	build.CGOCFLAGS, build.ModFile = "-DPRIVATE=private-token", "/private-path/go.mod"
+	build.CC = "private-compiler-command"
+	recordBuildContext(*opts, *build)
+
+	encoded, err := json.Marshal(opts.details)
+	if err != nil || bytes.Contains(encoded, []byte("private")) || !bytes.Contains(encoded, []byte("linux")) {
+		t.Fatalf("unsafe or missing build context: %s (%v)", encoded, err)
+	}
+}
+
+func (failure *cyclicDiagnosticError) Error() string {
+	return "private-error-token"
+}
+
+func (failure *cyclicDiagnosticError) Unwrap() error {
+	return failure
 }
 
 func TestInspectRejectsUnsafeCaptureWithoutPrintingConstant(t *testing.T) {

@@ -33,21 +33,29 @@ func compileCommand(ctx context.Context, opts options, p *model.Policy, code *mo
 
 	executable, err := exec.LookPath("otelc")
 	if err != nil {
+		recordFailure(opts, model.CodeBackendUnsupported, "find pinned backend", err)
+
 		return fail(7, "cannot find pinned otelc executable on PATH")
 	}
 
 	backend, err := otelc.VerifyExecutable(ctx, executable, p.Backend.Version)
 	if err != nil {
+		recordFailure(opts, model.CodeBackendUnsupported, "verify pinned backend", err)
+
 		return fail(7, "backend executable does not match the pinned version")
 	}
 
 	files, err := otelc.RenderBundle(backend, Version, code, plan, "otelplan.local/generated")
 	if err != nil {
+		recordFailure(opts, model.CodeBackendUnsupported, "render backend bundle", err)
+
 		return fail(7, err.Error())
 	}
 
 	staged, err := compiler.StageArtifacts("", files)
 	if err != nil {
+		recordFailure(opts, model.CodeArtifactOutput, "stage generated artifacts", err)
+
 		return fail(1, "cannot stage compiler artifacts")
 	}
 
@@ -55,6 +63,8 @@ func compileCommand(ctx context.Context, opts options, p *model.Policy, code *mo
 
 	env, buildFlags, err := compiler.RecordedBuildEnvironment(os.Environ(), code.EffectiveBuild)
 	if err != nil {
+		recordFailure(opts, model.CodeCompilationFailed, "restore analyzed build environment", err)
+
 		return fail(8, "cannot restore analyzed Go environment")
 	}
 
@@ -68,11 +78,17 @@ func compileCommand(ctx context.Context, opts options, p *model.Policy, code *mo
 		command.Env = append(command.Env, "GOPROXY=off", "GONOPROXY=none", "GOSUMDB=off", "GOTOOLCHAIN=local")
 	}
 
-	if err := command.Run(); err != nil {
+	err = command.Run()
+	if err != nil {
+		recordFailure(opts, model.CodeCompilationFailed, "compile generated runtime", err)
+
 		return fail(8, "generated source compilation failed")
 	}
 
-	if err := compiler.VerifyArtifacts(staged); err != nil {
+	err = compiler.VerifyArtifacts(staged)
+	if err != nil {
+		recordFailure(opts, model.CodeCompilationFailed, "verify generated artifacts", err)
+
 		return fail(8, "generated source verification changed artifacts")
 	}
 
@@ -83,6 +99,8 @@ func compileCommand(ctx context.Context, opts options, p *model.Policy, code *mo
 
 	published, err := compiler.PublishArtifacts(destination, files, opts.clean)
 	if err != nil {
+		recordFailure(opts, model.CodeArtifactOutput, "publish generated artifacts", err)
+
 		return fail(1, err.Error())
 	}
 

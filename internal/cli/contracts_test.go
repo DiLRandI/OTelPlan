@@ -24,7 +24,6 @@ func TestCLIUsageContracts(t *testing.T) {
 		{"interfaces applicability", []string{"lock", "--interfaces"}, "scan"},
 		{"strict applicability", []string{"scan", "--strict"}, "policy"},
 		{"config applicability", []string{"scan", "--config=unused.yaml"}, "policy"},
-		{"verbose unsupported", []string{"version", "--verbose"}, "not implemented"},
 	} {
 		for _, format := range []string{"text", "json"} {
 			t.Run(tc.name+"/"+format, func(t *testing.T) {

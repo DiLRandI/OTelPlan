@@ -123,7 +123,10 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 		}
 
 		var out, errout bytes.Buffer
-		if exit := Run(t.Context(), []string{"build", "--root", root, "--format=json", "--offline", "--", "-buildvcs=false", "-o", argument, ".", "./cmd/second"}, &out, &errout); exit != 0 {
+
+		buildArgs := []string{"build", "--root", root, "--format=json", "--offline", "--verbose", "--",
+			"-buildvcs=false", "-o", argument, ".", "./cmd/second"}
+		if exit := Run(t.Context(), buildArgs, &out, &errout); exit != 0 {
 			t.Fatalf("directory build exit=%d: %s %s", exit, &out, &errout)
 		}
 

@@ -48,46 +48,52 @@ type initSummary struct {
 func initCommand(ctx context.Context, opts options, patterns []string, stdin io.Reader,
 	prompts io.Writer,
 ) (any, int, model.DiagnosticErrorList) {
-	fail := func(exit int, code model.Code, message string) (any, int, model.DiagnosticErrorList) {
-		diagnostic := new(model.DiagnosticError)
-		diagnostic.Severity, diagnostic.Code, diagnostic.Message = model.SeverityError, code, message
-
-		return nil, exit, model.DiagnosticErrorList{*diagnostic}
-	}
-
 	path, err := starterPolicyPath(opts)
 	if err != nil {
-		return fail(exitUsage, model.CodeInvalidPolicy, err.Error())
+		recordFailure(opts, model.CodeInvalidPolicy, "resolve starter policy path", err)
+
+		return initFailure(exitUsage, model.CodeInvalidPolicy, err.Error())
 	}
 
 	err = checkStarterDestination(path, opts.force)
 	if err != nil {
-		return fail(1, model.CodeArtifactOutput, err.Error())
+		recordFailure(opts, model.CodeArtifactOutput, "inspect starter policy destination", err)
+
+		return initFailure(1, model.CodeArtifactOutput, err.Error())
 	}
 
 	patterns = normalizedStarterPatterns(patterns)
-	analysis := new(discovery.Options)
-	analysis.Root, analysis.Patterns = opts.root, patterns
-	analysis.CallGraph, analysis.Offline = true, opts.offline
 
-	code, err := discovery.LoadContext(ctx, *analysis)
+	code, err := loadStarterCode(ctx, opts, patterns)
 	if err != nil {
-		return fail(exitAnalysis, model.CodeUnresolvedSymbol, fmt.Sprintf("analyze project for starter policy: %v", err))
+		recordFailure(opts, model.CodeUnresolvedSymbol, "analyze starter candidates", err)
+
+		return initFailure(exitAnalysis, model.CodeUnresolvedSymbol, err.Error())
 	}
+
+	recordBuildContext(opts, code.EffectiveBuild)
 
 	selected := starterCandidates(code)
 	if opts.interactive {
 		selected, err = reviewStarterCandidates(ctx, stdin, prompts, selected)
 		if err != nil {
-			return fail(1, model.CodeArtifactOutput, err.Error())
+			recordFailure(opts, model.CodeArtifactOutput, "review starter candidates", err)
+
+			return initFailure(1, model.CodeArtifactOutput, err.Error())
 		}
 	}
 
 	if len(selected) == 0 {
-		return fail(exitValidation, model.CodeUnresolvedSymbol,
+		return initFailure(exitValidation, model.CodeUnresolvedSymbol,
 			"no starter candidates selected; inspect symbols and write an explicit policy")
 	}
 
+	return finishStarterPolicy(ctx, opts, path, code, patterns, selected)
+}
+
+func finishStarterPolicy(ctx context.Context, opts options, path string, code *model.CodeModel,
+	patterns []string, selected []suggest.Suggestion,
+) (any, int, model.DiagnosticErrorList) {
 	starter := starterPolicy(code, patterns, selected)
 
 	diagnostics, exit := validateStarterPolicy(starter, code, len(selected))
@@ -95,17 +101,41 @@ func initCommand(ctx context.Context, opts options, patterns []string, stdin io.
 		return nil, exit, diagnostics
 	}
 
-	err = ctx.Err()
+	err := ctx.Err()
 	if err != nil {
-		return fail(1, model.CodeArtifactOutput, fmt.Sprintf("starter policy generation canceled: %v", err))
+		recordFailure(opts, model.CodeArtifactOutput, "generate starter policy", err)
+
+		return initFailure(1, model.CodeArtifactOutput, fmt.Sprintf("starter policy generation canceled: %v", err))
 	}
 
 	err = writeStarter(starter, path, opts.force)
 	if err != nil {
-		return fail(1, model.CodeArtifactOutput, err.Error())
+		recordFailure(opts, model.CodeArtifactOutput, "write starter policy", err)
+
+		return initFailure(1, model.CodeArtifactOutput, err.Error())
 	}
 
 	return initSummary{Path: path, Suggestions: selected}, 0, diagnostics
+}
+
+func initFailure(exit int, code model.Code, message string) (any, int, model.DiagnosticErrorList) {
+	diagnostic := new(model.DiagnosticError)
+	diagnostic.Severity, diagnostic.Code, diagnostic.Message = model.SeverityError, code, message
+
+	return nil, exit, model.DiagnosticErrorList{*diagnostic}
+}
+
+func loadStarterCode(ctx context.Context, opts options, patterns []string) (*model.CodeModel, error) {
+	analysis := new(discovery.Options)
+	analysis.Root, analysis.Patterns = opts.root, patterns
+	analysis.CallGraph, analysis.Offline = true, opts.offline
+
+	code, err := discovery.LoadContext(ctx, *analysis)
+	if err != nil {
+		return nil, fmt.Errorf("analyze project for starter policy: %w", err)
+	}
+
+	return code, nil
 }
 
 func writeStarter(starter *model.Policy, path string, force bool) error {

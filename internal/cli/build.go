@@ -31,11 +31,15 @@ func buildCommand(ctx context.Context, opts options, args buildArguments, p *mod
 
 	executable, err := exec.LookPath("otelc")
 	if err != nil {
+		recordFailure(opts, model.CodeBackendUnsupported, "find pinned backend", err)
+
 		return fail(7, model.CodeBackendUnsupported, "cannot find pinned otelc executable on PATH")
 	}
 
 	backend, err := otelc.VerifyExecutable(ctx, executable, p.Backend.Version)
 	if err != nil {
+		recordFailure(opts, model.CodeBackendVersionMismatch, "verify pinned backend", err)
+
 		return fail(7, model.CodeBackendVersionMismatch, "backend executable does not match pinned version")
 	}
 
@@ -55,6 +59,8 @@ func buildCommand(ctx context.Context, opts options, args buildArguments, p *mod
 
 	built, err := compiler.BuildResolved(ctx, compiler.ResolvedBuildRequest{Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: Version, Env: os.Environ(), GoArgs: args.GoArgs, Offline: opts.offline, DefaultOutput: destination == "", DirectoryOutput: directoryOutput, Packages: args.Packages})
 	if err != nil {
+		recordFailure(opts, model.CodeCompilationFailed, "build isolated workspace", err)
+
 		return fail(8, model.CodeCompilationFailed, "isolated backend build failed")
 	}
 
@@ -74,6 +80,8 @@ func buildCommand(ctx context.Context, opts options, args buildArguments, p *mod
 
 		target, err = filepath.Abs(target)
 		if err != nil {
+			recordFailure(opts, model.CodeArtifactOutput, "resolve build output", err)
+
 			return fail(1, model.CodeArtifactOutput, "cannot resolve build output")
 		}
 
@@ -84,6 +92,8 @@ func buildCommand(ctx context.Context, opts options, args buildArguments, p *mod
 		if info, err := os.Lstat(target); err == nil && !info.Mode().IsRegular() {
 			return fail(1, model.CodeArtifactOutput, "build output cannot replace a directory or symlink")
 		} else if err != nil && !os.IsNotExist(err) {
+			recordFailure(opts, model.CodeArtifactOutput, "inspect build output", err)
+
 			return fail(1, model.CodeArtifactOutput, "cannot inspect build output")
 		}
 
@@ -93,6 +103,8 @@ func buildCommand(ctx context.Context, opts options, args buildArguments, p *mod
 	for i, artifact := range built.Files {
 		err := compiler.PublishBuildArtifact(artifact, destinations[i])
 		if err != nil {
+			recordFailure(opts, model.CodeArtifactOutput, "publish build output", err)
+
 			return fail(1, model.CodeArtifactOutput, "cannot publish verified build output")
 		}
 

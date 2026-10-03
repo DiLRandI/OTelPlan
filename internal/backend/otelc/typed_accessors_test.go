@@ -3,6 +3,7 @@ package otelc
 import (
 	"bytes"
 	"fmt"
+	"go/parser"
 	"math"
 	"os"
 	"os/exec"
@@ -15,6 +16,38 @@ import (
 	"github.com/DiLRandI/OTelPlan/internal/discovery"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
+
+func TestGenericAccessorTypeParameterDetection(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		expression string
+		uses       bool
+	}{
+		{expression: "T", uses: true},
+		{expression: "*Request[T]", uses: true},
+		{expression: "map[string][]T", uses: true},
+		{expression: "pkg.T", uses: false},
+		{expression: "struct{ T string; Value int }", uses: false},
+		{expression: "struct{ Value T }", uses: true},
+		{expression: "func(T int) string", uses: false},
+		{expression: "func(value int) T", uses: true},
+		{expression: "Request[int]", uses: false},
+	} {
+		t.Run(testCase.expression, func(t *testing.T) {
+			t.Parallel()
+
+			expression, err := parser.ParseExpr(testCase.expression)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if actual := expressionUsesTypeParameters(expression, map[string]bool{"T": true}); actual != testCase.uses {
+				t.Fatalf("type parameter detection=%t, want %t", actual, testCase.uses)
+			}
+		})
+	}
+}
 
 func TestTypedAccessorsCompileAndRun(t *testing.T) {
 	root, code, target := accessorFixture(t)

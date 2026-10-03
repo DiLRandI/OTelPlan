@@ -23,16 +23,22 @@ func lockCommand(command string, opts options, p *model.Policy, code *model.Code
 
 	graph, err := lockfile.GraphDigest(code)
 	if err != nil {
+		recordFailure(opts, model.CodeStaleLockfile, "fingerprint analyzed project", err)
+
 		return fail(4, err.Error())
 	}
 
 	identity, err := otelc.Identity(p.Backend.Version)
 	if err != nil {
+		recordFailure(opts, model.CodeStaleLockfile, "resolve pinned backend identity", err)
+
 		return fail(7, err.Error())
 	}
 
 	current, err := lockfile.Create(p, code, plan, identity, graph, nil)
 	if err != nil {
+		recordFailure(opts, model.CodeStaleLockfile, "construct resolution lock", err)
+
 		return fail(5, err.Error())
 	}
 
@@ -45,6 +51,8 @@ func lockCommand(command string, opts options, p *model.Policy, code *model.Code
 	exists := err == nil
 
 	if err != nil && !os.IsNotExist(err) {
+		recordFailure(opts, model.CodeStaleLockfile, "read resolution lock", err)
+
 		return fail(6, "cannot read lockfile")
 	}
 
@@ -52,6 +60,8 @@ func lockCommand(command string, opts options, p *model.Policy, code *model.Code
 		previous, err = lockfile.Parse(contents)
 		if err != nil {
 			if command != "lock" || opts.check {
+				recordFailure(opts, model.CodeStaleLockfile, "parse resolution lock", err)
+
 				return fail(6, "lockfile is invalid; regenerate it with otelplan lock")
 			}
 
@@ -86,12 +96,16 @@ func lockCommand(command string, opts options, p *model.Policy, code *model.Code
 
 		current, err = lockfile.RefreshResolution(previous, current)
 		if err != nil {
+			recordFailure(opts, model.CodeStaleLockfile, "refresh resolution lock", err)
+
 			return fail(6, err.Error())
 		}
 
 		if !opts.dryRun {
 			err := lockfile.Write(filename, current)
 			if err != nil {
+				recordFailure(opts, model.CodeStaleLockfile, "write resolution lock", err)
+
 				return fail(1, err.Error())
 			}
 		}

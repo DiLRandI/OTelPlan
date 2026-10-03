@@ -16,6 +16,33 @@ import (
 
 const hookImportPath = "example.com/app/hooks"
 
+func TestGenericRootHooksAvoidUnsupportedAPIs(t *testing.T) {
+	t.Parallel()
+
+	code, plan := genericRootFixture()
+	attribute := new(model.AttributePlan)
+	attribute.Key, attribute.From.Constant = "operation.kind", "generic"
+	attribute.Classification = model.ClassificationPublic
+	plan.Targets[0].Attributes = []model.AttributePlan{*attribute}
+
+	source, err := RenderHooks(SupportedVersion, "runtime", code, plan, hookImportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, forbidden := range []string{"GetParam(", "SetParam(", "GetReturnVal(", "SetReturnVal("} {
+		if strings.Contains(string(source), forbidden) {
+			t.Fatalf("generic hook uses an unsupported API: %s", source)
+		}
+	}
+
+	if !strings.Contains(string(source), "returned_1.(error)") || !strings.Contains(string(source), "span.RecordError") {
+		t.Fatalf("generic hook omitted direct returned-error recording: %s", source)
+	}
+
+	parseGeneratedHooks(t, source)
+}
+
 func TestRenderHooksDeterministicAndDoesNotMutatePlan(t *testing.T) {
 	code, plan := hookFixture()
 	original := append([]model.ResolvedTarget(nil), plan.Targets...)
@@ -270,7 +297,6 @@ func TestRenderHooksPropagatesRenderRulesValidation(t *testing.T) {
 	}{
 		{name: "invalid", change: func(c *model.CodeModel) { c.Symbols[0].Name = "bad-name" }},
 		{name: "mismatched", change: func(c *model.CodeModel) { c.Symbols[0].Name = "Other" }},
-		{name: "generic", change: func(c *model.CodeModel) { c.Symbols[0].Generics = &model.GenericInfo{TypeParams: []string{"T"}} }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

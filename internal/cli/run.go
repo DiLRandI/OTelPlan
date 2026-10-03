@@ -37,9 +37,11 @@ type response struct {
 	OK          bool                      `json:"ok"`
 	Diagnostics model.DiagnosticErrorList `json:"diagnostics"`
 	Data        any                       `json:"data,omitempty"`
+	Details     *diagnosticDetails        `json:"details,omitempty"`
 }
 
 type options struct {
+	details                                                 *diagnosticDetails
 	output                                                  string
 	outputSet, clean                                        bool
 	strict, offline, check, dryRun, allowLargePlan, force   bool
@@ -68,6 +70,10 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		}
 
 		return usageError(opts, command, err.Error(), stdout, stderr)
+	}
+
+	if opts.verbose {
+		opts.details = new(diagnosticDetails)
 	}
 
 	if opts.help {
@@ -137,10 +143,6 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return fail(exitUsage, model.CodeInvalidPolicy, "--interactive requires an input stream")
 	}
 
-	if opts.verbose {
-		return fail(2, model.CodeInvalidPolicy, "--verbose output is not implemented")
-	}
-
 	if opts.check && command != "lock" && command != "diff" {
 		return fail(2, model.CodeInvalidPolicy, "--check is supported by lock and diff")
 	}
@@ -172,9 +174,12 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 			CallGraph: opts.callGraph, Offline: opts.offline,
 		})
 		if err != nil {
+			recordFailure(opts, model.CodeUnresolvedSymbol, "analyze Go project", err)
+
 			return fail(4, model.CodeUnresolvedSymbol, err.Error())
 		}
 
+		recordBuildContext(opts, inventory.EffectiveBuild)
 		output.Data = inventory
 	case initCommandName:
 		var diagnostics model.DiagnosticErrorList
@@ -209,6 +214,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 
 		p, err := policy.Load(config)
 		if err != nil {
+			recordFailure(opts, model.CodeInvalidPolicy, "load policy", err)
+
 			return fail(3, model.CodeInvalidPolicy, "cannot read or parse policy at "+config)
 		}
 
@@ -228,9 +235,12 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 
 		inventory, err := discovery.LoadContext(ctx, discovery.Options{Root: opts.root, Patterns: p.Project.Packages, BuildFlags: buildArgs.AnalysisFlags, BuildTags: p.Project.BuildTags, IncludeTests: p.Project.IncludeTests, IncludeDependencies: p.Project.IncludeDependencies, Offline: opts.offline})
 		if err != nil {
+			recordFailure(opts, model.CodeUnresolvedSymbol, "analyze policy packages", err)
+
 			return fail(4, model.CodeUnresolvedSymbol, err.Error())
 		}
 
+		recordBuildContext(opts, inventory.EffectiveBuild)
 		result := resolve.Resolve(p, inventory)
 
 		output.Diagnostics = append(result.Diagnostics, validate.Safety(inventory, result.Plan, validate.Options{AllowLargePlan: opts.allowLargePlan})...)
@@ -313,7 +323,7 @@ func parse(args []string) (options, []string, error) {
 	flags.BoolVar(&opts.help, "help", false, "show usage")
 	flags.BoolVar(&opts.help, "h", false, "show usage")
 	flags.BoolVar(&opts.quiet, "quiet", false, "suppress informational text")
-	flags.BoolVar(&opts.verbose, "verbose", false, "include selection details")
+	flags.BoolVar(&opts.verbose, "verbose", false, "include safe error causes and build context")
 	flags.BoolVar(&opts.noColor, "no-color", false, "disable color")
 	flags.BoolVar(&opts.dependencies, "dependencies", false, "include dependency code in scan")
 	flags.BoolVar(&opts.callGraph, "calls", false, "include conservative advisory calls in scan")
@@ -422,6 +432,14 @@ func usageError(opts options, command, message string, stdout, stderr io.Writer)
 }
 
 func emit(out io.Writer, opts options, reply response) error {
+	if inventory, ok := reply.Data.(*model.CodeModel); ok {
+		reply.Data = previewInventory(inventory)
+	}
+
+	if opts.details != nil && (opts.details.Build != nil || len(opts.details.Failures) > 0) {
+		reply.Details = opts.details
+	}
+
 	if opts.format == jsonFormat {
 		encoder := json.NewEncoder(out)
 		encoder.SetIndent("", "  ")
@@ -433,6 +451,11 @@ func emit(out io.Writer, opts options, reply response) error {
 		if _, err := fmt.Fprintln(out, diag.Error()); err != nil {
 			return err
 		}
+	}
+
+	err := emitDiagnosticDetails(out, opts)
+	if err != nil {
+		return err
 	}
 
 	if opts.quiet {
@@ -526,7 +549,7 @@ func emit(out io.Writer, opts options, reply response) error {
 		fmt.Fprintf(&text, "otelplan %s\nGo %s\n", data["otelplan"], data["go"])
 	}
 
-	_, err := io.WriteString(out, text.String())
+	_, err = io.WriteString(out, text.String())
 
 	return err
 }

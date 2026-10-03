@@ -20,6 +20,8 @@ otelplan explain --root /path/to/project 'example.com/app.(*Worker).Run'
 
 `scan --calls` includes advisory calls and analysis limits in text or JSON output. Static edges identify a known callee; conservative edges are possible calls, not proof of runtime execution. This opt-in analysis does not select instrumentation targets.
 
+Scan JSON marks nonempty free-form CGO compiler flags and `CC`/`CXX` commands as `[redacted]`, since those values may contain credentials or other private configuration. The analyzer retains the original values internally for build fingerprinting and isolated builds. Symbol metadata and build target information remain available in scan output.
+
 `inspect` and `explain` read `otelplan.yaml` relative to `--root`; override it with `--config`. JSON responses use `otelplan.io/cli/v1alpha1`. Exit codes distinguish usage (2), policy (3), project loading (4), and resolution (5) failures.
 
 `validate` checks policy, static safety, pinned backend capabilities, and an existing lockfile. It does not require the backend binary; compile/build verify that executable separately. Pin `backend.version` to `v1.1.0`.
@@ -40,4 +42,6 @@ A lock refresh preserves existing build identity when resolution is unchanged. I
 
 With `--format=json`, usage errors also return a JSON envelope on stdout with `ok=false`, diagnostics, and exit code 2. Invalid flag values are not echoed. Output failures return 1. Text usage errors remain on stderr.
 
-`lock --check --dry-run` is rejected as contradictory. `--dependencies` and `--interfaces` apply to `scan`; `--config`, `--strict`, and `--allow-large-plan` apply to policy commands (`inspect`, `explain`, `validate`, `lock`, `diff`, `compile`, `build`). `--verbose` is rejected until verbose output is implemented. A stale `diff --check` returns 6 with both the diff and a diagnostic explaining the failure.
+`lock --check --dry-run` is rejected as contradictory. `--dependencies` and `--interfaces` apply to `scan`; `--config`, `--strict`, and `--allow-large-plan` apply to policy commands (`inspect`, `explain`, `validate`, `lock`, `diff`, `compile`, `build`). A stale `diff --check` returns 6 with both the diff and a diagnostic explaining the failure.
+
+`--verbose` adds the operation stage, safe underlying cause categories, subprocess exit status when available, and analyzed build target context. JSON responses include an optional `details` object; ordinary diagnostics and exit codes stay the same. Raw error messages, subprocess logs, paths from underlying errors, environment-variable values, and captured attribute values are withheld from these details. Unknown error text is reported as redacted. `--quiet` suppresses informational text while retaining diagnostic details for failures.

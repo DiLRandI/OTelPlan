@@ -25,7 +25,8 @@ func TestCompileCLI(t *testing.T) {
 	for _, format := range []string{"json", "text"} {
 		var out, errout bytes.Buffer
 
-		code := Run(t.Context(), []string{"compile", "--root", root, "--format", format, "--offline"}, &out, &errout)
+		code := Run(t.Context(), []string{"compile", "--root", root, "--format", format, "--offline", "--verbose"},
+			&out, &errout)
 		if code != 0 {
 			t.Fatalf("compile exit=%d: %s %s", code, &out, &errout)
 		}

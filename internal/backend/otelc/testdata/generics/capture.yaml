@@ -1,0 +1,36 @@
+apiVersion: otelplan.io/v1alpha1
+kind: InstrumentationPlan
+backend: {name: otelc, version: v1.1.0}
+project: {packages: [./ops]}
+defaults:
+  context: {mode: root}
+  errors: {record: true}
+rules:
+- id: capture
+  match:
+    symbols:
+    - example.com/genericprobe/ops.Capture
+    - example.com/genericprobe/ops.(Store).Capture
+  span: {name: generic.capture}
+  attributes:
+  - key: request.id
+    from: {argument: req.ID}
+    safety: {classification: public}
+  - key: request.count
+    from: {argument: req.Count}
+    safety: {classification: public}
+  - key: capture.enabled
+    from: {argument: enabled}
+    safety: {classification: public}
+  - key: result.message
+    from: {result: result.Message}
+    safety: {classification: public}
+  - key: result.empty
+    from: {result: result.Empty}
+    safety: {classification: public}
+  - key: result.big
+    from: {result: result.Big}
+    safety: {classification: public}
+  - key: result.nonfinite
+    from: {result: result.NonFinite}
+    safety: {classification: public}

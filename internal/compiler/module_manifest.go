@@ -8,11 +8,16 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
+var (
+	errRelativeOriginalModuleDirectory = errors.New("original module directory must be absolute")
+	errUncopiedLocalReplacement        = errors.New("local module replacement has no isolated copy")
+)
+
 // RelocateModuleManifest rewrites local replacement paths for a copied module.
 // Every local replacement must have a verified copy in relocations.
 func RelocateModuleManifest(data []byte, originalDir string, relocations map[string]string) ([]byte, error) {
 	if !filepath.IsAbs(originalDir) {
-		return nil, errors.New("original module directory must be absolute")
+		return nil, errRelativeOriginalModuleDirectory
 	}
 
 	file, err := modfile.Parse("go.mod", data, nil)
@@ -32,7 +37,7 @@ func RelocateModuleManifest(data []byte, originalDir string, relocations map[str
 
 		copied, ok := relocations[filepath.Clean(original)]
 		if !ok || !filepath.IsAbs(copied) {
-			return nil, errors.New("local module replacement has no isolated copy")
+			return nil, errUncopiedLocalReplacement
 		}
 
 		err := file.AddReplace(replacement.Old.Path, replacement.Old.Version, filepath.Clean(copied), "")

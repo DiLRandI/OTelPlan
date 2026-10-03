@@ -1,8 +1,8 @@
-# External Sources Used
+# External references
 
-Checked: 2026-09-05.
-
-These references informed the product boundary and backend assumptions. Re-check them before implementing the `otelc` adapter because upstream behavior can change.
+These sources informed the product boundary and implementation. Upstream main
+may differ from the pinned backend. See [the current backend reference](OTELC_BACKEND.md)
+for verified capabilities and limitations.
 
 ## OpenTelemetry Go compile-time instrumentation
 
@@ -57,10 +57,13 @@ These references informed the product boundary and backend assumptions. Re-check
 - Go release history  
   https://go.dev/doc/devel/release
 
-  At preparation time Go 1.27.1 (2026-09-01) was the current stable patch release in the newest Go release line.
+  The repository requires Go 1.27.x; use `go.mod` and local verification as the
+  authority for the supported toolchain.
 
 ## Important implementation rule
 
 External documentation is not an API guarantee.
 
-Before writing the backend adapter, pin a concrete `otelc` version and inspect its exact source, rule schema, CLI, hook API, and tests. Build compatibility tests against that pinned version.
+For any backend update, inspect its exact source, rule schema, CLI, hook API, and
+tests. Retain compatibility and real trace tests against the pin. OTelPlan
+currently uses v1.1.0 at `449ee08a682586adb177e4402845ed404565879f`.

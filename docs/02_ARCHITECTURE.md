@@ -8,9 +8,9 @@
                          +--------+---------+
                                   |
                                   v
-+-------------+          +--------+---------+
-| otelplan.yml|--------->| Project Analyzer |
-+------+------+          +--------+---------+
++--------------+         +--------+---------+
+| otelplan.yaml |-------->| Project Analyzer |
++------+-------+          +--------+---------+
        |                          |
        |                  normalized CodeModel
        |                          |
@@ -42,27 +42,27 @@
 
 ## 2. Package boundaries
 
-Suggested implementation packages:
+Current implementation packages:
 
 ```text
 cmd/otelplan
-internal/project
+internal/cli
 internal/discovery
+internal/suggest
 internal/policy
 internal/resolve
 internal/validate
-internal/inspect
 internal/lockfile
 internal/compiler
-internal/backend
 internal/backend/otelc
-internal/diagnostic
-internal/config
-internal/fs
 pkg/model
 ```
 
-Keep the public surface small. Most implementation packages should remain `internal`.
+Presentation and diagnostics are handled by the CLI and domain model rather than
+separate placeholder packages. The public Go model package currently supports
+internal cross-package contracts; it is not a stable SDK commitment. Public Go
+types require a demonstrated consumer need. Primary compatibility contracts are
+policy YAML, lockfiles, CLI JSON, and diagnostic codes.
 
 ## 3. Core domain models
 
@@ -119,18 +119,16 @@ type BackendCapabilities struct {
 }
 ```
 
-### Backend
+### Backend boundary
 
-```go
-type Backend interface {
-    Name() string
-    Version(ctx context.Context) (string, error)
-    Capabilities(ctx context.Context) (BackendCapabilities, error)
-    Validate(ctx context.Context, plan ResolvedPlan) []Diagnostic
-    Compile(ctx context.Context, plan ResolvedPlan, outDir string) (Artifacts, error)
-    Build(ctx context.Context, req BuildRequest) error
-}
-```
+The current adapter exposes pinned identity/capability validation and deterministic
+rule, hook, accessor, and bundle generation through `internal/backend/otelc`.
+`internal/compiler` owns artifact staging/publication, disposable module state,
+selection verification, and backend execution. It uses caller-owned contexts for
+long-running work. The backend boundary currently uses typed adapter functions
+rather than a public Go interface. Any future backend must preserve the same
+capability-validation and compiler ownership contracts. Policy loading/resolution
+does not import OTelC syntax.
 
 ## 4. Why backend isolation matters
 
@@ -181,8 +179,12 @@ ResolvedPlan -> backend capability check -> backend compiler -> generated artifa
 ### `build`
 
 ```text
-validate -> lock check -> compile -> backend build -> binary
+validate -> generate -> isolated module/backend verification -> backend build -> verify/publish binary
 ```
+
+Build does not check or refresh `otelplan.lock`. Enforce `lock --check` explicitly
+in CI before building. Compile publishes an independently verified artifact
+manifest. See [lock ownership](09_LOCKFILE_REPRODUCIBILITY.md).
 
 ## 6. No hidden mutation
 

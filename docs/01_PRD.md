@@ -1,5 +1,10 @@
 # Product Requirements Document
 
+This document defines the product requirements. The implemented CLI is described
+in [CLI.md](CLI.md), backend support in [OTELC_BACKEND.md](OTELC_BACKEND.md), and
+remaining release work in [the roadmap](13_ROADMAP.md). Requirements below are not
+claims that every acceptance gate is complete.
+
 ## 1. Product
 
 Name: **OTelPlan**
@@ -221,7 +226,9 @@ Allowed attribute sources:
 - symbol metadata;
 - error classification.
 
-Every attribute rule requires an explicit key.
+Every attribute rule requires an explicit key. Current attribute sources are
+constants and typed scalar argument/result paths; dedicated symbol-metadata and
+error-classification sources remain product goals.
 
 Never serialize whole objects by default.
 
@@ -317,7 +324,9 @@ OTelPlan's public policy schema must not expose raw `otelc` pointcut/advice synt
 
 ### FR-018 Dry-run
 
-All mutating/generating commands support `--dry-run` where meaningful.
+All mutating/generating commands must support `--dry-run` where meaningful.
+Currently the CLI supports this flag only for lock refresh; init/compile/build
+preview behavior remains a requirement to assess before stability.
 
 ### FR-019 JSON output
 
@@ -328,8 +337,8 @@ Commands must support `--format=json`.
 Diagnostics have stable codes, e.g.:
 
 ```text
-OTP1001 invalid-policy
-OTP2001 unresolved-symbol
+OTP1005 invalid-policy
+OTP1002 unresolved-symbol
 OTP3001 missing-context
 OTP4001 sensitive-attribute
 OTP5001 backend-unsupported

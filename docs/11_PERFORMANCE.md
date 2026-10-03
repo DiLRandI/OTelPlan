@@ -53,3 +53,17 @@ Very broad policies must trigger usability/cardinality warnings even if technica
 ## 5. Benchmark regression gate
 
 After a stable baseline exists, CI should fail on statistically meaningful regressions beyond an agreed threshold rather than an arbitrary initial threshold.
+
+## Current benchmarks
+
+```sh
+go test ./internal/discovery -run '^$' -bench 'BenchmarkLoadGeneratedSymbols|BenchmarkAnalysisCache' -benchmem
+go test ./internal/resolve -run '^$' -bench . -benchmem
+```
+
+`BenchmarkAnalysisCache` compares equivalent uncached and cached engine metadata
+for 100 functions importing context. Record the revision, Go version, platform,
+CPU, commands, and samples with any published result. The CLI does not yet opt
+into this cache; cache benchmark timings do not describe repeated CLI scan
+performance. Generated-hook runtime benchmarks and a representative performance
+report remain pending.

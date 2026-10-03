@@ -61,7 +61,10 @@ Search both:
 - telemetry key;
 - source field/path.
 
-Users may add deny patterns.
+The internal validator accepts supplemental deny patterns. The current policy
+schema and CLI do not expose a configurable denylist. Built-in checks cannot be
+disabled wholesale; sensitive captures require explicit per-attribute safety
+acknowledgment.
 
 ## 3. PII
 
@@ -138,18 +141,28 @@ Suggested defaults:
 > 2000 targets: require explicit --allow-large-plan
 ```
 
-These thresholds must be configurable.
+The internal validator accepts threshold overrides. The CLI exposes
+`--allow-large-plan` for the 2,000-target limit, with warnings retained. Arbitrary
+threshold configuration is not currently a policy/CLI feature.
 
 ## 9. Recursion
 
 Instrumenting recursive functions is allowed but can create deep traces.
-
-Detect direct recursion when visible and warn.
+Dedicated recursion warnings remain planned. Advisory call edges can help a
+human review recursion but are not an automatic safety diagnostic.
 
 ## 10. Double instrumentation
 
-Detect when a target appears to already use manual OpenTelemetry spans where statically recognizable.
+Dedicated manual-span/double-instrumentation detection remains planned.
+The current validator does not claim to detect existing `tracer.Start` calls or
+automatically suppress them. Review overlap with existing application tracing.
 
-Warn rather than automatically suppress unless policy says so.
+## Returned-error messages
 
-Do not claim perfect detection.
+When `errors.record` is enabled, generated hooks call OpenTelemetry `RecordError`
+with the application error. Its exception message can include the application's
+error text even though the status description is fixed to `operation failed`.
+This is distinct from CLI diagnostics and explicit argument/result attributes.
+Use `errors.record: false` for targets whose error messages may contain private
+data, or sanitize errors in the application. There is no runtime error-message
+redaction policy in the current schema.

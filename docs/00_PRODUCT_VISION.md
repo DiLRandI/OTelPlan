@@ -62,7 +62,7 @@ otelplan inspect
 $EDITOR otelplan.yaml
 otelplan validate
 otelplan lock
-otelplan build ./cmd/api
+otelplan build -- ./cmd/api
 ```
 
 The engineer sees exact spans before building, receives warnings about unsafe or broken selections, commits the policy and lockfile, and builds with no modifications to application `.go` files.

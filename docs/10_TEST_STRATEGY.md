@@ -147,14 +147,51 @@ The test must verify trace ID continuity and parent span IDs.
 - backend executable missing;
 - Go compile failure.
 
-## 6. Quality gates
+## 6. Authoritative quality gates
 
-Before merge:
-
-```bash
-go test ./...
-go test -race ./...
-go vet ./...
+```sh
+make test
+make test-race
+make vet
+make lint GOLANGCI_LINT=/path/to/golangci-lint
+make test-gates
 ```
 
-Add `golangci-lint` with a strong project configuration once implementation starts.
+`make check` runs all of these. The required linter version is v2.13.2. Tool
+absence, version mismatch, and real lint failures return nonzero. No broad
+suppression is an acceptable substitute for fixing a finding.
+
+GitHub Actions runs unit, race, vet, lint, pinned OTelC integration/E2E, and
+quality-gate tests as separate Linux jobs. The aggregate check requires every
+job to pass. macOS/Windows matrix coverage remains pending.
+
+## 7. Real pinned backend
+
+Build the exact backend using [these instructions](OTELC_BACKEND.md#build-the-pinned-backend).
+From OTelPlan:
+
+```sh
+OTELPLAN_OTELC=/absolute/path/to/otelc go test ./...
+OTELPLAN_OTELC=/absolute/path/to/otelc go test -race -timeout=20m ./...
+```
+
+Without `OTELPLAN_OTELC`, backend integration tests skip locally. A configured
+missing or incompatible executable fails. Do not treat skipped tests as trace
+E2E evidence.
+
+`TestArchitectureTracesWithPinnedBackend` tests package, feature, and hexagonal
+layouts in independent `cold-cache-online` and `prepared-cache-offline` scenarios.
+Each starts with a fresh test-owned module cache. Offline first proves discovery
+fails without dependencies, prepares pinned dependencies in disposable state,
+then retains `--offline` and rejects/counts HTTP(S) proxy requests throughout the
+workflow. This covers dependency resolution without depending on a developer's
+cache. It is not an operating-system network sandbox. See the
+[fixture instructions](../internal/cli/testdata/architectures/README.md).
+
+## 8. Documented upstream failures
+
+Generic receiver shapes affected by the pinned backend's missing type-argument
+inference retain expected failed-build tests with source/output safety assertions.
+Generic context replacement, unsupported variadic types, and main-package targets
+have validation regressions. Upstream issue closure does not imply that a fix is
+present in the pinned executable; see [backend limits](OTELC_BACKEND.md).

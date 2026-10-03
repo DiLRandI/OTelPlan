@@ -42,7 +42,7 @@ project:
 ```yaml
 backend:
   name: otelc
-  version: "PINNED_VERSION"
+  version: "v1.1.0"
 ```
 
 `version` must be exact for lock/build workflows.
@@ -64,7 +64,7 @@ defaults:
 Context modes:
 
 - `require`: skip/error if no context is available;
-- `root`: explicitly permit a root span;
+- `root`: permit a root fallback only when the declaration has no context argument;
 - future modes may be added only with clear backend semantics.
 
 ## Rules
@@ -208,13 +208,17 @@ attributes:
       argument: "payment.Method"
 ```
 
-Allowed value types should initially be conservative:
+Supported capture value types:
 
 - bool;
 - integer;
 - float;
 - string;
-- stringer only with explicit opt-in.
+- named primitive aliases whose underlying type is supported.
+
+Stringer conversion and object serialization are not implemented. Attribute
+sources currently support `argument`, `result`, and `constant`, with one source
+per mapping. Capture cannot be enabled wholesale through defaults.
 
 No automatic JSON encoding.
 

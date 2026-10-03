@@ -9,10 +9,18 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
+var (
+	errUnpreparedBuildModule          = errors.New("build directory has no prepared module")
+	errRelativePreparedBuildDirectory = errors.New("build directory must be absolute")
+	errMissingPreparedBuildDirectory  = errors.New("prepared build directory does not exist")
+	errOutsidePreparedApplication     = errors.New("build directory is not inside a prepared application module")
+	errMissingPreparedApplication     = errors.New("workspace has no prepared application module")
+)
+
 // BuildDirectory maps an original working directory into its prepared module.
 func (workspace PreparedWorkspace) BuildDirectory(original string) (string, error) {
 	if !filepath.IsAbs(original) {
-		return "", errors.New("original build directory must be absolute")
+		return "", errRelativeOriginalBuildDirectory
 	}
 
 	original = filepath.Clean(original)
@@ -26,16 +34,18 @@ func (workspace PreparedWorkspace) BuildDirectory(original string) (string, erro
 	}
 
 	if source == "" {
-		return "", errors.New("build directory has no prepared module")
+		return "", errUnpreparedBuildModule
 	}
 
 	relative, err := filepath.Rel(source, original)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("map original build directory: %w", err)
 	}
 
 	result := filepath.Join(copied, relative)
-	if err := workspace.validateBuildDirectory(result); err != nil {
+
+	err = workspace.validateBuildDirectory(result)
+	if err != nil {
 		return "", err
 	}
 
@@ -44,24 +54,57 @@ func (workspace PreparedWorkspace) BuildDirectory(original string) (string, erro
 
 func (workspace PreparedWorkspace) validateBuildDirectory(path string) error {
 	if !filepath.IsAbs(path) {
-		return errors.New("build directory must be absolute")
+		return errRelativePreparedBuildDirectory
 	}
 
 	physical, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return errors.New("resolve prepared build directory")
+		return fmt.Errorf("resolve prepared build directory: %w", err)
 	}
 
-	info, err := os.Stat(physical)
-	if err != nil || !info.IsDir() {
-		return errors.New("prepared build directory does not exist")
+	info, err := statPreparedDirectory(physical)
+	if err != nil {
+		return fmt.Errorf("inspect prepared build directory: %w", err)
+	}
+
+	if !info.IsDir() {
+		return errMissingPreparedBuildDirectory
 	}
 
 	workspaceRoot, err := filepath.EvalSymlinks(workspace.Dir)
 	if err != nil {
-		return errors.New("resolve prepared workspace directory")
+		return fmt.Errorf("resolve prepared workspace directory: %w", err)
 	}
 
+	if workspace.containsPreparedBuildDirectory(path, physical, workspaceRoot) {
+		return nil
+	}
+
+	return errOutsidePreparedApplication
+}
+
+func statPreparedDirectory(path string) (os.FileInfo, error) {
+	parent, name := filepath.Dir(path), filepath.Base(path)
+	if parent == path {
+		name = "."
+	}
+
+	root, err := os.OpenRoot(parent)
+	if err != nil {
+		return nil, fmt.Errorf("open prepared directory parent: %w", err)
+	}
+
+	defer func() { _ = root.Close() }()
+
+	info, err := root.Stat(name)
+	if err != nil {
+		return nil, fmt.Errorf("stat prepared directory: %w", err)
+	}
+
+	return info, nil
+}
+
+func (workspace PreparedWorkspace) containsPreparedBuildDirectory(path, physical, workspaceRoot string) bool {
 	for _, dir := range workspace.Relocations {
 		if !filepath.IsAbs(dir) || !withinTree(workspace.Dir, dir) || !withinTree(dir, path) {
 			continue
@@ -69,11 +112,11 @@ func (workspace PreparedWorkspace) validateBuildDirectory(path string) error {
 
 		root, err := filepath.EvalSymlinks(dir)
 		if err == nil && withinTree(workspaceRoot, root) && withinTree(root, physical) {
-			return nil
+			return true
 		}
 	}
 
-	return errors.New("build directory is not inside a prepared application module")
+	return false
 }
 
 func (workspace PreparedWorkspace) applicationBuildDirectory() (string, error) {
@@ -84,7 +127,7 @@ func (workspace PreparedWorkspace) applicationBuildDirectory() (string, error) {
 
 	work, err := modfile.ParseWork(workspace.WorkspaceFile, data, nil)
 	if err != nil {
-		return "", errors.New("parse prepared workspace")
+		return "", fmt.Errorf("parse prepared workspace: %w", err)
 	}
 
 	for _, use := range work.Use {
@@ -105,5 +148,5 @@ func (workspace PreparedWorkspace) applicationBuildDirectory() (string, error) {
 		return dir, nil
 	}
 
-	return "", errors.New("workspace has no prepared application module")
+	return "", errMissingPreparedApplication
 }

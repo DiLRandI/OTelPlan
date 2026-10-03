@@ -1,10 +1,14 @@
 package compiler
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
+
+	"golang.org/x/mod/modfile"
 )
 
 func TestPreparedBuildDirectory(t *testing.T) {
@@ -92,5 +96,33 @@ func TestApplicationBuildDirectory(t *testing.T) {
 				t.Fatalf("directory=%q, %v; want %q", got, err, tc.want)
 			}
 		})
+	}
+}
+
+func TestPreparedWorkspaceParseFailurePreservesCause(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+
+	root, err := os.OpenRoot(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() { _ = root.Close() }()
+
+	err = root.WriteFile("go.work", []byte("go invalid\n"), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	workspace := new(PreparedWorkspace)
+	workspace.Dir, workspace.WorkspaceFile = parent, filepath.Join(parent, "go.work")
+	directory, err := workspace.applicationBuildDirectory()
+
+	var parseErrors modfile.ErrorList
+
+	if directory != "" || !errors.As(err, &parseErrors) || !strings.Contains(err.Error(), "parse prepared workspace") {
+		t.Fatal("workspace parse failure lost its parser cause or operation context", err)
 	}
 }

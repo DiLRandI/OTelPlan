@@ -2,8 +2,9 @@ package lockfile
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -122,7 +123,7 @@ func companionSum(modfile string) string {
 }
 
 func moduleManifest(filename string) ([]string, error) {
-	data, err := os.ReadFile(filename)
+	data, err := readGraphInput(filename)
 	if err != nil {
 		return nil, fmt.Errorf("read module manifest: %w", err)
 	}
@@ -173,8 +174,8 @@ func manifestLines(syntax *modfile.FileSyntax) []string {
 }
 
 func optionalLines(filename string) ([]string, error) {
-	data, err := os.ReadFile(filename)
-	if os.IsNotExist(err) {
+	data, err := readGraphInput(filename)
+	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
 
@@ -367,7 +368,7 @@ func fingerprintWorkspace(filename string) (graphWorkspace, error) {
 		return workspace, nil
 	}
 
-	data, err := os.ReadFile(filename)
+	data, err := readGraphInput(filename)
 	if err != nil {
 		return workspace, fmt.Errorf("read workspace manifest: %w", err)
 	}
@@ -407,7 +408,7 @@ func normalizeWorkspaceUse(use *modfile.Use, workspaceDirectory string) error {
 		directory = filepath.Join(workspaceDirectory, directory)
 	}
 
-	data, err := os.ReadFile(filepath.Join(directory, "go.mod"))
+	data, err := readGraphInput(filepath.Join(directory, "go.mod"))
 	if err != nil {
 		return fmt.Errorf("read workspace module: %w", err)
 	}

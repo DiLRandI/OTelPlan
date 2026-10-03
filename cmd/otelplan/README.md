@@ -20,6 +20,8 @@ otelplan explain --root /path/to/project 'example.com/app.(*Worker).Run'
 
 `scan --calls` includes advisory calls and analysis limits in text or JSON output. Static edges identify a known callee; conservative edges are possible calls, not proof of runtime execution. This opt-in analysis does not select instrumentation targets.
 
+Scan JSON marks nonempty free-form CGO compiler flags and `CC`/`CXX` commands as `[redacted]`, since those values may contain credentials or other private configuration. The analyzer retains the original values internally for build fingerprinting and isolated builds. Symbol metadata and build target information remain available in scan output.
+
 `inspect` and `explain` read `otelplan.yaml` relative to `--root`; override it with `--config`. JSON responses use `otelplan.io/cli/v1alpha1`. Exit codes distinguish usage (2), policy (3), project loading (4), and resolution (5) failures.
 
 `validate` checks policy, static safety, pinned backend capabilities, and an existing lockfile. It does not require the backend binary; compile/build verify that executable separately. Pin `backend.version` to `v1.1.0`.

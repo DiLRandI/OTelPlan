@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DiLRandI/OTelPlan/internal/discovery"
+	"github.com/DiLRandI/OTelPlan/internal/lockfile"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
@@ -328,6 +330,52 @@ func TestSafeDiagnosticCausesOmitSensitiveValues(t *testing.T) {
 }
 
 type cyclicDiagnosticError struct{}
+
+func TestInventoryOutputPreservesInternalBuildFingerprint(t *testing.T) {
+	t.Parallel()
+
+	root, _ := cliFixture(t)
+	analysis := new(discovery.Options)
+	analysis.Root, analysis.Offline = root, true
+
+	code, err := discovery.LoadContext(t.Context(), *analysis)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	code.EffectiveBuild.CGOEnabled = "1"
+	code.EffectiveBuild.CGOCFLAGS = "caller-private-build-value"
+
+	before, err := lockfile.GraphDigest(code)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var output bytes.Buffer
+
+	opts := new(options)
+	opts.format = jsonFormat
+	reply := new(response)
+	reply.Data = code
+
+	err = emit(&output, *opts, *reply)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := lockfile.GraphDigest(code)
+	if err != nil || before != after || code.EffectiveBuild.CGOCFLAGS != "caller-private-build-value" ||
+		bytes.Contains(output.Bytes(), []byte("caller-private-build-value")) {
+		t.Fatal("inventory redaction exposed a value or changed internal build identity")
+	}
+
+	code.EffectiveBuild.CGOCFLAGS = "different-private-build-value"
+
+	changed, err := lockfile.GraphDigest(code)
+	if err != nil || changed == before {
+		t.Fatal("free-form build values no longer influence the fingerprint")
+	}
+}
 
 func TestVerboseBuildContextOmitsSensitiveConfiguration(t *testing.T) {
 	t.Parallel()

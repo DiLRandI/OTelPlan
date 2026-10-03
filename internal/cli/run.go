@@ -432,6 +432,10 @@ func usageError(opts options, command, message string, stdout, stderr io.Writer)
 }
 
 func emit(out io.Writer, opts options, reply response) error {
+	if inventory, ok := reply.Data.(*model.CodeModel); ok {
+		reply.Data = previewInventory(inventory)
+	}
+
 	if opts.details != nil && (opts.details.Build != nil || len(opts.details.Failures) > 0) {
 		reply.Details = opts.details
 	}

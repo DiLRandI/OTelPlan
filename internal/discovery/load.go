@@ -14,7 +14,9 @@ import (
 // Env entries override the process environment; Offline disables module downloads
 // and automatic toolchain selection. Go build caches may still be populated.
 type Options struct {
-	Root      string
+	Root string
+	// CacheDir enables private persistent semantic metadata caching when nonempty.
+	CacheDir  string
 	Patterns  []string
 	BuildTags []string
 	// BuildFlags override ambient GOFLAGS; value flags use -name=value.
@@ -50,9 +52,15 @@ func Load(opts Options) (*model.CodeModel, error) { return LoadContext(context.B
 // and package loading. Callers must permit the project and its Go build inputs,
 // including workspace modules and local replacements, to be read.
 func LoadContext(ctx context.Context, opts Options) (*model.CodeModel, error) {
+	code, _, err := loadContextResult(ctx, opts)
+
+	return code, err
+}
+
+func loadContextResult(ctx context.Context, opts Options) (*model.CodeModel, bool, error) {
 	env, flags, err := prepare(ctx, &opts)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	defer opts.cleanup()
@@ -63,15 +71,44 @@ func LoadContext(ctx context.Context, opts Options) (*model.CodeModel, error) {
 		Dir:     opts.Root, Tests: opts.IncludeTests, BuildFlags: flags, Env: env,
 	}
 
+	if opts.CacheDir != "" {
+		return loadCachedModel(ctx, opts, cfg)
+	}
+
+	result, err := loadPreparedModel(ctx, opts, cfg)
+
+	return result.code, false, err
+}
+
+type preparedAnalysis struct {
+	code     *model.CodeModel
+	packages []*packages.Package
+}
+
+func loadPreparedModel(ctx context.Context, opts Options, cfg *packages.Config) (preparedAnalysis, error) {
 	pkgs, err := packages.Load(cfg, opts.Patterns...)
 	if err != nil {
-		return nil, fmt.Errorf("load packages: %w", err)
+		return preparedAnalysis{}, fmt.Errorf("load packages: %w", err)
 	}
 
 	if err := reportErrors(pkgs); err != nil {
-		return nil, err
+		return preparedAnalysis{}, err
 	}
 
+	selected, all := selectAnalysisPackages(pkgs, opts)
+
+	code := buildModel(selected, all, opts)
+	if opts.CallGraph {
+		err = addCallGraph(ctx, code, selected)
+		if err != nil {
+			return preparedAnalysis{}, err
+		}
+	}
+
+	return preparedAnalysis{code: code, packages: pkgs}, nil
+}
+
+func selectAnalysisPackages(pkgs []*packages.Package, opts Options) ([]*packages.Package, []*packages.Package) {
 	var selected, all []*packages.Package
 
 	seen := map[string]*packages.Package{}
@@ -94,15 +131,7 @@ func LoadContext(ctx context.Context, opts Options) (*model.CodeModel, error) {
 
 	sort.Slice(selected, func(i, j int) bool { return selected[i].PkgPath < selected[j].PkgPath })
 
-	code := buildModel(selected, all, opts)
-	if opts.CallGraph {
-		err = addCallGraph(ctx, code, selected)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return code, nil
+	return selected, all
 }
 
 func buildFlags(tags []string) []string {

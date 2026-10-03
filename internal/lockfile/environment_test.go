@@ -152,7 +152,7 @@ func analysisDigest(t *testing.T, root, flags string) string {
 	t.Helper()
 
 	code, err := discovery.Load(discovery.Options{
-		Root: root, Offline: true, Env: []string{"GOWORK=off", "GOFLAGS=" + flags},
+		Root: root, CacheDir: "", Offline: true, Env: []string{"GOWORK=off", "GOFLAGS=" + flags},
 		Patterns: nil, BuildTags: nil, BuildFlags: nil, CallGraph: false, IncludeTests: false,
 		IncludeDependencies: false, GOOS: "", GOARCH: "",
 	})

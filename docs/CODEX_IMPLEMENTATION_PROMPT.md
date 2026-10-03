@@ -1,6 +1,9 @@
 # Codex Implementation Prompt
 
-You are implementing the OTelPlan repository from the specifications in this repository.
+Continue the implemented OTelPlan repository according to these product and
+architecture specifications. Read the current code, tests, [CLI](CLI.md),
+[backend reference](OTELC_BACKEND.md), and [roadmap](13_ROADMAP.md) before selecting
+remaining work; do not recreate already-implemented components.
 
 ## Objective
 
@@ -212,7 +215,7 @@ All commands must support:
 
 No prompts in non-interactive/CI commands.
 
-Stable exit codes are specified in `docs/05_CLI_SPEC.md`.
+Stable exit codes are specified in `docs/CLI.md`.
 
 ## Testing
 

@@ -473,6 +473,188 @@ func TestGenericRootSpansWithPinnedBackend(t *testing.T) {
 	checkGenericContextRejection(t, root)
 }
 
+func TestGenericTypedCapturesWithPinnedBackend(t *testing.T) {
+	executable := os.Getenv("OTELPLAN_OTELC")
+	if executable == "" {
+		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
+	}
+
+	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prepareOfflineIntegration(t)
+
+	fixture, err := filepath.Abs("../backend/otelc/testdata/generics")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	root, err := compiler.CopySourceTree(t.Context(), fixture, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	invokeArchitecture(t, root, true, 0, "lock", "--config", "capture.yaml")
+	original := snapshotArchitecture(t, root)
+	invokeArchitecture(t, root, true, 0, "compile", "--config", "capture.yaml",
+		"--output", filepath.Join(t.TempDir(), "generated"))
+	outputDir := t.TempDir()
+	invokeArchitecture(t, root, true, 0, "build", "--config", "capture.yaml", "--", "-race", "-buildvcs=false",
+		"-o", filepath.Join(outputDir, "capture-probe"), "./cmd/captures")
+
+	command := exec.CommandContext(t.Context(), "./capture-probe")
+	command.Dir = outputDir
+
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("run generic capture fixture: %v", err)
+	}
+
+	checkGenericCaptureTrace(t, output)
+	invokeArchitecture(t, root, true, 0, "lock", "--config", "capture.yaml", "--check")
+	checkArchitectureImmutability(t, original, snapshotArchitecture(t, root))
+	checkGenericCaptureRejections(t, root)
+	checkGenericReceiverInferenceFailure(t, root)
+}
+
+func checkGenericReceiverInferenceFailure(t *testing.T, root string) {
+	t.Helper()
+
+	directory := openIntegrationDirectory(t, root)
+	policy := []byte(`apiVersion: otelplan.io/v1alpha1
+kind: InstrumentationPlan
+backend: {name: otelc, version: v1.1.0}
+project: {packages: [./ops]}
+defaults: {context: {mode: root}}
+rules:
+- id: inference
+  match: {symbols: [example.com/genericprobe/ops.(Store).UnsupportedCapture]}
+`)
+
+	err := directory.WriteFile("inference.yaml", policy, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	original := snapshotArchitecture(t, root)
+	output := openIntegrationDirectory(t, t.TempDir())
+	invokeArchitecture(t, root, true, 8, "build", "--config", "inference.yaml", "--", "-buildvcs=false",
+		"-o", filepath.Join(output.Name(), "blocked"), "./cmd/captures")
+
+	_, err = output.Stat("blocked")
+	if !os.IsNotExist(err) {
+		t.Fatal("failed generic inference published a binary")
+	}
+
+	checkArchitectureImmutability(t, original, snapshotArchitecture(t, root))
+}
+
+type genericCapturePair struct {
+	requestPresent bool
+	enabled        bool
+}
+
+func checkGenericCaptureTrace(t *testing.T, output []byte) {
+	t.Helper()
+
+	if bytes.Contains(output, []byte("private-input-marker")) || bytes.Contains(output, []byte("private-request-marker")) {
+		t.Fatal("generic capture emitted an unselected private value")
+	}
+
+	var reply struct {
+		Spans []genericTraceSpan `json:"spans"`
+	}
+
+	err := json.Unmarshal(output, &reply)
+	if err != nil {
+		t.Fatalf("decode generic captures: %v", err)
+	}
+
+	const expectedCalls = 4
+	if len(reply.Spans) != expectedCalls {
+		t.Fatalf("unexpected generic capture span count: %s", output)
+	}
+
+	combinations := make(map[genericCapturePair]int, expectedCalls)
+	for _, span := range reply.Spans {
+		combinations[checkGenericCaptureSpan(t, span)]++
+	}
+
+	if len(combinations) != expectedCalls {
+		t.Fatalf("direct inputs did not preserve method offsets or nil omission: %v", combinations)
+	}
+}
+
+func checkGenericCaptureSpan(t *testing.T, span genericTraceSpan) genericCapturePair {
+	t.Helper()
+
+	if span.Name != "generic.capture" || span.Attributes["result.message"] != "approved-output" ||
+		span.Attributes["result.empty"] != "" {
+		t.Fatalf("incorrect generic result capture: %+v", span)
+	}
+
+	enabled, exists := span.Attributes["capture.enabled"].(bool)
+	if !exists {
+		t.Fatal("generic capture omitted a zero or true boolean value")
+	}
+
+	request, requestPresent := span.Attributes["request.id"]
+	if requestPresent && request != "approved-id" {
+		t.Fatal("generic capture changed a selected request field")
+	}
+
+	const baseCaptureCount = 3
+
+	expectedCount := baseCaptureCount
+	if requestPresent {
+		expectedCount++
+	}
+
+	if len(span.Attributes) != expectedCount {
+		t.Fatalf("generic capture included an overflow, non-finite, or unselected value: %+v", span)
+	}
+
+	return genericCapturePair{requestPresent: requestPresent, enabled: enabled}
+}
+
+func checkGenericCaptureRejections(t *testing.T, root string) {
+	t.Helper()
+
+	for _, rejection := range []struct {
+		symbol, source, code, message string
+		exit                          int
+	}{
+		{symbol: "Parametric", source: "req.ID", code: "OTP5001", message: "unbound type parameters", exit: 7},
+		{symbol: "Capture", source: "req.Secret", code: "OTP4001", message: "secret", exit: 5},
+	} {
+		directory := openIntegrationDirectory(t, root)
+		policy := "apiVersion: otelplan.io/v1alpha1\nkind: InstrumentationPlan\n" +
+			"backend: {name: otelc, version: v1.1.0}\nproject: {packages: [./ops]}\n" +
+			"defaults: {context: {mode: root}}\nrules:\n- id: rejected\n" +
+			"  match: {symbols: [example.com/genericprobe/ops." + rejection.symbol + "]}\n" +
+			"  attributes:\n  - key: request.value\n    from: {argument: " + rejection.source + "}\n"
+
+		err := directory.WriteFile("rejected.yaml", []byte(policy), 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		original := snapshotArchitecture(t, root)
+		reply := invokeArchitecture(t, root, true, rejection.exit, "validate", "--config", "rejected.yaml")
+		found := false
+
+		for _, diagnostic := range reply.Diagnostics {
+			if string(diagnostic.Code) == rejection.code && strings.Contains(diagnostic.Message, rejection.message) {
+				found = true
+			}
+		}
+
+		if !found {
+			t.Fatalf("missing generic capture rejection %s: %+v", rejection.code, reply.Diagnostics)
+		}
+
+		checkArchitectureImmutability(t, original, snapshotArchitecture(t, root))
+	}
+}
+
 func checkGenericContextRejection(t *testing.T, root string) {
 	t.Helper()
 

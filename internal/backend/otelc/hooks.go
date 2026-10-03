@@ -77,23 +77,15 @@ func RenderHooks(version, runtimeVersion string, code *model.CodeModel, plan mod
 	for _, binding := range bindings {
 		target := targets[binding.Symbol]
 		symbol, _ := code.Symbol(binding.Symbol)
-		parameters := len(symbol.Parameters)
 		offset := 0
 
 		if symbol.Receiver != nil {
-			parameters++
 			offset = 1
 		}
 
-		beforeParameters := strings.Repeat(", _ any", parameters)
-
-		if symbol.Variadic {
-			element, supported := variadicElementType(symbol)
-			if !supported {
-				return nil, errUnsupportedVariadicHookElement
-			}
-
-			beforeParameters = strings.Repeat(", _ any", parameters-1) + ", _ ..." + element
+		beforeParameters, err := beforeHookParameters(symbol, accessors[binding.Symbol])
+		if err != nil {
+			return nil, err
 		}
 
 		for _, accessor := range accessors[binding.Symbol] {
@@ -120,14 +112,14 @@ func RenderHooks(version, runtimeVersion string, code *model.CodeModel, plan mod
 			fmt.Fprintf(&source, "h.SetParam(%d, child)\n", target.ContextStrategy.Index+offset)
 		}
 
-		writeHookAttributes(&source, accessors[binding.Symbol], false, offset)
+		writeHookAttributes(&source, symbol, accessors[binding.Symbol], false)
 		source.WriteString("}\n")
 		fmt.Fprintf(&source, "\nfunc %s(h hook.HookContext%s) {\n"+
 			"span, ok := h.GetData().(trace.Span)\nif !ok { return }\ndefer span.End()\nh.SetData(nil)\n",
-			binding.After, afterHookParameters(symbol, target.ErrorStrategy.Indexes))
+			binding.After, afterHookParameters(symbol, target.ErrorStrategy.Indexes, accessors[binding.Symbol]))
 		writeHookErrors(&source, symbol, target.ErrorStrategy.Indexes)
 
-		writeHookAttributes(&source, accessors[binding.Symbol], true, offset)
+		writeHookAttributes(&source, symbol, accessors[binding.Symbol], true)
 		source.WriteString("}\n")
 	}
 
@@ -139,7 +131,45 @@ func RenderHooks(version, runtimeVersion string, code *model.CodeModel, plan mod
 	return data, nil
 }
 
-func afterHookParameters(symbol *model.Symbol, errorIndexes []int) string {
+func beforeHookParameters(symbol *model.Symbol, bindings []AccessorBinding) (string, error) {
+	parameters := make([]string, len(symbol.Parameters))
+	for index := range symbol.Parameters {
+		name, typ := "_", "any"
+		if hasTypeParameters(symbol) && hasAccessorInput(bindings, accessorArgumentSource, index) {
+			name = fmt.Sprintf("argument_%d", index)
+		}
+
+		if symbol.Variadic && index == len(symbol.Parameters)-1 {
+			element, supported := variadicElementType(symbol)
+			if !supported {
+				return "", errUnsupportedVariadicHookElement
+			}
+
+			typ = "..." + element
+		}
+
+		parameters[index] = fmt.Sprintf(", %s %s", name, typ)
+	}
+
+	result := strings.Join(parameters, "")
+	if symbol.Receiver != nil {
+		result = ", _ any" + result
+	}
+
+	return result, nil
+}
+
+func hasAccessorInput(bindings []AccessorBinding, source string, index int) bool {
+	for _, binding := range bindings {
+		if binding.Source == source && binding.Index == index {
+			return true
+		}
+	}
+
+	return false
+}
+
+func afterHookParameters(symbol *model.Symbol, errorIndexes []int, bindings []AccessorBinding) string {
 	if !hasTypeParameters(symbol) {
 		return strings.Repeat(", _ any", len(symbol.Results))
 	}
@@ -147,7 +177,7 @@ func afterHookParameters(symbol *model.Symbol, errorIndexes []int) string {
 	parameters := make([]string, len(symbol.Results))
 	for index := range symbol.Results {
 		parameters[index] = ", _ any"
-		if slices.Contains(errorIndexes, index) {
+		if slices.Contains(errorIndexes, index) || hasAccessorInput(bindings, accessorResultSource, index) {
 			parameters[index] = fmt.Sprintf(", returned_%d any", index)
 		}
 	}
@@ -168,11 +198,11 @@ func writeHookErrors(source *bytes.Buffer, symbol *model.Symbol, indexes []int) 
 	}
 }
 
-func writeHookAttributes(source *bytes.Buffer, bindings []AccessorBinding, results bool, receiverOffset int) {
+func writeHookAttributes(source *bytes.Buffer, symbol *model.Symbol, bindings []AccessorBinding, results bool) {
 	opened := false
 
 	for _, binding := range bindings {
-		if (binding.Source == "result") != results {
+		if (binding.Source == accessorResultSource) != results {
 			continue
 		}
 
@@ -182,14 +212,7 @@ func writeHookAttributes(source *bytes.Buffer, bindings []AccessorBinding, resul
 			opened = true
 		}
 
-		input := "nil"
-
-		switch binding.Source {
-		case "argument":
-			input = fmt.Sprintf("h.GetParam(%d)", binding.Index+receiverOffset)
-		case "result":
-			input = fmt.Sprintf("h.GetReturnVal(%d)", binding.Index)
-		}
+		input := hookAttributeInput(symbol, binding)
 
 		constructor := map[string]string{"string": "String", "bool": "Bool", "integer": "Int64", "float": "Float64"}[binding.Kind]
 		fmt.Fprintf(source, "if value, ok := read_%s(%s); ok { span.SetAttributes(attribute.%s(%q, value)) }\n", binding.Function, input, constructor, binding.Key)
@@ -197,5 +220,29 @@ func writeHookAttributes(source *bytes.Buffer, bindings []AccessorBinding, resul
 
 	if opened {
 		source.WriteString("}\n")
+	}
+}
+
+func hookAttributeInput(symbol *model.Symbol, binding AccessorBinding) string {
+	switch binding.Source {
+	case accessorArgumentSource:
+		if hasTypeParameters(symbol) {
+			return fmt.Sprintf("argument_%d", binding.Index)
+		}
+
+		offset := 0
+		if symbol.Receiver != nil {
+			offset = 1
+		}
+
+		return fmt.Sprintf("h.GetParam(%d)", binding.Index+offset)
+	case accessorResultSource:
+		if hasTypeParameters(symbol) {
+			return fmt.Sprintf("returned_%d", binding.Index)
+		}
+
+		return fmt.Sprintf("h.GetReturnVal(%d)", binding.Index)
+	default:
+		return "nil"
 	}
 }

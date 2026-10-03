@@ -10,6 +10,45 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+func TestGenericAttributesUseDirectTypedInputs(t *testing.T) {
+	t.Parallel()
+
+	_, code, target := accessorFixture(t)
+	symbol, _ := code.Symbol(target.SymbolID)
+	symbol.Generics = &model.GenericInfo{TypeParams: []string{"T"}}
+	target.ContextStrategy = model.ContextStrategy{Strategy: model.ContextStrategyRoot, Index: 0}
+	target.SpanName = "generic.capture"
+	target.ErrorStrategy = model.ErrorStrategy{Record: true, Indexes: []int{1}}
+	argument := new(model.AttributePlan)
+	argument.Key, argument.From.Argument = "request.id", "req.ID"
+	result := new(model.AttributePlan)
+	result.Key, result.From.Result = "result.message", "result.Message"
+	target.Attributes = []model.AttributePlan{*argument, *result}
+	plan := new(model.ResolvedPlan)
+	plan.Targets = []model.ResolvedTarget{target}
+
+	source, err := RenderHooks(SupportedVersion, "runtime", code, *plan, hookImportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, forbidden := range []string{"GetParam(", "SetParam(", "GetReturnVal(", "SetReturnVal("} {
+		if strings.Contains(string(source), forbidden) {
+			t.Fatalf("generic capture called an unavailable backend API: %s", source)
+		}
+	}
+
+	if !strings.Contains(string(source), "argument_1") || !strings.Contains(string(source), "returned_0") ||
+		!strings.Contains(string(source), "returned_1.(error)") {
+		t.Fatalf("generic capture omitted direct argument or result bindings: %s", source)
+	}
+
+	imports := importedPaths(parseGeneratedHooks(t, source))
+	if imports[symbol.PackageImportPath] {
+		t.Fatal("generic capture imports the application package")
+	}
+}
+
 func TestAttributeHooksAreTypedAndBound(t *testing.T) {
 	_, code, target := accessorFixture(t)
 	target.SpanName = "accessor.operation"

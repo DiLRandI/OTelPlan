@@ -432,6 +432,142 @@ func TestVariadicBuiltinWithPinnedBackend(t *testing.T) {
 	checkVariadicSourceUnchanged(t, root, original)
 }
 
+func TestGenericRootSpansWithPinnedBackend(t *testing.T) {
+	executable := os.Getenv("OTELPLAN_OTELC")
+	if executable == "" {
+		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
+	}
+
+	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prepareOfflineIntegration(t)
+
+	fixture, err := filepath.Abs("../backend/otelc/testdata/generics")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	root, err := compiler.CopySourceTree(t.Context(), fixture, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	invokeArchitecture(t, root, true, 0, "lock")
+	original := snapshotArchitecture(t, root)
+	generated := filepath.Join(t.TempDir(), "generated")
+	invokeArchitecture(t, root, true, 0, "compile", "--output", generated)
+	outputDir := t.TempDir()
+	invokeArchitecture(t, root, true, 0, "build", "--", "-race", "-buildvcs=false",
+		"-o", filepath.Join(outputDir, "generic-probe"), ".")
+
+	command := exec.CommandContext(t.Context(), "./generic-probe")
+	command.Dir = outputDir
+
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("run generic root fixture: %v", err)
+	}
+
+	checkGenericRootTrace(t, output)
+	invokeArchitecture(t, root, true, 0, "lock", "--check")
+	checkArchitectureImmutability(t, original, snapshotArchitecture(t, root))
+	checkGenericContextRejection(t, root)
+}
+
+func checkGenericContextRejection(t *testing.T, root string) {
+	t.Helper()
+
+	directory := openIntegrationDirectory(t, root)
+	policy := []byte(`apiVersion: otelplan.io/v1alpha1
+kind: InstrumentationPlan
+backend: {name: otelc, version: v1.1.0}
+project: {packages: [./ops]}
+defaults:
+  context: {mode: root}
+rules:
+- id: contextual
+  match: {symbols: [example.com/genericprobe/ops.Contextual]}
+`)
+
+	err := directory.WriteFile("otelplan.yaml", policy, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	original := snapshotArchitecture(t, root)
+	invokeArchitecture(t, root, true, 7, "validate")
+	checkArchitectureImmutability(t, original, snapshotArchitecture(t, root))
+}
+
+type genericTraceSpan struct {
+	Name       string         `json:"name"`
+	Parent     string         `json:"parent"`
+	Error      bool           `json:"error"`
+	Events     int            `json:"events"`
+	Attributes map[string]any `json:"attributes"`
+}
+
+func checkGenericRootTrace(t *testing.T, output []byte) {
+	t.Helper()
+
+	if bytes.Contains(output, []byte("private-input-marker")) {
+		t.Fatal("generic instrumentation captured an unselected argument")
+	}
+
+	var reply struct {
+		Spans []genericTraceSpan `json:"spans"`
+	}
+
+	err := json.Unmarshal(output, &reply)
+	if err != nil {
+		t.Fatalf("decode generic trace: %v", err)
+	}
+
+	expected := map[string]int{
+		"generic.function": 2, "generic.method": 2, "generic.panic": 1, "generic.batch": 1,
+		"generic.pointer": 1,
+	}
+	counts := make(map[string]int, len(expected))
+	failures := 0
+
+	for _, span := range reply.Spans {
+		checkGenericRootSpan(t, span)
+
+		counts[span.Name]++
+		if span.Error {
+			failures++
+		}
+	}
+
+	const expectedFailures = 2
+	if failures != expectedFailures || len(counts) != len(expected) {
+		t.Fatalf("unexpected generic spans or error recording: %s", output)
+	}
+
+	for name, count := range expected {
+		if counts[name] != count {
+			t.Fatalf("generic span %s ended %d times, want %d", name, counts[name], count)
+		}
+	}
+}
+
+func checkGenericRootSpan(t *testing.T, span genericTraceSpan) {
+	t.Helper()
+
+	if span.Parent != "0000000000000000" || len(span.Attributes) != 1 ||
+		span.Attributes["operation.kind"] != strings.TrimPrefix(span.Name, "generic.") {
+		t.Fatalf("generic span has a parent or unexpected captures: %+v", span)
+	}
+
+	expectedEvents := 0
+	if span.Error {
+		expectedEvents = 1
+	}
+
+	if span.Events != expectedEvents {
+		t.Fatalf("generic span has incorrect error events: %+v", span)
+	}
+}
+
 func prepareVariadicFixture(t *testing.T, root string) map[string][]byte {
 	t.Helper()
 

@@ -14,6 +14,56 @@ func compatibilityFixture() (*model.CodeModel, model.ResolvedPlan) {
 	return &model.CodeModel{Symbols: []model.Symbol{symbol}}, model.ResolvedPlan{Targets: []model.ResolvedTarget{{SymbolID: symbol.ID, Signature: symbol.Signature, RuleID: "run", ContextStrategy: model.ContextStrategy{Strategy: model.ContextStrategyArgument}, ErrorStrategy: model.ErrorStrategy{Record: true, Indexes: []int{0}}}}}
 }
 
+func genericRootFixture() (*model.CodeModel, model.ResolvedPlan) {
+	code, plan := ruleFixture()
+	code.Symbols = code.Symbols[:1]
+	plan.Targets = plan.Targets[:1]
+	symbol := &code.Symbols[0]
+	symbol.Signature = "func[T any](T, bool) (T, error)"
+	symbol.Generics = &model.GenericInfo{TypeParams: []string{"T"}}
+	symbol.Parameters = []model.Parameter{{Name: "value", Type: "T"}, {Name: "fail", Type: "bool"}}
+	symbol.Results = []model.Result{{Name: "output", Type: "T"}, {Name: "err", Type: "error"}}
+	symbol.ErrorIndexes = []int{1}
+	symbol.Ownership = model.OwnershipApplication
+	plan.Targets[0].Signature = symbol.Signature
+	plan.Targets[0].SpanName = "generic.operation"
+	plan.Targets[0].ErrorStrategy = model.ErrorStrategy{Record: true, Indexes: []int{1}}
+
+	return code, plan
+}
+
+func TestGenericRootCompatibility(t *testing.T) {
+	t.Parallel()
+
+	code, plan := genericRootFixture()
+	if diagnostics := Check(SupportedVersion, code, plan); diagnostics.HasErrors() {
+		t.Fatalf("generic root span with returned errors rejected: %+v", diagnostics)
+	}
+
+	attribute := new(model.AttributePlan)
+	attribute.Key, attribute.From.Constant = "operation.kind", "generic"
+	attribute.Classification = model.ClassificationPublic
+
+	plan.Targets[0].Attributes = []model.AttributePlan{*attribute}
+	if diagnostics := Check(SupportedVersion, code, plan); diagnostics.HasErrors() {
+		t.Fatalf("generic constant attribute rejected: %+v", diagnostics)
+	}
+
+	attribute.From.Constant, attribute.From.Argument = nil, "value"
+
+	plan.Targets[0].Attributes = []model.AttributePlan{*attribute}
+	if diagnostics := Check(SupportedVersion, code, plan); !diagnostics.HasErrors() {
+		t.Fatal("generic argument capture accepted despite disabled backend APIs")
+	}
+
+	attribute.From.Argument, attribute.From.Result = "", "output"
+
+	plan.Targets[0].Attributes = []model.AttributePlan{*attribute}
+	if diagnostics := Check(SupportedVersion, code, plan); !diagnostics.HasErrors() {
+		t.Fatal("generic result capture accepted despite disabled backend APIs")
+	}
+}
+
 func TestPinnedCapabilities(t *testing.T) {
 	identity, err := Identity(SupportedVersion)
 	if err != nil || !identity.Capabilities.ContextReplacement || !identity.Capabilities.AfterHook || identity.Capabilities.PanicObservation {

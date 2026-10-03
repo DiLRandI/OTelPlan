@@ -84,9 +84,14 @@ func TestRuleRenderingRejectsUnrepresentableTargets(t *testing.T) {
 		{name: "main mapping", change: func(c *model.CodeModel, _ *model.ResolvedPlan) { c.Symbols[0].PackageName = "main" }},
 		{name: "identity mismatch", change: func(c *model.CodeModel, _ *model.ResolvedPlan) { c.Symbols[0].Name = "Other" }},
 		{name: "receiver mismatch", change: func(c *model.CodeModel, _ *model.ResolvedPlan) { c.Symbols[1].Receiver.Pointer = false }},
-		{name: "generic", change: func(c *model.CodeModel, _ *model.ResolvedPlan) {
-			c.Symbols[0].Generics = &model.GenericInfo{TypeParams: []string{"T"}}
-		}},
+		{name: "generic argument context", change: func(code *model.CodeModel, plan *model.ResolvedPlan) {
+			code.Symbols[0].Generics = &model.GenericInfo{TypeParams: []string{"T"}}
+			code.Symbols[0].Parameters = []model.Parameter{{Name: "ctx", Type: "context.Context"}}
+			code.Symbols[0].ContextIndexes = []int{0}
+			code.Symbols[0].Signature = "func[T any](context.Context)"
+			plan.Targets[0].Signature = code.Symbols[0].Signature
+			plan.Targets[0].ContextStrategy.Strategy = model.ContextStrategyArgument
+		}, path: ""},
 		{name: "self instrumentation", path: "example.com/app"},
 		{name: "invalid hook path", path: "../hooks"},
 	} {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"go/format"
+	"slices"
 	"strings"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
@@ -121,11 +122,10 @@ func RenderHooks(version, runtimeVersion string, code *model.CodeModel, plan mod
 
 		writeHookAttributes(&source, accessors[binding.Symbol], false, offset)
 		source.WriteString("}\n")
-		fmt.Fprintf(&source, "\nfunc %s(h hook.HookContext%s) {\nspan, ok := h.GetData().(trace.Span)\nif !ok { return }\ndefer span.End()\nh.SetData(nil)\n", binding.After, strings.Repeat(", _ any", len(symbol.Results)))
-
-		for _, index := range target.ErrorStrategy.Indexes {
-			fmt.Fprintf(&source, "if err, ok := h.GetReturnVal(%d).(error); ok && err != nil {\nspan.RecordError(err)\nspan.SetStatus(codes.Error, \"operation failed\")\n}\n", index)
-		}
+		fmt.Fprintf(&source, "\nfunc %s(h hook.HookContext%s) {\n"+
+			"span, ok := h.GetData().(trace.Span)\nif !ok { return }\ndefer span.End()\nh.SetData(nil)\n",
+			binding.After, afterHookParameters(symbol, target.ErrorStrategy.Indexes))
+		writeHookErrors(&source, symbol, target.ErrorStrategy.Indexes)
 
 		writeHookAttributes(&source, accessors[binding.Symbol], true, offset)
 		source.WriteString("}\n")
@@ -137,6 +137,35 @@ func RenderHooks(version, runtimeVersion string, code *model.CodeModel, plan mod
 	}
 
 	return data, nil
+}
+
+func afterHookParameters(symbol *model.Symbol, errorIndexes []int) string {
+	if !hasTypeParameters(symbol) {
+		return strings.Repeat(", _ any", len(symbol.Results))
+	}
+
+	parameters := make([]string, len(symbol.Results))
+	for index := range symbol.Results {
+		parameters[index] = ", _ any"
+		if slices.Contains(errorIndexes, index) {
+			parameters[index] = fmt.Sprintf(", returned_%d any", index)
+		}
+	}
+
+	return strings.Join(parameters, "")
+}
+
+func writeHookErrors(source *bytes.Buffer, symbol *model.Symbol, indexes []int) {
+	for _, index := range indexes {
+		value := fmt.Sprintf("h.GetReturnVal(%d)", index)
+		if hasTypeParameters(symbol) {
+			// The pinned backend disables generic result APIs but passes original results directly to after hooks.
+			value = fmt.Sprintf("returned_%d", index)
+		}
+
+		fmt.Fprintf(source, "if err, ok := %s.(error); ok && err != nil {\nspan.RecordError(err)\n"+
+			"span.SetStatus(codes.Error, \"operation failed\")\n}\n", value)
+	}
 }
 
 func writeHookAttributes(source *bytes.Buffer, bindings []AccessorBinding, results bool, receiverOffset int) {

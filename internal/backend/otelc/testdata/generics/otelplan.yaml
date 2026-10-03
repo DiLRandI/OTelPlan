@@ -1,0 +1,43 @@
+apiVersion: otelplan.io/v1alpha1
+kind: InstrumentationPlan
+backend: {name: otelc, version: v1.1.0}
+project: {packages: [./ops]}
+defaults:
+  context: {mode: root}
+  errors: {record: true}
+rules:
+- id: function
+  match: {symbols: [example.com/genericprobe/ops.Transform]}
+  span: {name: generic.function}
+  attributes:
+  - key: operation.kind
+    from: {constant: function}
+    safety: {classification: public}
+- id: method
+  match: {symbols: [example.com/genericprobe/ops.(Store).Apply]}
+  span: {name: generic.method}
+  attributes:
+  - key: operation.kind
+    from: {constant: method}
+    safety: {classification: public}
+- id: panic
+  match: {symbols: [example.com/genericprobe/ops.Panic]}
+  span: {name: generic.panic}
+  attributes:
+  - key: operation.kind
+    from: {constant: panic}
+    safety: {classification: public}
+- id: batch
+  match: {symbols: [example.com/genericprobe/ops.Batch]}
+  span: {name: generic.batch}
+  attributes:
+  - key: operation.kind
+    from: {constant: batch}
+    safety: {classification: public}
+- id: pointer
+  match: {symbols: [example.com/genericprobe/ops.(*Store).PointerApply]}
+  span: {name: generic.pointer}
+  attributes:
+  - key: operation.kind
+    from: {constant: pointer}
+    safety: {classification: public}

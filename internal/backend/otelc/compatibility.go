@@ -66,8 +66,9 @@ func Check(version string, code *model.CodeModel, plan model.ResolvedPlan) model
 			add("backend cannot hook a declaration without a Go body")
 		}
 
-		if symbol.Generics != nil && len(symbol.Generics.TypeParams) > 0 {
-			add("otelc v1.1.0 disables hook parameter/result APIs for generic targets; see upstream issue 1280")
+		if hasTypeParameters(symbol) && requiresGenericValueAPIs(target) {
+			add("otelc v1.1.0 cannot replace generic context arguments or capture argument/result attributes; " +
+				"see upstream issue 1280")
 		}
 
 		switch target.ContextStrategy.Strategy {
@@ -97,6 +98,24 @@ func Check(version string, code *model.CodeModel, plan model.ResolvedPlan) model
 	}
 
 	return diags
+}
+
+func hasTypeParameters(symbol *model.Symbol) bool {
+	return symbol.Generics != nil && len(symbol.Generics.TypeParams) > 0
+}
+
+func requiresGenericValueAPIs(target model.ResolvedTarget) bool {
+	if target.ContextStrategy.Strategy != model.ContextStrategyRoot {
+		return true
+	}
+
+	for _, attribute := range target.Attributes {
+		if attribute.From.Argument != "" || attribute.From.Result != "" {
+			return true
+		}
+	}
+
+	return false
 }
 
 func variadicElementType(symbol *model.Symbol) (string, bool) {

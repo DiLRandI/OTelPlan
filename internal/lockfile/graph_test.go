@@ -1,8 +1,11 @@
 package lockfile_test
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DiLRandI/OTelPlan/internal/lockfile"
@@ -170,5 +173,120 @@ func TestGraphDigestMissingMetadata(t *testing.T) {
 	_, err = lockfile.GraphDigest(code)
 	if err == nil {
 		t.Fatal("missing module manifest accepted")
+	}
+}
+
+func TestGraphDigestPreservesOwnedSymlinkInputs(t *testing.T) {
+	t.Parallel()
+
+	for _, input := range []string{"go.work", "app/go.mod", "app/go.sum"} {
+		t.Run(input, func(t *testing.T) {
+			t.Parallel()
+
+			code := graphFixture(t)
+
+			root, err := os.OpenRoot(code.ModuleRoot)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			defer func() { _ = root.Close() }()
+
+			if input == "app/go.sum" {
+				err = root.WriteFile(input, []byte("example.com/unused v1.0.0 h1:example\n"), 0o600)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			before, err := lockfile.GraphDigest(code)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			symlinkOwnedGraphInput(t, root, input)
+
+			after, err := lockfile.GraphDigest(code)
+			if err != nil || after != before {
+				t.Fatal("symlink to caller-owned input changed or prevented fingerprinting", err)
+			}
+		})
+	}
+}
+
+func TestGraphDigestRetainsMissingInputError(t *testing.T) {
+	t.Parallel()
+
+	code := graphFixture(t)
+
+	root, err := os.OpenRoot(code.ModuleRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() { _ = root.Close() }()
+
+	err = root.Remove("go.work")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = lockfile.GraphDigest(code)
+	if !errors.Is(err, fs.ErrNotExist) || !strings.Contains(err.Error(), "read workspace manifest") {
+		t.Fatal("missing workspace input lost its error identity or operational context", err)
+	}
+}
+
+func symlinkOwnedGraphInput(t *testing.T, root *os.Root, input string) {
+	t.Helper()
+
+	contents, err := root.ReadFile(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	owner, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() { _ = owner.Close() }()
+
+	err = owner.WriteFile("input", contents, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = root.Remove(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = root.Symlink(filepath.Join(owner.Name(), "input"), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGraphDigestRejectsUnreadableOptionalInput(t *testing.T) {
+	t.Parallel()
+
+	code := graphFixture(t)
+
+	root, err := os.OpenRoot(code.ModuleRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() { _ = root.Close() }()
+
+	err = root.Mkdir("app/go.sum", 0o700)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = lockfile.GraphDigest(code)
+	if err == nil || errors.Is(err, fs.ErrNotExist) || !strings.Contains(err.Error(), "read module graph input") {
+		t.Fatal("invalid optional input was silently treated as missing or lost context", err)
 	}
 }

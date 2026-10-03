@@ -9,6 +9,16 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+var (
+	errModuleRemoved              = errors.New("build module selection removed")
+	errModuleChanged              = errors.New("build module selection changed")
+	errModuleReplacementChanged   = errors.New("build module replacement changed")
+	errLocalReplacementChanged    = errors.New("build local module replacement changed")
+	errMainModuleDirectoryChanged = errors.New("build main module directory changed")
+	errEmptyModuleIdentity        = errors.New("module selection has an empty identity")
+	errDuplicateModuleIdentity    = errors.New("module selection has duplicate identities")
+)
+
 // CheckModuleSelection preserves existing module selections when generated
 // runtime dependencies are added. Relocations map original local directories
 // to their isolated copies; new dependencies are checked against runtime pins
@@ -36,33 +46,54 @@ func CheckModuleSelection(original, selected []model.ModuleInfo, relocations map
 
 		actual, ok := after[path]
 		if !ok {
-			return fmt.Errorf("build module selection removed %s", path)
+			return fmt.Errorf("%w %s", errModuleRemoved, path)
 		}
 
-		if wanted.Version != actual.Version || wanted.Main != actual.Main {
-			return fmt.Errorf("build module selection changed %s", path)
+		err = checkSelectedModule(wanted, actual, relocations)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func checkSelectedModule(wanted, actual model.ModuleInfo, relocations map[string]string) error {
+	if wanted.Version != actual.Version || wanted.Main != actual.Main {
+		return fmt.Errorf("%w %s", errModuleChanged, wanted.Path)
+	}
+
+	if (wanted.Replace == nil) != (actual.Replace == nil) {
+		return fmt.Errorf("%w %s", errModuleReplacementChanged, wanted.Path)
+	}
+
+	if wanted.Replace != nil {
+		return checkSelectedReplacement(wanted.Path, wanted.Replace, actual.Replace, relocations)
+	}
+
+	if wanted.Main && !sameModuleDirectory(wanted.Dir, actual.Dir, relocations) {
+		return fmt.Errorf("%w %s", errMainModuleDirectoryChanged, wanted.Path)
+	}
+
+	return nil
+}
+
+func checkSelectedReplacement(path string, wanted, actual *model.ModuleReplacement,
+	relocations map[string]string) error {
+	if wanted.Version != actual.Version {
+		return fmt.Errorf("%w %s", errModuleReplacementChanged, path)
+	}
+
+	if wanted.Version != "" {
+		if wanted.Path != actual.Path {
+			return fmt.Errorf("%w %s", errModuleReplacementChanged, path)
 		}
 
-		if (wanted.Replace == nil) != (actual.Replace == nil) {
-			return fmt.Errorf("build module replacement changed %s", path)
-		}
+		return nil
+	}
 
-		if wanted.Replace != nil {
-			a, b := wanted.Replace, actual.Replace
-			if a.Version != b.Version {
-				return fmt.Errorf("build module replacement changed %s", path)
-			}
-
-			if a.Version != "" {
-				if a.Path != b.Path {
-					return fmt.Errorf("build module replacement changed %s", path)
-				}
-			} else if !sameModuleDirectory(a.Dir, b.Dir, relocations) {
-				return fmt.Errorf("build local module replacement changed %s", path)
-			}
-		} else if wanted.Main && !sameModuleDirectory(wanted.Dir, actual.Dir, relocations) {
-			return fmt.Errorf("build main module directory changed %s", path)
-		}
+	if !sameModuleDirectory(wanted.Dir, actual.Dir, relocations) {
+		return fmt.Errorf("%w %s", errLocalReplacementChanged, path)
 	}
 
 	return nil
@@ -73,11 +104,11 @@ func indexModules(modules []model.ModuleInfo) (map[string]model.ModuleInfo, erro
 
 	for _, module := range modules {
 		if module.Path == "" {
-			return nil, errors.New("module selection has an empty identity")
+			return nil, errEmptyModuleIdentity
 		}
 
 		if _, exists := result[module.Path]; exists {
-			return nil, errors.New("module selection has duplicate identities")
+			return nil, errDuplicateModuleIdentity
 		}
 
 		result[module.Path] = module

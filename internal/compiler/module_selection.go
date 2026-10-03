@@ -12,6 +12,8 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+var errEmptyBuildSelection = errors.New("build module selection is empty")
+
 // ReadModuleSelection lists the modules selected in a prepared directory. Env
 // must include the effective build environment and isolated workspace path.
 func ReadModuleSelection(ctx context.Context, dir string, env []string) ([]model.ModuleInfo, error) {
@@ -22,7 +24,7 @@ func ReadModuleSelection(ctx context.Context, dir string, env []string) ([]model
 	output, err := command.Output()
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, fmt.Errorf("read build module selection: %w", ctx.Err())
 		}
 
 		return nil, fmt.Errorf("read build module selection: %w", err)
@@ -47,10 +49,11 @@ func ReadModuleSelection(ctx context.Context, dir string, env []string) ([]model
 	}
 
 	if len(modules) == 0 {
-		return nil, errors.New("build module selection is empty")
+		return nil, errEmptyBuildSelection
 	}
 
-	if _, err := indexModules(modules); err != nil {
+	_, err = indexModules(modules)
+	if err != nil {
 		return nil, err
 	}
 

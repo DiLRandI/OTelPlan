@@ -9,28 +9,80 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestAccessorRules(t *testing.T) {
-	_, code, target := accessorFixture(t)
-	target.Attributes = []model.AttributePlan{{Key: "request.id", From: model.AttributeSource{Argument: "req.ID"}}}
-	plan := model.ResolvedPlan{Targets: []model.ResolvedTarget{target}}
+type decodedAccessorRules map[string]struct {
+	Target  string `yaml:"target"`
+	Actions []struct {
+		AddFile struct {
+			File string `yaml:"file"`
+			Path string `yaml:"path"`
+		} `yaml:"add_file"`
+	} `yaml:"do"`
+}
 
-	rules, files, err := RenderAccessorRules(SupportedVersion, code, plan, "example.com/generated/accessors")
+func TestAccessorRules(t *testing.T) {
+	t.Parallel()
+
+	_, code, target := accessorFixture(t)
+	target.Attributes = []model.AttributePlan{
+		accessorAttributePlan("request.id", argumentAttributeSource("req.ID")),
+	}
+	plan := resolvedPlanWithTargets(target)
+	provider := "example.com/generated/accessors"
+
+	rules, files, err := RenderAccessorRules(SupportedVersion, code, plan, provider)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	assertAccessorRuleInjection(t, rules, files, provider)
+	assertAccessorRuleHelperSource(t, code, target, files)
+	assertAccessorRuleDeterminism(t, code, plan, provider, rules, files)
+}
+
+func accessorAttributePlan(key string, source model.AttributeSource) model.AttributePlan {
+	var attribute model.AttributePlan
+
+	attribute.Key = key
+	attribute.From = source
+
+	return attribute
+}
+
+func argumentAttributeSource(argument string) model.AttributeSource {
+	var source model.AttributeSource
+
+	source.Argument = argument
+
+	return source
+}
+
+func constantAttributeSource(value string) model.AttributeSource {
+	var source model.AttributeSource
+
+	source.Constant = value
+
+	return source
+}
+
+func resolvedPlanWithTargets(targets ...model.ResolvedTarget) model.ResolvedPlan {
+	var plan model.ResolvedPlan
+
+	plan.Targets = targets
+
+	return plan
+}
+
+func assertAccessorRuleInjection(t *testing.T, rules []byte, files []AccessorFile, provider string) {
+	t.Helper()
 
 	if len(files) != 1 {
 		t.Fatalf("files: %d", len(files))
 	}
 
-	var document map[string]struct {
-		Target  string `yaml:"target"`
-		Actions []struct {
-			AddFile struct{ File, Path string } `yaml:"add_file"`
-		} `yaml:"do"`
-	}
+	var document decodedAccessorRules
 
-	if err := yaml.Unmarshal(rules, &document); err != nil {
+	err := yaml.Unmarshal(rules, &document)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -39,29 +91,73 @@ func TestAccessorRules(t *testing.T) {
 	}
 
 	for _, rule := range document {
-		if rule.Target != "example.com/accessorprobe/ops" || len(rule.Actions) != 1 || rule.Actions[0].AddFile.File != files[0].Name || rule.Actions[0].AddFile.Path != "example.com/generated/accessors" {
-			t.Fatalf("wrong injection: %+v", rule)
+		if rule.Target != "example.com/accessorprobe/ops" {
+			t.Fatalf("wrong injection target: %q", rule.Target)
+		}
+
+		if len(rule.Actions) != 1 {
+			t.Fatalf("injection actions: %d", len(rule.Actions))
+		}
+
+		if rule.Actions[0].AddFile.File != files[0].Name {
+			t.Fatalf("injected file: %q, want %q", rule.Actions[0].AddFile.File, files[0].Name)
+		}
+
+		if rule.Actions[0].AddFile.Path != provider {
+			t.Fatalf("injection path: %q, want %q", rule.Actions[0].AddFile.Path, provider)
 		}
 	}
+}
+
+func assertAccessorRuleHelperSource(
+	t *testing.T,
+	code *model.CodeModel,
+	target model.ResolvedTarget,
+	files []AccessorFile,
+) {
+	t.Helper()
 
 	expected, _, err := RenderAccessors(code, target)
-	if err != nil || !bytes.Equal(expected, files[0].Source) {
-		t.Fatalf("helper source differs: %v", err)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	repeatedRules, repeatedFiles, err := RenderAccessorRules(SupportedVersion, code, plan, "example.com/generated/accessors")
-	if err != nil || !bytes.Equal(rules, repeatedRules) || !reflect.DeepEqual(files, repeatedFiles) {
+	if !bytes.Equal(expected, files[0].Source) {
+		t.Fatal("helper source differs")
+	}
+}
+
+func assertAccessorRuleDeterminism(
+	t *testing.T,
+	code *model.CodeModel,
+	plan model.ResolvedPlan,
+	provider string,
+	rules []byte,
+	files []AccessorFile,
+) {
+	t.Helper()
+
+	repeatedRules, repeatedFiles, err := RenderAccessorRules(SupportedVersion, code, plan, provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(rules, repeatedRules) || !reflect.DeepEqual(files, repeatedFiles) {
 		t.Fatal("generation is nondeterministic")
 	}
 }
 
 func TestAccessorRulesRejectInvalidProvider(t *testing.T) {
-	_, code, target := accessorFixture(t)
+	t.Parallel()
 
-	target.Attributes = []model.AttributePlan{{Key: "request.id", From: model.AttributeSource{Argument: "req.ID"}}}
+	_, code, target := accessorFixture(t)
+	target.Attributes = []model.AttributePlan{
+		accessorAttributePlan("request.id", argumentAttributeSource("req.ID")),
+	}
+	plan := resolvedPlanWithTargets(target)
 
 	for _, provider := range []string{"../escape", "example.com/accessorprobe/ops"} {
-		rules, files, err := RenderAccessorRules(SupportedVersion, code, model.ResolvedPlan{Targets: []model.ResolvedTarget{target}}, provider)
+		rules, files, err := RenderAccessorRules(SupportedVersion, code, plan, provider)
 		if err == nil || rules != nil || files != nil {
 			t.Fatalf("accepted provider %q", provider)
 		}
@@ -69,42 +165,59 @@ func TestAccessorRulesRejectInvalidProvider(t *testing.T) {
 }
 
 func TestAccessorRulesOrderingAndFailure(t *testing.T) {
+	t.Parallel()
+
 	code, plan := ruleFixture()
 	for i := range plan.Targets {
-		plan.Targets[i].Attributes = []model.AttributePlan{{Key: "component", From: model.AttributeSource{Constant: "app"}}}
+		plan.Targets[i].Attributes = []model.AttributePlan{
+			accessorAttributePlan("component", constantAttributeSource("app")),
+		}
 	}
 
 	original := append([]model.ResolvedTarget(nil), plan.Targets...)
+	provider := "example.com/generated/accessors"
 
-	rules, files, err := RenderAccessorRules(SupportedVersion, code, plan, "example.com/generated/accessors")
+	rules, files, err := RenderAccessorRules(SupportedVersion, code, plan, provider)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(files) != 3 || !reflect.DeepEqual(original, plan.Targets) {
-		t.Fatal("missing helpers or mutated plan")
+	if len(files) != 3 {
+		t.Fatalf("helper files: %d, want 3", len(files))
+	}
+
+	if !reflect.DeepEqual(original, plan.Targets) {
+		t.Fatal("render mutated plan")
 	}
 
 	plan.Targets[0], plan.Targets[2] = plan.Targets[2], plan.Targets[0]
+	assertAccessorRuleDeterminism(t, code, plan, provider, rules, files)
 
-	reordered, reorderedFiles, err := RenderAccessorRules(SupportedVersion, code, plan, "example.com/generated/accessors")
-	if err != nil || !bytes.Equal(rules, reordered) || !reflect.DeepEqual(files, reorderedFiles) {
-		t.Fatal("target order changed output")
+	plan.Targets[0].Attributes = []model.AttributePlan{
+		accessorAttributePlan("bad", argumentAttributeSource("missing")),
 	}
+	rules, files, err = RenderAccessorRules(SupportedVersion, code, plan, provider)
 
-	plan.Targets[0].Attributes = []model.AttributePlan{{Key: "bad", From: model.AttributeSource{Argument: "missing"}}}
-
-	rules, files, err = RenderAccessorRules(SupportedVersion, code, plan, "example.com/generated/accessors")
 	if err == nil || rules != nil || files != nil {
 		t.Fatal("invalid accessor returned partial output")
 	}
 }
 
 func TestAccessorRulesSkipTargetsWithoutCaptures(t *testing.T) {
+	t.Parallel()
+
 	code, plan := ruleFixture()
 
 	rules, files, err := RenderAccessorRules(SupportedVersion, code, plan, "example.com/generated/accessors")
-	if err != nil || len(files) != 0 || string(rules) != "{}\n" {
-		t.Fatalf("unexpected empty output: %s, %v", rules, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(files) != 0 {
+		t.Fatalf("helper files: %d, want 0", len(files))
+	}
+
+	if string(rules) != "{}\n" {
+		t.Fatalf("unexpected empty output: %s", rules)
 	}
 }

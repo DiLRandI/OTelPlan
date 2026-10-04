@@ -3,40 +3,58 @@ package compiler
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
+const alternateModuleFileMode = 0o600
+
 func installAlternateModuleFiles(alternate, copiedDir string) error {
-	manifest, err := os.ReadFile(alternate)
+	manifest, err := readWorkspaceSourceManifest(alternate)
 	if err != nil {
-		return errors.New("read alternate module manifest")
+		return fmt.Errorf("read alternate module manifest: %w", err)
 	}
 
-	sums, err := os.ReadFile(strings.TrimSuffix(alternate, ".mod") + ".sum")
-
-	missingSums := os.IsNotExist(err)
+	sums, err := readWorkspaceSourceManifest(strings.TrimSuffix(alternate, ".mod") + ".sum")
+	missingSums := errors.Is(err, fs.ErrNotExist)
 
 	if err != nil && !missingSums {
-		return errors.New("read alternate module checksums")
+		return fmt.Errorf("read alternate module checksums: %w", err)
 	}
 
-	for _, name := range []string{"go.mod", "go.sum"} {
-		err := os.Remove(filepath.Join(copiedDir, name))
-		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("remove copied module file: %w", err)
-		}
+	root, err := os.OpenRoot(copiedDir)
+	if err != nil {
+		return fmt.Errorf("open isolated alternate module directory: %w", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(copiedDir, "go.mod"), manifest, 0o600); err != nil {
+	defer func() { _ = root.Close() }()
+
+	err = removeCopiedModuleFiles(root)
+	if err != nil {
+		return err
+	}
+
+	err = root.WriteFile("go.mod", manifest, alternateModuleFileMode)
+	if err != nil {
 		return fmt.Errorf("write isolated alternate manifest: %w", err)
 	}
 
 	if !missingSums {
-		err := os.WriteFile(filepath.Join(copiedDir, "go.sum"), sums, 0o600)
+		err := root.WriteFile("go.sum", sums, alternateModuleFileMode)
 		if err != nil {
 			return fmt.Errorf("write isolated alternate checksums: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func removeCopiedModuleFiles(root *os.Root) error {
+	for _, name := range []string{"go.mod", "go.sum"} {
+		err := root.Remove(name)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("remove copied module file: %w", err)
 		}
 	}
 

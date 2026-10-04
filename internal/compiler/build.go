@@ -12,6 +12,12 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+var (
+	errUnverifiedBuildIdentities = errors.New("build requires verified module and backend identities")
+	errChangedBuildBackend       = errors.New("build backend identity changed")
+)
+
+// PreparedBuildRequest binds a prepared workspace to its analyzed build settings and verified identities.
 type PreparedBuildRequest struct {
 	BuildEnvironment   model.BuildEnvironment
 	Workspace          PreparedWorkspace
@@ -28,44 +34,24 @@ type PreparedBuildRequest struct {
 // BuildPrepared executes an already planned build. Env and GoArgs must match
 // the analyzed build configuration; output paths must be resolved by the caller.
 func BuildPrepared(ctx context.Context, request PreparedBuildRequest) error {
-	if len(request.ApplicationModules) == 0 || len(request.RuntimeModules) == 0 || request.Backend.Digest == "" {
-		return errors.New("build requires verified module and backend identities")
-	}
-
-	if err := ValidateBuildArguments(request.GoArgs, request.BuildEnvironment); err != nil {
-		return err
-	}
-
-	baseEnv, buildFlags, err := RecordedBuildEnvironment(request.Env, request.BuildEnvironment)
+	err := validatePreparedBuildIdentities(request)
 	if err != nil {
 		return err
 	}
 
-	if err := request.Workspace.validateBuildDirectory(request.ModuleDir); err != nil {
-		return err
-	}
-
-	if err := VerifyArtifacts(request.Workspace.Runtime); err != nil {
-		return err
-	}
-
-	executable, err := exec.LookPath(request.Executable)
-	if err != nil {
-		return fmt.Errorf("find build backend: %w", err)
-	}
-
-	executable, err = filepath.Abs(executable)
+	env, buildFlags, err := RecordedBuildEnvironment(request.Env, request.BuildEnvironment)
 	if err != nil {
 		return err
 	}
 
-	identity, err := otelc.VerifyExecutable(ctx, executable, request.Backend.Version)
+	err = validatePreparedBuildWorkspace(request)
 	if err != nil {
 		return err
 	}
 
-	if identity != request.Backend {
-		return errors.New("build backend identity changed")
+	executable, err := verifyPreparedBuildBackend(ctx, request.Executable, request.Backend)
+	if err != nil {
+		return err
 	}
 
 	temporary, err := os.MkdirTemp(request.Workspace.Dir, "compiler-")
@@ -76,9 +62,74 @@ func BuildPrepared(ctx context.Context, request PreparedBuildRequest) error {
 	defer func() { _ = os.RemoveAll(temporary) }()
 
 	rules := filepath.Join(request.Workspace.Runtime.Dir, "rules")
+	env = append(env, "GOWORK="+request.Workspace.WorkspaceFile, "GOTMPDIR="+temporary,
+		"OTELC_RULES="+rules, "OTELC_WORK_DIR="+request.Workspace.Dir, "OTELC_BUILD_FLAGS=")
 
-	env := append(baseEnv, "GOWORK="+request.Workspace.WorkspaceFile, "GOTMPDIR="+temporary, "OTELC_RULES="+rules, "OTELC_WORK_DIR="+request.Workspace.Dir, "OTELC_BUILD_FLAGS=")
-	if err := verifyRecordedGoEnvironment(ctx, request.ModuleDir, env, request.BuildEnvironment); err != nil {
+	err = verifyPreparedBuildSelection(ctx, request, env)
+	if err != nil {
+		return err
+	}
+
+	err = runPreparedBuildBackend(ctx, executable, request, env, buildFlags, rules)
+	if err != nil {
+		return err
+	}
+
+	err = VerifyArtifacts(request.Workspace.Runtime)
+	if err != nil {
+		return fmt.Errorf("backend changed runtime artifacts: %w", err)
+	}
+
+	return nil
+}
+
+func validatePreparedBuildIdentities(request PreparedBuildRequest) error {
+	if len(request.ApplicationModules) == 0 || len(request.RuntimeModules) == 0 || request.Backend.Digest == "" {
+		return errUnverifiedBuildIdentities
+	}
+
+	return ValidateBuildArguments(request.GoArgs, request.BuildEnvironment)
+}
+
+func validatePreparedBuildWorkspace(request PreparedBuildRequest) error {
+	err := request.Workspace.validateBuildDirectory(request.ModuleDir)
+	if err != nil {
+		return err
+	}
+
+	return VerifyArtifacts(request.Workspace.Runtime)
+}
+
+func verifyPreparedBuildBackend(ctx context.Context, name string, expected model.LockBackend) (string, error) {
+	executable, err := exec.LookPath(name)
+	if err != nil {
+		return "", fmt.Errorf("find build backend: %w", err)
+	}
+
+	executable, err = filepath.Abs(executable)
+	if err != nil {
+		return "", fmt.Errorf("resolve build backend path: %w", err)
+	}
+
+	identity, err := otelc.VerifyExecutable(ctx, executable, expected.Version)
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("verify build backend: %w", ctx.Err())
+		}
+
+		return "", fmt.Errorf("verify build backend: %w", err)
+	}
+
+	if identity != expected {
+		return "", errChangedBuildBackend
+	}
+
+	return executable, nil
+}
+
+func verifyPreparedBuildSelection(ctx context.Context, request PreparedBuildRequest, env []string) error {
+	err := verifyRecordedGoEnvironment(ctx, request.ModuleDir, env, request.BuildEnvironment)
+	if err != nil {
 		return err
 	}
 
@@ -87,15 +138,20 @@ func BuildPrepared(ctx context.Context, request PreparedBuildRequest) error {
 		return err
 	}
 
-	if err := CheckModuleSelection(request.ApplicationModules, selected, request.Workspace.Relocations); err != nil {
+	err = CheckModuleSelection(request.ApplicationModules, selected, request.Workspace.Relocations)
+	if err != nil {
 		return err
 	}
 
-	if err := CheckModuleSelection(request.RuntimeModules, selected, map[string]string{request.RuntimeOriginalDir: request.Workspace.Runtime.Dir}); err != nil {
-		return err
-	}
+	runtimeRelocations := map[string]string{request.RuntimeOriginalDir: request.Workspace.Runtime.Dir}
 
-	args := append([]string{"--rules", rules, "go", "build"}, buildFlags...)
+	return CheckModuleSelection(request.RuntimeModules, selected, runtimeRelocations)
+}
+
+func runPreparedBuildBackend(ctx context.Context, executable string, request PreparedBuildRequest,
+	env, buildFlags []string, rules string) error {
+	args := []string{"--rules", rules, "go", "build"}
+	args = append(args, buildFlags...)
 
 	if request.BuildEnvironment.ModuleMode == "vendor" {
 		args = append(args, "-mod=vendor")
@@ -103,20 +159,15 @@ func BuildPrepared(ctx context.Context, request PreparedBuildRequest) error {
 
 	args = append(args, request.GoArgs...)
 	command := exec.CommandContext(ctx, executable, args...)
-	command.Dir = request.ModuleDir
+	command.Dir, command.Env = request.ModuleDir, env
 
-	command.Env = env
-
-	if err := command.Run(); err != nil {
+	err := command.Run()
+	if err != nil {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return fmt.Errorf("backend build failed: %w", ctx.Err())
 		}
 
 		return fmt.Errorf("backend build failed: %w", err)
-	}
-
-	if err := VerifyArtifacts(request.Workspace.Runtime); err != nil {
-		return fmt.Errorf("backend changed runtime artifacts: %w", err)
 	}
 
 	return nil

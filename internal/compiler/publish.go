@@ -15,124 +15,217 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+var (
+	errArtifactOutputNotDirectory  = errors.New("artifact output must be a directory")
+	errUnsupportedArtifactManifest = errors.New("unsupported or invalid artifact manifest")
+	errArtifactOutputDiffers       = errors.New("artifact output differs; use --clean to replace verified output")
+)
+
 // ReadArtifacts verifies a bundle against its own manifest. This establishes
 // file ownership for refresh, not authenticity against a trusted lockfile.
 func ReadArtifacts(dir string) (model.Artifacts, error) {
-	info, err := os.Lstat(dir)
-	if err != nil || !info.IsDir() {
-		return model.Artifacts{}, errors.New("artifact output must be a directory")
-	}
+	var empty model.Artifacts
 
-	root, err := os.OpenRoot(dir)
+	root, err := openArtifactOutput(dir)
 	if err != nil {
-		return model.Artifacts{}, err
+		return empty, err
 	}
 
 	defer func() { _ = root.Close() }()
 
 	data, err := root.ReadFile("manifest.json")
 	if err != nil {
-		return model.Artifacts{}, errors.New("read artifact manifest")
+		return empty, fmt.Errorf("read artifact manifest: %w", err)
 	}
 
-	var manifest otelc.BundleManifest
-
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&manifest); err != nil {
-		return model.Artifacts{}, errors.New("invalid artifact manifest")
+	files, err := artifactManifestInventory(data)
+	if err != nil {
+		return empty, err
 	}
 
-	if decoder.Decode(new(any)) != io.EOF || manifest.APIVersion != "otelplan.io/artifacts/v1alpha1" || len(manifest.Files) == 0 {
-		return model.Artifacts{}, errors.New("unsupported or invalid artifact manifest")
-	}
+	artifacts := model.Artifacts{Dir: dir, Files: files}
 
-	artifacts := model.Artifacts{Dir: dir, Files: append(manifest.Files, model.ArtifactFile{Path: "manifest.json", Digest: artifactDigest(data)})}
-	sort.Slice(artifacts.Files, func(i, j int) bool { return artifacts.Files[i].Path < artifacts.Files[j].Path })
-
-	if err := VerifyArtifacts(artifacts); err != nil {
-		return model.Artifacts{}, err
+	err = VerifyArtifacts(artifacts)
+	if err != nil {
+		return empty, err
 	}
 
 	return artifacts, nil
 }
 
+func openArtifactOutput(dir string) (*os.Root, error) {
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return nil, fmt.Errorf("inspect artifact output: %w", err)
+	}
+
+	if !info.IsDir() {
+		return nil, errArtifactOutputNotDirectory
+	}
+
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("open artifact output: %w", err)
+	}
+
+	return root, nil
+}
+
+func artifactManifestInventory(data []byte) ([]model.ArtifactFile, error) {
+	var manifest otelc.BundleManifest
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+
+	err := decoder.Decode(&manifest)
+	if err != nil {
+		return nil, fmt.Errorf("invalid artifact manifest: %w", err)
+	}
+
+	err = decoder.Decode(new(any))
+	if !errors.Is(err, io.EOF) {
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errUnsupportedArtifactManifest, err)
+		}
+
+		return nil, errUnsupportedArtifactManifest
+	}
+
+	if manifest.APIVersion != "otelplan.io/artifacts/v1alpha1" || len(manifest.Files) == 0 {
+		return nil, errUnsupportedArtifactManifest
+	}
+
+	files := slices.Clone(manifest.Files)
+	files = append(files, model.ArtifactFile{Path: "manifest.json", Digest: artifactDigest(data)})
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+
+	return files, nil
+}
+
 // PublishArtifacts publishes a complete bundle. Clean permits replacing only a
 // verified existing bundle; unexpected or modified files are never removed.
 func PublishArtifacts(destination string, files []otelc.GeneratedFile, clean bool) (model.Artifacts, error) {
+	var empty model.Artifacts
+
 	destination, err := filepath.Abs(destination)
 	if err != nil {
-		return model.Artifacts{}, err
+		return empty, fmt.Errorf("resolve artifact output path: %w", err)
 	}
 
-	var previous model.Artifacts
-	if _, err := os.Lstat(destination); err == nil {
-		previous, err = ReadArtifacts(destination)
-		if err != nil {
-			return model.Artifacts{}, err
-		}
-	} else if !os.IsNotExist(err) {
-		return model.Artifacts{}, err
+	previous, err := existingArtifactOutput(destination)
+	if err != nil {
+		return empty, err
 	}
 
 	parent := filepath.Dir(destination)
-	if err := os.MkdirAll(parent, 0o700); err != nil {
-		return model.Artifacts{}, err
+
+	err = os.MkdirAll(parent, artifactStagingDirectoryMode)
+	if err != nil {
+		return empty, fmt.Errorf("create artifact output parent: %w", err)
 	}
 
 	staged, err := StageArtifacts(parent, files)
 	if err != nil {
-		return model.Artifacts{}, err
+		return empty, err
 	}
 
 	defer func() { _ = os.RemoveAll(staged.Dir) }()
 
-	if _, err := ReadArtifacts(staged.Dir); err != nil {
-		return model.Artifacts{}, err
+	_, err = ReadArtifacts(staged.Dir)
+	if err != nil {
+		return empty, err
 	}
 
-	if previous.Dir != "" {
-		if slices.Equal(previous.Files, staged.Files) {
-			return previous, nil
-		}
+	if previous.Dir != "" && slices.Equal(previous.Files, staged.Files) {
+		return previous, nil
+	}
 
-		if !clean {
-			return model.Artifacts{}, errors.New("artifact output differs; use --clean to replace verified output")
-		}
-
-		backup, err := os.MkdirTemp(parent, "otelplan-previous-")
-		if err != nil {
-			return model.Artifacts{}, err
-		}
-
-		old := filepath.Join(backup, "artifacts")
-		if err := os.Rename(destination, old); err != nil {
-			_ = os.Remove(backup)
-
-			return model.Artifacts{}, err
-		}
-
-		if err := os.Rename(staged.Dir, destination); err != nil {
-			restoreErr := os.Rename(old, destination)
-			if restoreErr != nil {
-				return model.Artifacts{}, fmt.Errorf("publish failed; previous artifacts retained at %s", old)
-			}
-
-			_ = os.Remove(backup)
-
-			return model.Artifacts{}, err
-		}
-
-		if err := os.RemoveAll(backup); err != nil {
-			return model.Artifacts{}, fmt.Errorf("published artifacts but could not remove previous output: %w", err)
-		}
-	} else {
-		err := os.Rename(staged.Dir, destination)
-		if err != nil {
-			return model.Artifacts{}, err
-		}
+	err = publishStagedArtifacts(destination, staged.Dir, previous.Dir != "", clean)
+	if err != nil {
+		return empty, err
 	}
 
 	return model.Artifacts{Dir: destination, Files: staged.Files}, nil
+}
+
+func existingArtifactOutput(destination string) (model.Artifacts, error) {
+	var empty model.Artifacts
+
+	_, err := os.Lstat(destination)
+	if errors.Is(err, os.ErrNotExist) {
+		return empty, nil
+	}
+
+	if err != nil {
+		return empty, fmt.Errorf("inspect previous artifact output: %w", err)
+	}
+
+	return ReadArtifacts(destination)
+}
+
+func publishStagedArtifacts(destination, staged string, exists, clean bool) error {
+	if exists {
+		if !clean {
+			return errArtifactOutputDiffers
+		}
+
+		return replaceArtifactOutput(destination, staged)
+	}
+
+	err := os.Rename(staged, destination)
+	if err != nil {
+		return fmt.Errorf("publish artifact output: %w", err)
+	}
+
+	return nil
+}
+
+func replaceArtifactOutput(destination, staged string) error {
+	backup, err := os.MkdirTemp(filepath.Dir(destination), "otelplan-previous-")
+	if err != nil {
+		return fmt.Errorf("create previous artifact backup: %w", err)
+	}
+
+	old := filepath.Join(backup, "artifacts")
+
+	err = os.Rename(destination, old)
+	if err != nil {
+		cleanupErr := os.Remove(backup)
+		if cleanupErr != nil {
+			return fmt.Errorf("move previous artifacts to backup: %w; remove empty backup: %w", err, cleanupErr)
+		}
+
+		return fmt.Errorf("move previous artifacts to backup: %w", err)
+	}
+
+	return commitArtifactReplacement(destination, staged, backup)
+}
+
+func commitArtifactReplacement(destination, staged, backup string) error {
+	publishErr := os.Rename(staged, destination)
+	if publishErr != nil {
+		old := filepath.Join(backup, "artifacts")
+
+		restoreErr := os.Rename(old, destination)
+		if restoreErr != nil {
+			return fmt.Errorf(
+				"publish failed: %w; restore failed: %w; previous artifacts retained at %s",
+				publishErr, restoreErr, old,
+			)
+		}
+
+		cleanupErr := os.Remove(backup)
+		if cleanupErr != nil {
+			return fmt.Errorf("publish artifact output: %w; remove empty backup: %w", publishErr, cleanupErr)
+		}
+
+		return fmt.Errorf("publish artifact output: %w", publishErr)
+	}
+
+	err := os.RemoveAll(backup)
+	if err != nil {
+		return fmt.Errorf("published artifacts but could not remove previous output: %w", err)
+	}
+
+	return nil
 }

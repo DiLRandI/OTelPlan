@@ -16,7 +16,10 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
-const buildTagsFlag = "-tags"
+const (
+	buildTagsFlag    = "-tags"
+	vendorModuleMode = "vendor"
+)
 
 type buildEnvironment struct {
 	GOOS         string `json:"GOOS"`
@@ -133,7 +136,7 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 	if parsed.moduleMode != "" {
 		mode = parsed.moduleMode
 	} else if vendorErr == nil {
-		mode = "vendor"
+		mode = vendorModuleMode
 	}
 
 	for _, flag := range opts.BuildFlags {
@@ -407,7 +410,7 @@ func applyGoFlag(flags *goFlags, token string) error {
 }
 
 func applyModuleMode(flags *goFlags, value string) error {
-	if value != "mod" && value != "readonly" && value != "vendor" {
+	if value != "mod" && value != "readonly" && value != vendorModuleMode {
 		return errUnsupportedModuleMode
 	}
 

@@ -53,7 +53,9 @@ If multiple context parameters exist:
 - default is validation error;
 - policy may select an index/path in a future schema.
 
-Nil contexts must be handled without panic. Follow OpenTelemetry API expectations and a defined fallback policy.
+A nil context argument falls back to `context.Background` before starting a span.
+Ordinary targets receive the derived child context. Generic context replacement
+is unsupported by the pin and rejected; see [backend limits](OTELC_BACKEND.md).
 
 ## 6. No context
 
@@ -76,6 +78,9 @@ For each configured error result index:
 - do not emit unbounded error strings as attributes;
 - do not alter returned error.
 
+`RecordError` includes application error text in the exception event. The fixed
+status description does not redact that event. See [error-message privacy](08_VALIDATION_SAFETY.md#returned-error-messages).
+
 ## 8. Panic semantics
 
 OTelPlan never recovers a panic merely to continue execution.
@@ -86,7 +91,8 @@ If the backend allows observing panic/defer-equivalent exit safely:
 - end span;
 - allow panic to continue.
 
-Otherwise document the limitation and validate accordingly.
+The pinned backend does not expose panic values. Deferred after hooks end the
+span and preserve panic propagation; no exception event for the panic is promised.
 
 ## 9. Attribute extraction
 

@@ -4,7 +4,9 @@
 
 OTelPlan compiles a backend-neutral `ResolvedPlan` into backend artifacts.
 
-Initial backend: OpenTelemetry Go compile-time instrumentation (`otelc`).
+Implemented backend: OpenTelemetry Go compile-time instrumentation (`otelc v1.1.0`).
+See the authoritative [OTelC reference](OTELC_BACKEND.md) for capabilities, upstream
+limitations, installation, and compile/build integration.
 
 ## 2. Why not emit raw backend rules directly from user policy
 
@@ -34,8 +36,7 @@ A build-grade policy must pin an exact backend version.
 The lockfile records:
 
 - backend name;
-- requested version;
-- resolved version;
+- exact configured version;
 - binary digest when available;
 - supported capability snapshot.
 
@@ -47,7 +48,7 @@ OTelPlan must verify actual support against the pinned version rather than assum
 
 ## 5. Generated artifacts
 
-Suggested work directory:
+Default published artifact directory:
 
 ```text
 .otelplan/
@@ -55,7 +56,9 @@ Suggested work directory:
     manifest.json
     rules/
     hooks/
-    backend/
+    accessors/
+    go.mod
+    go.sum
 ```
 
 This directory should be gitignored except when debugging.
@@ -64,7 +67,7 @@ The manifest records every file and digest.
 
 ## 6. Runtime hook package
 
-OTelPlan may generate or ship a small reusable hook runtime that:
+OTelPlan generates a standalone hook runtime that:
 
 - obtains tracer;
 - starts span;
@@ -76,7 +79,8 @@ OTelPlan may generate or ship a small reusable hook runtime that:
 
 Generated rules reference these hook functions.
 
-The runtime must remain OpenTelemetry API/SDK based and vendor neutral.
+The runtime uses the OpenTelemetry API and stays vendor neutral. The application
+configures its SDK/exporter; hooks do not install one.
 
 ## 7. Hook state
 
@@ -141,12 +145,19 @@ Generated rules must:
 
 ## 11. Build isolation
 
-Preferred model:
+Current model:
 
-- create isolated temporary/work module state when backend needs generated module files;
-- do not dirty the source checkout;
-- use pinned dependencies;
-- preserve Go's normal reproducibility expectations as far as backend permits.
+- copy application modules, workspace state, and local replacements to a disposable workspace;
+- add generated runtime with pinned dependencies;
+- verify application and runtime dependency selection before backend execution;
+- preserve module/vendor mode and compare regenerated application vendor inputs;
+- verify generated artifacts and backend executable identity;
+- verify and publish built binaries without dirtying the source checkout.
+
+Compile publishes a standalone artifact bundle and manifest. Build does not
+update or enforce the resolution lock. Use `lock --check` explicitly when CI must
+freeze resolution. Resolution commands cannot erase independently-owned build
+identity. See [reproducibility](09_LOCKFILE_REPRODUCIBILITY.md).
 
 ## 12. Failure behavior
 

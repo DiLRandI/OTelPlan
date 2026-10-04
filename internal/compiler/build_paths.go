@@ -6,55 +6,77 @@ import (
 	"strings"
 )
 
+var errRelativeOriginalBuildDirectory = errors.New("original build directory must be absolute")
+
 // RelocateBuildArguments maps filesystem package patterns and Go filenames to
 // prepared copies. Arguments must first pass ValidateBuildArguments.
 func (workspace PreparedWorkspace) RelocateBuildArguments(args []string, originalDir string) ([]string, error) {
 	if !filepath.IsAbs(originalDir) {
-		return nil, errors.New("original build directory must be absolute")
+		return nil, errRelativeOriginalBuildDirectory
 	}
 
 	result := append([]string(nil), args...)
 
 	first := buildPackageStart(args)
 
-	for i := first; i < len(result); i++ {
-		arg := result[i]
-		local := filepath.IsAbs(arg) || arg == "." || arg == ".." || strings.HasPrefix(arg, "./") || strings.HasPrefix(arg, "../") || strings.HasPrefix(arg, ".\\") || strings.HasPrefix(arg, "..\\")
-
-		file := strings.HasSuffix(arg, ".go")
-
-		if !local && !file {
+	for position := first; position < len(result); position++ {
+		arg := result[position]
+		if !isFilesystemBuildTarget(arg) {
 			continue
 		}
 
-		path := filepath.Clean(arg)
-
-		directory, suffix := path, ""
-
-		if file {
-			directory, suffix = filepath.Dir(path), filepath.Base(path)
-		} else if before, _, ok := strings.Cut(path, "..."); ok {
-			separator := strings.LastIndexAny(before, "/\\")
-
-			directory, suffix = path[:separator+1], path[separator+1:]
-			if directory == "" {
-				directory = "."
-			}
-		}
-
-		if !filepath.IsAbs(directory) {
-			directory = filepath.Join(originalDir, directory)
-		}
-
-		copied, err := workspace.BuildDirectory(directory)
+		relocated, err := workspace.relocateBuildTarget(arg, originalDir)
 		if err != nil {
 			return nil, err
 		}
 
-		result[i] = filepath.Join(copied, suffix)
+		result[position] = relocated
 	}
 
 	return result, nil
+}
+
+func isFilesystemBuildTarget(argument string) bool {
+	return filepath.IsAbs(argument) || argument == "." || argument == ".." ||
+		strings.HasPrefix(argument, "./") || strings.HasPrefix(argument, "../") ||
+		strings.HasPrefix(argument, ".\\") || strings.HasPrefix(argument, "..\\") ||
+		strings.HasSuffix(argument, ".go")
+}
+
+func (workspace PreparedWorkspace) relocateBuildTarget(argument, originalDir string) (string, error) {
+	directory, suffix := buildTargetParts(argument)
+	if !filepath.IsAbs(directory) {
+		directory = filepath.Join(originalDir, directory)
+	}
+
+	copied, err := workspace.BuildDirectory(directory)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(copied, suffix), nil
+}
+
+func buildTargetParts(argument string) (string, string) {
+	path := filepath.Clean(argument)
+
+	if strings.HasSuffix(argument, ".go") {
+		return filepath.Dir(path), filepath.Base(path)
+	}
+
+	before, _, wildcard := strings.Cut(path, "...")
+	if !wildcard {
+		return path, ""
+	}
+
+	separator := strings.LastIndexAny(before, "/\\")
+
+	directory, suffix := path[:separator+1], path[separator+1:]
+	if directory == "" {
+		directory = "."
+	}
+
+	return directory, suffix
 }
 
 func buildPackageStart(args []string) int {

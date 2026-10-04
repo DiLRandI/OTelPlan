@@ -13,11 +13,16 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+var (
+	errIncompleteRecordedEnvironment = errors.New("complete analyzed Go environment is required")
+	errRecordedSettingMismatch       = errors.New("differs from analysis")
+)
+
 // RecordedBuildEnvironment restores discovery's process settings. Module and
 // workspace paths are supplied separately after their isolated copies exist.
 func RecordedBuildEnvironment(base []string, build model.BuildEnvironment) ([]string, []string, error) {
 	if !version.IsValid(build.GoVersion) || build.GOOS == "" || build.GOARCH == "" {
-		return nil, nil, errors.New("complete analyzed Go environment is required")
+		return nil, nil, errIncompleteRecordedEnvironment
 	}
 
 	values := recordedGoValues(build)
@@ -59,8 +64,10 @@ func recordedGoValues(build model.BuildEnvironment) map[string]string {
 		"GOOS": build.GOOS, "GOARCH": build.GOARCH, "CGO_ENABLED": build.CGOEnabled,
 		"GOEXPERIMENT": build.GOEXPERIMENT, "GOFIPS140": build.GOFIPS140,
 		"GOAMD64": build.GOAMD64, "GOARM": build.GOARM, "GOARM64": build.GOARM64, "GO386": build.GO386,
-		"GOMIPS": build.GOMIPS, "GOMIPS64": build.GOMIPS64, "GOPPC64": build.GOPPC64, "GORISCV64": build.GORISCV64, "GOWASM": build.GOWASM,
-		"CGO_CFLAGS": build.CGOCFLAGS, "CGO_CPPFLAGS": build.CGOCPPFLAGS, "CGO_CXXFLAGS": build.CGOCXXFLAGS, "CGO_LDFLAGS": build.CGOLDFLAGS, "CGO_FFLAGS": build.CGOFFLAGS, "CC": build.CC, "CXX": build.CXX,
+		"GOMIPS": build.GOMIPS, "GOMIPS64": build.GOMIPS64, "GOPPC64": build.GOPPC64,
+		"GORISCV64": build.GORISCV64, "GOWASM": build.GOWASM,
+		"CGO_CFLAGS": build.CGOCFLAGS, "CGO_CPPFLAGS": build.CGOCPPFLAGS, "CGO_CXXFLAGS": build.CGOCXXFLAGS,
+		"CGO_LDFLAGS": build.CGOLDFLAGS, "CGO_FFLAGS": build.CGOFFLAGS, "CC": build.CC, "CXX": build.CXX,
 	}
 }
 
@@ -76,7 +83,12 @@ func verifyRecordedGoEnvironment(ctx context.Context, dir string, env []string, 
 	}
 
 	sort.Strings(keys)
-	command := exec.CommandContext(ctx, "go", append([]string{"env", "-json"}, keys...)...)
+
+	command := exec.CommandContext(ctx, "go", "env", "-json",
+		"GOFLAGS", "GOTOOLCHAIN", "GOVERSION", "GOOS", "GOARCH", "CGO_ENABLED",
+		"GOEXPERIMENT", "GOFIPS140", "GOAMD64", "GOARM", "GOARM64", "GO386", "GOMIPS", "GOMIPS64",
+		"GOPPC64", "GORISCV64", "GOWASM", "CGO_CFLAGS", "CGO_CPPFLAGS", "CGO_CXXFLAGS", "CGO_LDFLAGS",
+		"CGO_FFLAGS", "CC", "CXX")
 	command.Dir, command.Env = dir, env
 
 	output, err := command.Output()
@@ -85,13 +97,15 @@ func verifyRecordedGoEnvironment(ctx context.Context, dir string, env []string, 
 	}
 
 	var actual map[string]string
-	if err := json.Unmarshal(output, &actual); err != nil {
+
+	err = json.Unmarshal(output, &actual)
+	if err != nil {
 		return fmt.Errorf("decode effective Go environment: %w", err)
 	}
 
 	for _, key := range keys {
 		if actual[key] != expected[key] {
-			return fmt.Errorf("effective Go setting %s differs from analysis", key)
+			return fmt.Errorf("effective Go setting %s %w", key, errRecordedSettingMismatch)
 		}
 	}
 

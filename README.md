@@ -1,122 +1,135 @@
 # OTelPlan
 
-**Policy-driven, zero-source-change business tracing for Go.**
+Policy-driven business tracing for Go, without editing application source.
 
-OTelPlan is a proposed Go developer tool that analyzes an existing Go codebase, helps a developer identify meaningful business operations, stores that decision in a source-controlled policy, validates the policy, and compiles it to OpenTelemetry compile-time instrumentation.
+OTelPlan analyzes Go packages, resolves a human-owned instrumentation policy to
+exact functions and methods, validates context and capture safety, and builds
+OpenTelemetry business spans through a pinned OTelC backend.
 
-OTelPlan does **not** replace OpenTelemetry or `otelc`. It sits above them.
+It adds application operations such as checkout, pricing, or authorization to the
+traces your application already collects. Selection uses real symbols, types,
+interfaces, and policy rules. It does not require Service/Repository naming or a
+particular directory layout.
 
-```text
-Existing Go code
-      |
-      v
-  otelplan scan
-      |
-      v
-Code model + suggestions
-      |
-      v
- otelplan.yaml       <-- human-owned source of truth
-      |
-      v
-validate / inspect / diff
-      |
-      v
- otelplan compile
-      |
-      v
-pinned otelc rules + hooks
-      |
-      v
-instrumented Go binary
-      |
-      v
-OTLP -> Collector -> New Relic / Grafana / Honeycomb / etc.
-```
-
-## Core value
-
-Existing auto-instrumentation is good at technical boundaries such as HTTP, gRPC, SQL, Redis, Kafka, and AWS SDK calls.
-
-OTelPlan targets the missing layer:
+## How it works
 
 ```text
-Checkout
-├── Cart.Calculate
-├── Pricing.ApplyDiscounts
-├── Payment.Authorize
-└── Order.Persist
+Go packages -> CodeModel ----+
+                            v
+otelplan.yaml -> resolver -> ResolvedPlan -> validation -> otelplan.lock
+                                                 |
+                                                 v
+                                    pinned backend rules + hooks
+                                                 |
+                                                 v
+                                      isolated instrumented build
 ```
 
-The user should be able to get these business spans **without adding `tracer.Start()` calls to the application source**.
+Discovery and initialization provide suggestions. The reviewed policy determines
+which operations become spans. Inspect and explain show the exact decisions.
 
-## Non-negotiable design principles
+## Quick start
 
-1. **Architecture agnostic.** Never depend on names such as `Service`, `Repository`, `UseCase`, or a particular folder layout.
-2. **Discovery is advisory; policy is authoritative.**
-3. **No source modification required.**
-4. **OpenTelemetry-native and vendor-neutral.**
-5. **Safe by default.** Do not capture arguments, return values, secrets, or high-cardinality data unless explicitly allowed.
-6. **Deterministic and reviewable.** The resolved instrumentation set is lockable and diffable.
-7. **Backend isolation.** `otelc` is a backend implementation, not OTelPlan's public configuration format.
-8. **Fail loudly rather than silently produce broken trace propagation.**
+Build with Go 1.27.x:
 
-## Repository starter
-
-This bundle is intentionally specification-first. It contains the contracts Codex should implement.
-
-Start with:
-
-```bash
-git init
-go mod tidy
+```sh
+git clone https://github.com/DiLRandI/OTelPlan.git
+cd OTelPlan
+go build -o bin/otelplan ./cmd/otelplan
 ```
 
-Then give Codex `docs/CODEX_IMPLEMENTATION_PROMPT.md`.
+Put the resulting binary on `PATH`, then run these commands in your Go project:
 
-## Documents
-
-- `docs/01_PRD.md` — product and functional requirements
-- `docs/02_ARCHITECTURE.md` — system architecture
-- `docs/03_DISCOVERY_ENGINE.md` — Go code analysis model
-- `docs/04_POLICY_SPEC.md` — `otelplan.yaml` contract
-- `docs/05_CLI_SPEC.md` — CLI commands and exit codes
-- `docs/06_COMPILER_BACKEND.md` — backend and `otelc` integration
-- `docs/07_RUNTIME_HOOKS.md` — span lifecycle and context behavior
-- `docs/08_VALIDATION_SAFETY.md` — privacy, cardinality, safety
-- `docs/09_LOCKFILE_REPRODUCIBILITY.md` — deterministic builds
-- `docs/10_TEST_STRATEGY.md` — tests and fixtures
-- `docs/11_PERFORMANCE.md` — performance requirements
-- `docs/12_COMPETITIVE_GAP.md` — why the project should exist
-- `docs/13_ROADMAP.md` — implementation phases
-- `docs/14_ACCEPTANCE_CRITERIA.md` — release gates
-- `docs/15_DECISIONS.md` — architectural decisions
-- `docs/CODEX_IMPLEMENTATION_PROMPT.md` — implementation instruction
-- `schemas/otelplan.schema.json` — initial JSON Schema
-- `examples/otelplan.yaml` — full example
-- `examples/otelplan.minimal.yaml` — minimal example
-- `SOURCES.md` — external references used in the specification
-
-## Toolchain baseline
-
-The specification targets **Go 1.27.x** and should be implemented and tested with the latest patch version available in that line. At the time this specification was prepared, Go 1.27.1 was the latest stable patch release.
-
-The `otelc` version must be explicitly pinned by the project. Do not use `@latest` in reproducible CI builds.
-
-## Development checks
-
-Install [golangci-lint v2.13.2](https://github.com/golangci/golangci-lint/releases/tag/v2.13.2) and run `make check`. This runs unit tests, race tests, vet, the pinned standard lint checks, and regressions for the quality gate itself. A missing tool, unexpected version, or lint failure fails the check. To use a binary outside PATH, run `make check GOLANGCI_LINT=/path/to/golangci-lint`.
-
-GitHub Actions runs unit tests, race tests, vet, lint, quality-gate tests, and real-backend E2E tests as separate jobs on pull requests and main. An aggregate `check` job fails if any gate fails. Its linter download is pinned and checked against the release checksums. The E2E job builds otelc v1.1.0 from commit `449ee08a682586adb177e4402845ed404565879f` and runs both normal and race suites with `OTELPLAN_OTELC` set. A missing or incompatible backend fails those tests.
-
-To run those tests locally, build that pinned otelc checkout with:
-
-```bash
-go build -mod=readonly -trimpath -ldflags '-X go.opentelemetry.io/otelc/tool/util.Version=v1.1.0' -o /tmp/otelplan-otelc ./tool/cmd/otelc
+```sh
+otelplan scan ./...
+otelplan init --non-interactive
+# Review the generated otelplan.yaml before continuing.
+otelplan inspect
+otelplan validate --strict
+otelplan lock
+otelplan lock --check
 ```
 
-Then, from OTelPlan, run `OTELPLAN_OTELC=/tmp/otelplan-otelc make check`. Without this variable, local checks skip the real-backend tests.
+A minimal policy selects an exact declaration discovered by `scan`:
+
+```yaml
+apiVersion: otelplan.io/v1alpha1
+kind: InstrumentationPlan
+backend: {name: otelc, version: v1.1.0}
+defaults:
+  context: {mode: require}
+  errors: {record: true}
+rules:
+  - id: authorize
+    match:
+      symbols: ["example.com/shop/internal/payment.(*Processor).Authorize"]
+```
+
+Replace the example symbol with one from your project. This policy captures no
+arguments or results. See the [policy reference](docs/04_POLICY_SPEC.md) for
+selectors, templates, and explicit attributes.
+
+## Compile and build
+
+Install the verified OTelC v1.1.0 executable on `PATH` using the
+[backend instructions](docs/OTELC_BACKEND.md#build-the-pinned-backend). Then:
+
+```sh
+otelplan compile --output .otelplan/build
+otelplan build -- -trimpath -o bin/api ./cmd/api
+```
+
+Compile publishes verified generated artifacts. Build runs in disposable copies
+of module/workspace state and publishes verified binaries. Your application owns
+its OpenTelemetry SDK, exporter, and Collector configuration; generated hooks do
+not install them.
+
+See [the CLI reference](docs/CLI.md) for every command, flag, JSON response, exit
+code, offline requirements, and lock/build ownership contract.
+
+## Safety and design
+
+- Application Go source and module/workspace manifests remain unchanged.
+- Policy stays independent of OTelC rule syntax.
+- Context propagation and unsupported target shapes fail validation explicitly.
+- Attribute capture requires explicit policy mappings and safety checks.
+- Lock generation is deterministic; check/diff operations do not write project files.
+- Analysis is local. Online Go operations may download pinned dependencies.
+
+## Documentation
+
+Start with the [documentation index](docs/README.md).
+
+- [CLI](docs/CLI.md) and [policy](docs/04_POLICY_SPEC.md)
+- [Architecture](docs/02_ARCHITECTURE.md) and [discovery](docs/03_DISCOVERY_ENGINE.md)
+- [Backend compatibility](docs/OTELC_BACKEND.md) and [runtime](docs/07_RUNTIME_HOOKS.md)
+- [Safety](docs/08_VALIDATION_SAFETY.md) and [reproducibility](docs/09_LOCKFILE_REPRODUCIBILITY.md)
+- [Testing](docs/10_TEST_STRATEGY.md) and [roadmap/status](docs/13_ROADMAP.md)
+
+## Development
+
+```sh
+make build
+make check GOLANGCI_LINT=/path/to/golangci-lint
+```
+
+The required linter is v2.13.2. `make check` runs tests, race tests, vet, lint, and
+quality-gate regressions. Missing tools and failing checks return nonzero.
+Set `OTELPLAN_OTELC=/absolute/path/to/otelc` to run real backend integration tests;
+otherwise those tests skip locally. See [testing instructions](docs/10_TEST_STRATEGY.md).
+
+## Status and compatibility
+
+OTelPlan is implemented and pre-stable. Policy, lockfile, and CLI JSON contracts
+use `v1alpha1`; release acceptance is still pending. CI currently tests Linux.
+macOS and Windows are not yet verified by a CI matrix.
+
+Vendor builds are isolated and require prepared dependency caches for offline
+use. Generic root spans and concrete typed attributes have documented limits.
+Built-in variadic element types are supported; application-defined elements,
+`package main` targets, generic context replacement, and panic-value observation
+remain unsupported. See [the support matrix](docs/OTELC_BACKEND.md#support-matrix).
 
 ## License
 
-OTelPlan is licensed under the [Apache License 2.0](LICENSE).
+[Apache License 2.0](LICENSE).

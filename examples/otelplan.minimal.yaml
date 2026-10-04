@@ -3,7 +3,7 @@ kind: InstrumentationPlan
 
 backend:
   name: otelc
-  version: "PIN_EXACT_OTELC_VERSION"
+  version: "v1.1.0"
 
 defaults:
   context:

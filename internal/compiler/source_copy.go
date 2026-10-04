@@ -10,35 +10,31 @@ import (
 	"path/filepath"
 )
 
+const (
+	sourceCopyDirectoryMode = 0o700
+	sourceCopyFileMode      = 0o600
+	sourceCopyOwnerExecute  = 0o100
+)
+
+var (
+	errNestedSourceStaging  = errors.New("source staging parent must be outside source tree")
+	errExternalSourceLink   = errors.New("source link points outside copied tree")
+	errNonregularSourceFile = errors.New("source tree contains a non-regular file")
+)
+
+type sourceTreeCopy struct {
+	input  *os.Root
+	output *os.Root
+	source string
+	target string
+}
+
 // CopySourceTree creates a disposable source copy. Internal symbolic links are
 // relocated into the copy; external links require a wider source root.
 func CopySourceTree(ctx context.Context, source, parent string) (string, error) {
-	source, err := filepath.EvalSymlinks(source)
-	if err != nil {
-		return "", fmt.Errorf("resolve source directory: %w", err)
-	}
-
-	source, err = filepath.Abs(source)
+	source, parent, err := sourceCopyPaths(source, parent)
 	if err != nil {
 		return "", err
-	}
-
-	if parent == "" {
-		parent = os.TempDir()
-	}
-
-	parent, err = filepath.EvalSymlinks(parent)
-	if err != nil {
-		return "", fmt.Errorf("resolve staging parent: %w", err)
-	}
-
-	parent, err = filepath.Abs(parent)
-	if err != nil {
-		return "", err
-	}
-
-	if withinTree(source, parent) {
-		return "", errors.New("source staging parent must be outside source tree")
 	}
 
 	input, err := os.OpenRoot(source)
@@ -54,84 +50,22 @@ func CopySourceTree(ctx context.Context, source, parent string) (string, error) 
 	}
 
 	completed := false
-
 	defer func() {
 		if !completed {
 			_ = os.RemoveAll(target)
 		}
 	}()
 
-	err = fs.WalkDir(input.FS(), ".", func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
+	output, err := os.OpenRoot(target)
+	if err != nil {
+		return "", fmt.Errorf("open source copy root: %w", err)
+	}
 
-		if err := ctx.Err(); err != nil {
-			return err
-		}
+	defer func() { _ = output.Close() }()
 
-		if path == "." {
-			return nil
-		}
+	copier := sourceTreeCopy{input: input, output: output, source: source, target: target}
 
-		destination := filepath.Join(target, filepath.FromSlash(path))
-		if entry.IsDir() {
-			return os.Mkdir(destination, 0o700)
-		}
-
-		if entry.Type()&os.ModeSymlink != 0 {
-			resolved, err := filepath.EvalSymlinks(filepath.Join(source, filepath.FromSlash(path)))
-			if err != nil {
-				return fmt.Errorf("resolve source link: %w", err)
-			}
-
-			if !withinTree(source, resolved) {
-				return errors.New("source link points outside copied tree")
-			}
-
-			relative, err := filepath.Rel(source, resolved)
-			if err != nil {
-				return err
-			}
-
-			link, err := filepath.Rel(filepath.Dir(destination), filepath.Join(target, relative))
-			if err != nil {
-				return err
-			}
-
-			return os.Symlink(link, destination)
-		}
-
-		if !entry.Type().IsRegular() {
-			return errors.New("source tree contains a non-regular file")
-		}
-
-		file, err := input.Open(path)
-		if err != nil {
-			return err
-		}
-
-		defer func() { _ = file.Close() }()
-
-		info, err := file.Stat()
-		if err != nil {
-			return err
-		}
-
-		output, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600|(info.Mode().Perm()&0o100))
-		if err != nil {
-			return err
-		}
-
-		_, copyErr := io.Copy(output, file)
-		closeErr := output.Close()
-
-		if copyErr != nil {
-			return copyErr
-		}
-
-		return closeErr
-	})
+	err = copier.walk(ctx)
 	if err != nil {
 		return "", fmt.Errorf("copy source tree: %w", err)
 	}
@@ -139,6 +73,147 @@ func CopySourceTree(ctx context.Context, source, parent string) (string, error) 
 	completed = true
 
 	return target, nil
+}
+
+func sourceCopyPaths(source, parent string) (string, string, error) {
+	source, err := filepath.EvalSymlinks(source)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve source directory: %w", err)
+	}
+
+	source, err = filepath.Abs(source)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve absolute source directory: %w", err)
+	}
+
+	if parent == "" {
+		parent = os.TempDir()
+	}
+
+	parent, err = filepath.EvalSymlinks(parent)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve staging parent: %w", err)
+	}
+
+	parent, err = filepath.Abs(parent)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve absolute staging parent: %w", err)
+	}
+
+	if withinTree(source, parent) {
+		return "", "", errNestedSourceStaging
+	}
+
+	return source, parent, nil
+}
+
+func (tree sourceTreeCopy) walk(ctx context.Context) error {
+	err := fs.WalkDir(tree.input.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return fmt.Errorf("read source entry: %w", walkErr)
+		}
+
+		err := ctx.Err()
+		if err != nil {
+			return fmt.Errorf("source copy canceled: %w", err)
+		}
+
+		if path == "." {
+			return nil
+		}
+
+		return tree.entry(filepath.FromSlash(path), entry)
+	})
+	if err != nil {
+		return fmt.Errorf("walk source entries: %w", err)
+	}
+
+	return nil
+}
+
+func (tree sourceTreeCopy) entry(path string, entry fs.DirEntry) error {
+	if entry.IsDir() {
+		err := tree.output.Mkdir(path, sourceCopyDirectoryMode)
+		if err != nil {
+			return fmt.Errorf("create copied source directory: %w", err)
+		}
+
+		return nil
+	}
+
+	if entry.Type()&os.ModeSymlink != 0 {
+		return tree.link(path)
+	}
+
+	if !entry.Type().IsRegular() {
+		return errNonregularSourceFile
+	}
+
+	return tree.file(path)
+}
+
+func (tree sourceTreeCopy) link(path string) error {
+	resolved, err := filepath.EvalSymlinks(filepath.Join(tree.source, path))
+	if err != nil {
+		return fmt.Errorf("resolve source link: %w", err)
+	}
+
+	if !withinTree(tree.source, resolved) {
+		return errExternalSourceLink
+	}
+
+	relative, err := filepath.Rel(tree.source, resolved)
+	if err != nil {
+		return fmt.Errorf("locate source link target: %w", err)
+	}
+
+	destination := filepath.Join(tree.target, path)
+
+	link, err := filepath.Rel(filepath.Dir(destination), filepath.Join(tree.target, relative))
+	if err != nil {
+		return fmt.Errorf("relocate source link target: %w", err)
+	}
+
+	err = tree.output.Symlink(link, path)
+	if err != nil {
+		return fmt.Errorf("create relocated source link: %w", err)
+	}
+
+	return nil
+}
+
+func (tree sourceTreeCopy) file(path string) error {
+	input, err := tree.input.Open(path)
+	if err != nil {
+		return fmt.Errorf("open source file: %w", err)
+	}
+
+	defer func() { _ = input.Close() }()
+
+	info, err := input.Stat()
+	if err != nil {
+		return fmt.Errorf("inspect source file: %w", err)
+	}
+
+	mode := sourceCopyFileMode | info.Mode().Perm()&sourceCopyOwnerExecute
+
+	output, err := tree.output.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+	if err != nil {
+		return fmt.Errorf("create copied source file: %w", err)
+	}
+
+	_, copyErr := io.Copy(output, input)
+	closeErr := output.Close()
+
+	if copyErr != nil {
+		return fmt.Errorf("copy source file contents: %w", copyErr)
+	}
+
+	if closeErr != nil {
+		return fmt.Errorf("close copied source file: %w", closeErr)
+	}
+
+	return nil
 }
 
 func withinTree(root, path string) bool {

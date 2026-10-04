@@ -1,116 +1,244 @@
-package compiler
+package compiler_test
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/backend/otelc"
+	"github.com/DiLRandI/OTelPlan/internal/compiler"
 	"golang.org/x/mod/modfile"
 )
 
-func TestPrepareWorkspaceAlternateModfile(t *testing.T) {
-	source := t.TempDir()
-	alternateDir := t.TempDir()
-	original := "module example.com/original\n\ngo 1.25.0\n"
-	alternate := "module example.com/alternate\n\ngo 1.25.0\nreplace example.com/dependency => ./dependency\n"
-	write := func(path, data string) {
-		t.Helper()
+type alternateModuleFixture struct {
+	root    *os.Root
+	request compiler.WorkspaceRequest
+	files   map[string]string
+}
 
-		err := os.WriteFile(path, []byte(data), 0o600)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+func newAlternateModuleFixture(t *testing.T) alternateModuleFixture {
+	t.Helper()
 
-	dependency := filepath.Join(source, "dependency")
-
-	err := os.Mkdir(dependency, 0o700)
+	root, err := os.OpenRoot(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	write(filepath.Join(dependency, "go.mod"), "module example.com/dependency\n\ngo 1.25.0\n")
-	write(filepath.Join(source, "go.mod"), original)
-	write(filepath.Join(source, "go.sum"), "original checksums\n")
-	alternatePath := filepath.Join(alternateDir, "build.mod")
-	write(alternatePath, alternate)
+	t.Cleanup(func() { _ = root.Close() })
 
-	runtimeDir := t.TempDir()
-	runtimeModule := []byte("module example.com/runtime\n\ngo 1.25.0\n")
-	write(filepath.Join(runtimeDir, "go.mod"), string(runtimeModule))
-	runtime := model.Artifacts{Dir: runtimeDir, Files: []model.ArtifactFile{{Path: "go.mod", Digest: artifactDigest(runtimeModule)}}}
-	request := WorkspaceRequest{OriginalWorkspaceDir: source, Workspace: []byte("go 1.25.0\nuse .\n"), Runtime: runtime, Parent: t.TempDir(), AlternateModFiles: map[string]string{source: alternatePath}}
+	files := map[string]string{
+		"app/go.mod":            "module example.com/original\n\ngo 1.25.0\n",
+		"app/go.sum":            "original checksums\n",
+		"app/dependency/go.mod": "module example.com/dependency\n\ngo 1.25.0\n",
+		"alternate/build.mod": "module example.com/alternate\n\ngo 1.25.0\n" +
+			"replace example.com/dependency => ./dependency\n",
+	}
+	writeRelocationFixture(t, root, files)
+
+	runtimeFiles := []otelc.GeneratedFile{{
+		Path: "go.mod", Data: []byte("module example.com/runtime\n\ngo 1.25.0\n"),
+	}}
+
+	runtime, err := compiler.StageArtifacts(t.TempDir(), runtimeFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var request compiler.WorkspaceRequest
+
+	request.OriginalWorkspaceDir = filepath.Join(root.Name(), "app")
+	request.Workspace = []byte("go 1.25.0\nuse .\n")
+	request.Runtime = runtime
+	request.Parent = t.TempDir()
+	request.AlternateModFiles = map[string]string{
+		request.OriginalWorkspaceDir: filepath.Join(root.Name(), "alternate", "build.mod"),
+	}
+
+	return alternateModuleFixture{root: root, request: request, files: files}
+}
+
+func TestPrepareWorkspaceAlternateModfile(t *testing.T) {
+	t.Parallel()
 
 	for _, sums := range []string{"", "alternate checksums\n"} {
-		if sums != "" {
-			write(filepath.Join(alternateDir, "build.sum"), sums)
-		}
+		t.Run(sums, func(t *testing.T) {
+			t.Parallel()
 
-		prepared, err := PrepareWorkspace(t.Context(), request)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		copiedManifest, err := os.ReadFile(filepath.Join(prepared.Relocations[source], "go.mod"))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		parsed, err := modfile.Parse("go.mod", copiedManifest, nil)
-		if err != nil || len(parsed.Replace) != 1 || parsed.Replace[0].New.Path != prepared.Relocations[dependency] {
-			t.Fatal("alternate replacement did not resolve relative to original module")
-		}
-
-		command := exec.CommandContext(t.Context(), "go", "list", "-m")
-		command.Dir = prepared.Relocations[source]
-
-		command.Env = append(os.Environ(), "GOFLAGS=", "GOWORK=off", "GOPROXY=off")
-
-		output, err := command.Output()
-		if err != nil || string(output) != "example.com/alternate\n" {
-			t.Fatalf("alternate manifest not used: %v %s", err, output)
-		}
-
-		copiedSums, err := os.ReadFile(filepath.Join(prepared.Relocations[source], "go.sum"))
-		if sums == "" {
-			if !os.IsNotExist(err) {
-				t.Fatal("original checksums survived alternate selection")
+			fixture := newAlternateModuleFixture(t)
+			if sums != "" {
+				writeRelocationFixture(t, fixture.root, map[string]string{"alternate/build.sum": sums})
+				fixture.files["alternate/build.sum"] = sums
 			}
-		} else if err != nil || string(copiedSums) != sums {
-			t.Fatal("alternate checksums not copied")
-		}
+
+			prepared, err := compiler.PrepareWorkspace(t.Context(), fixture.request)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			assertAlternateModuleCopy(t, fixture.request.OriginalWorkspaceDir, prepared, sums)
+			assertCopySourceUnchanged(t, fixture.root, fixture.files)
+		})
+	}
+}
+
+func assertAlternateModuleCopy(t *testing.T, source string, prepared compiler.PreparedWorkspace, sums string) {
+	t.Helper()
+
+	root, err := os.OpenRoot(prepared.Relocations[source])
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	for path, want := range map[string]string{filepath.Join(source, "go.mod"): original, filepath.Join(source, "go.sum"): "original checksums\n", alternatePath: alternate} {
-		data, err := os.ReadFile(path)
-		if err != nil || string(data) != want {
-			t.Fatal("original module files changed")
-		}
+	defer func() { _ = root.Close() }()
+
+	manifest, err := root.ReadFile("go.mod")
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	malformed := filepath.Join(alternateDir, "malformed.mod")
-	write(malformed, "not a module manifest\n")
+	parsed, err := modfile.Parse("go.mod", manifest, nil)
 
-	for _, selection := range []map[string]string{
-		{t.TempDir(): alternatePath},
-		{source: "relative.mod"},
-		{source: filepath.Join(alternateDir, "missing.mod")},
-		{source: malformed},
-		{source: filepath.Join(alternateDir, "wrong.txt")},
-	} {
-		request.AlternateModFiles = selection
-
-		request.Parent = t.TempDir()
-
-		if _, err := PrepareWorkspace(t.Context(), request); err == nil {
-			t.Fatal("accepted invalid alternate module selection")
-		}
-
-		entries, err := os.ReadDir(request.Parent)
-		if err != nil || len(entries) != 0 {
-			t.Fatal("invalid selection left output")
-		}
+	dependency := prepared.Relocations[filepath.Join(source, "dependency")]
+	if err != nil || len(parsed.Replace) != 1 || parsed.Replace[0].New.Path != dependency {
+		t.Fatal("alternate replacement did not resolve relative to original module", err)
 	}
+
+	assertAlternateModuleIdentity(t, root.Name())
+
+	copiedSums, err := root.ReadFile("go.sum")
+	if sums == "" {
+		if !errors.Is(err, fs.ErrNotExist) {
+			t.Fatal("original checksums survived alternate selection", err)
+		}
+	} else if err != nil || string(copiedSums) != sums {
+		t.Fatal("alternate checksums not copied", err)
+	}
+}
+
+func assertAlternateModuleIdentity(t *testing.T, dir string) {
+	t.Helper()
+
+	command := exec.CommandContext(t.Context(), "go", "list", "-m")
+	command.Dir = dir
+
+	command.Env = append(os.Environ(), "GOFLAGS=", "GOWORK=off", "GOPROXY=off")
+
+	output, err := command.CombinedOutput()
+	if err != nil || string(output) != "example.com/alternate\n" {
+		t.Fatalf("alternate manifest not used: %v %s", err, output)
+	}
+}
+
+func assertAlternatePreparationCleaned(t *testing.T, request compiler.WorkspaceRequest) {
+	t.Helper()
+
+	entries, err := os.ReadDir(request.Parent)
+	if err != nil || len(entries) != 0 {
+		t.Fatal("invalid selection left output", err)
+	}
+}
+
+func TestPrepareWorkspaceRejectsInvalidAlternateSelection(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"unknown module", "relative", "missing", "malformed", "extension"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			fixture := newAlternateModuleFixture(t)
+			request := fixture.request
+
+			writeRelocationFixture(t, fixture.root, map[string]string{"alternate/malformed.mod": "not a module manifest\n"})
+
+			selection := map[string]map[string]string{
+				"unknown module": {t.TempDir(): filepath.Join(fixture.root.Name(), "alternate", "build.mod")},
+				"relative":       {request.OriginalWorkspaceDir: "relative.mod"},
+				"missing":        {request.OriginalWorkspaceDir: filepath.Join(fixture.root.Name(), "alternate", "missing.mod")},
+				"malformed":      {request.OriginalWorkspaceDir: filepath.Join(fixture.root.Name(), "alternate", "malformed.mod")},
+				"extension":      {request.OriginalWorkspaceDir: filepath.Join(fixture.root.Name(), "alternate", "wrong.txt")},
+			}
+			request.AlternateModFiles = selection[name]
+
+			_, err := compiler.PrepareWorkspace(t.Context(), request)
+			if err == nil {
+				t.Fatal("accepted invalid alternate module selection")
+			}
+
+			assertAlternatePreparationCleaned(t, request)
+			assertCopySourceUnchanged(t, fixture.root, fixture.files)
+		})
+	}
+}
+
+func TestAlternateManifestInstallationPreservesMissingCause(t *testing.T) {
+	t.Parallel()
+
+	fixture := newAlternateModuleFixture(t)
+	request := fixture.request
+	request.SourceDirs = []string{request.OriginalWorkspaceDir}
+	missing := filepath.Join(fixture.root.Name(), "alternate", "missing.mod")
+	request.AlternateModFiles[request.OriginalWorkspaceDir] = missing
+
+	_, err := compiler.PrepareWorkspace(t.Context(), request)
+	if !errors.Is(err, fs.ErrNotExist) || !strings.Contains(err.Error(), "read alternate module manifest") {
+		t.Fatal("missing alternate manifest lost its cause or operation", err)
+	}
+
+	assertAlternatePreparationCleaned(t, request)
+	assertCopySourceUnchanged(t, fixture.root, fixture.files)
+}
+
+func TestAlternateChecksumInstallationPreservesFilesystemCause(t *testing.T) {
+	t.Parallel()
+
+	fixture := newAlternateModuleFixture(t)
+
+	err := fixture.root.Mkdir(filepath.Join("alternate", "build.sum"), 0o700)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = compiler.PrepareWorkspace(t.Context(), fixture.request)
+
+	var pathErr *fs.PathError
+	if !errors.As(err, &pathErr) || !strings.Contains(err.Error(), "read alternate module checksums") {
+		t.Fatal("unreadable alternate checksums lost their cause or operation", err)
+	}
+
+	assertAlternatePreparationCleaned(t, fixture.request)
+	assertCopySourceUnchanged(t, fixture.root, fixture.files)
+}
+
+func TestAlternateManifestSymlinkUsesLogicalChecksums(t *testing.T) {
+	t.Parallel()
+
+	fixture := newAlternateModuleFixture(t)
+	sums := "selected checksums\n"
+	writeRelocationFixture(t, fixture.root, map[string]string{
+		"alternate/build.sum":   sums,
+		"physical/selected.mod": fixture.files["alternate/build.mod"],
+		"physical/selected.sum": "unselected checksums\n",
+	})
+
+	err := fixture.root.Remove(filepath.Join("alternate", "build.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = fixture.root.Symlink(filepath.Join("..", "physical", "selected.mod"), filepath.Join("alternate", "build.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	prepared, err := compiler.PrepareWorkspace(t.Context(), fixture.request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertAlternateModuleCopy(t, fixture.request.OriginalWorkspaceDir, prepared, sums)
+	assertCopySourceUnchanged(t, fixture.root, fixture.files)
 }

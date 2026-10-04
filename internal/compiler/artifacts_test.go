@@ -1,125 +1,179 @@
-package compiler
+package compiler_test
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
-
 	"github.com/DiLRandI/OTelPlan/internal/backend/otelc"
+	"github.com/DiLRandI/OTelPlan/internal/compiler"
+	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+func stagedFixtureFiles() []otelc.GeneratedFile {
+	return []otelc.GeneratedFile{
+		{Path: "hooks/hooks.go", Data: []byte("package hooks\n")},
+		{Path: "manifest.json", Data: []byte("{}\n")},
+	}
+}
+
 func TestStageAndVerifyArtifacts(t *testing.T) {
+	t.Parallel()
+
 	parent := t.TempDir()
-	files := []otelc.GeneratedFile{{Path: "hooks/hooks.go", Data: []byte("package hooks\n")}, {Path: "manifest.json", Data: []byte("{}\n")}}
+	files := stagedFixtureFiles()
 
-	first, err := StageArtifacts(parent, files)
+	first, err := compiler.StageArtifacts(parent, files)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	second, err := StageArtifacts(parent, files)
+	second, err := compiler.StageArtifacts(parent, files)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if first.Dir == second.Dir || !reflect.DeepEqual(first.Files, second.Files) {
+	if first.Dir == second.Dir || !slices.Equal(first.Files, second.Files) {
 		t.Fatal("staging changed identity or reused directory")
 	}
 
-	if err := VerifyArtifacts(first); err != nil {
+	err = compiler.VerifyArtifacts(first)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	for _, change := range []struct {
+	err = compiler.VerifyArtifacts(second)
+	if err != nil {
+		t.Fatal("independent staged bundle changed", err)
+	}
+}
+
+func TestArtifactVerificationRejectsTampering(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	for _, testCase := range []struct {
 		name   string
-		mutate func(string) error
+		mutate func(*os.Root) error
 	}{
-		{"modified", func(dir string) error {
-			return os.WriteFile(filepath.Join(dir, "manifest.json"), []byte("changed"), 0o600)
+		{name: "modified", mutate: func(root *os.Root) error {
+			return root.WriteFile("manifest.json", []byte("changed"), 0o600)
 		}},
-		{"missing", func(dir string) error { return os.Remove(filepath.Join(dir, "manifest.json")) }},
-		{"extra", func(dir string) error { return os.WriteFile(filepath.Join(dir, "extra"), nil, 0o600) }},
-		{"symlink", func(dir string) error {
-			return os.Symlink(filepath.Join(second.Dir, "manifest.json"), filepath.Join(dir, "link"))
-		}},
+		{name: "missing", mutate: func(root *os.Root) error { return root.Remove("manifest.json") }},
+		{name: "extra", mutate: func(root *os.Root) error { return root.WriteFile("extra", nil, 0o600) }},
+		{name: "symlink", mutate: func(root *os.Root) error { return root.Symlink("manifest.json", "link") }},
 	} {
-		t.Run(change.name, func(t *testing.T) {
-			staged, err := StageArtifacts(parent, files)
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			staged, err := compiler.StageArtifacts(parent, stagedFixtureFiles())
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			if err := change.mutate(staged.Dir); err != nil {
+			root, err := os.OpenRoot(staged.Dir)
+			if err != nil {
 				t.Fatal(err)
 			}
 
-			if err := VerifyArtifacts(staged); err == nil {
+			defer func() { _ = root.Close() }()
+
+			err = testCase.mutate(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = compiler.VerifyArtifacts(staged)
+			if err == nil {
 				t.Fatal("accepted changed artifacts")
 			}
 		})
 	}
-
-	if err := VerifyArtifacts(second); err != nil {
-		t.Fatalf("other staged bundle changed: %v", err)
-	}
 }
 
 func TestStageRejectsUnsafePathsWithoutWrites(t *testing.T) {
+	t.Parallel()
+
 	parent := t.TempDir()
 	for _, path := range []string{"../escape", "/absolute", "a/../b", "a\\b", "C:drive", "."} {
-		if _, err := StageArtifacts(parent, []otelc.GeneratedFile{{Path: path}}); err == nil {
+		_, err := compiler.StageArtifacts(parent, []otelc.GeneratedFile{{Path: path, Data: nil}})
+		if err == nil {
 			t.Fatalf("accepted %q", path)
 		}
 	}
 
-	if _, err := StageArtifacts(parent, []otelc.GeneratedFile{{Path: "same"}, {Path: "same"}}); err == nil {
+	_, err := compiler.StageArtifacts(parent, []otelc.GeneratedFile{{Path: "same", Data: nil}, {Path: "same", Data: nil}})
+	if err == nil {
 		t.Fatal("accepted duplicate")
 	}
 
 	entries, err := os.ReadDir(parent)
 	if err != nil || len(entries) != 0 {
-		t.Fatal("invalid input wrote files")
+		t.Fatal("invalid input wrote files", err)
 	}
 }
 
 func TestStageCleansPartialFailure(t *testing.T) {
-	parent := t.TempDir()
+	t.Parallel()
 
-	_, err := StageArtifacts(parent, []otelc.GeneratedFile{{Path: "a", Data: []byte("file")}, {Path: "a/b"}})
+	parent := t.TempDir()
+	files := []otelc.GeneratedFile{{Path: "a", Data: []byte("file")}, {Path: "a/b", Data: nil}}
+
+	_, err := compiler.StageArtifacts(parent, files)
 	if err == nil {
 		t.Fatal("accepted file-directory conflict")
 	}
 
 	entries, err := os.ReadDir(parent)
 	if err != nil || len(entries) != 0 {
-		t.Fatal("failed staging left files")
+		t.Fatal("failed staging left files", err)
 	}
 }
 
-func TestStageGeneratedBundle(t *testing.T) {
+func generatedArtifactBundle(t *testing.T) model.Artifacts {
+	t.Helper()
+
 	backend, err := otelc.Identity(otelc.SupportedVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	files, err := otelc.RenderBundle(backend, "test", &model.CodeModel{}, model.ResolvedPlan{}, "example.com/generated")
+	code, plan := new(model.CodeModel), new(model.ResolvedPlan)
+
+	files, err := otelc.RenderBundle(backend, "test", code, *plan, "example.com/generated")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	staged, err := StageArtifacts(t.TempDir(), files)
+	staged, err := compiler.StageArtifacts(t.TempDir(), files)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := VerifyArtifacts(staged); err != nil {
+	return staged
+}
+
+func TestStageGeneratedBundle(t *testing.T) {
+	t.Parallel()
+
+	staged := generatedArtifactBundle(t)
+
+	err := compiler.VerifyArtifacts(staged)
+	if err != nil {
 		t.Fatal(err)
 	}
+
+	root, err := os.OpenRoot(staged.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() { _ = root.Close() }()
 
 	foundManifest := false
 
@@ -128,7 +182,7 @@ func TestStageGeneratedBundle(t *testing.T) {
 			foundManifest = true
 		}
 
-		info, err := os.Stat(filepath.Join(staged.Dir, filepath.FromSlash(file.Path)))
+		info, err := root.Stat(filepath.FromSlash(file.Path))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -141,16 +195,59 @@ func TestStageGeneratedBundle(t *testing.T) {
 	if !foundManifest {
 		t.Fatal("manifest was not hashed")
 	}
+}
 
+func TestArtifactVerificationRejectsMalformedDigests(t *testing.T) {
+	t.Parallel()
+
+	staged := generatedArtifactBundle(t)
 	for _, digest := range []string{"", strings.Repeat("x", 71), "sha256:" + strings.Repeat("A", 64)} {
 		changed := staged
-		changed.Files = append([]model.ArtifactFile(nil), staged.Files...)
-
+		changed.Files = slices.Clone(staged.Files)
 		changed.Files[0].Digest = digest
 
-		err := VerifyArtifacts(changed)
+		err := compiler.VerifyArtifacts(changed)
 		if err == nil {
 			t.Fatal("accepted malformed digest")
 		}
+	}
+}
+
+func TestArtifactStagingInvalidPathSharesCause(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	files := []otelc.GeneratedFile{{Path: "../escape", Data: nil}}
+	_, first := compiler.StageArtifacts(parent, files)
+
+	_, second := compiler.StageArtifacts(parent, files)
+	if first == nil || !errors.Is(second, first) || first.Error() != "invalid or duplicate artifact path" {
+		t.Fatal("invalid artifact paths lost their stable cause or meaningful message")
+	}
+}
+
+func TestArtifactVerificationInvalidInventorySharesCause(t *testing.T) {
+	t.Parallel()
+
+	staged := new(model.Artifacts)
+	staged.Dir = t.TempDir()
+	staged.Files = []model.ArtifactFile{{Path: "../escape", Digest: "invalid"}}
+	first := compiler.VerifyArtifacts(*staged)
+
+	second := compiler.VerifyArtifacts(*staged)
+	if first == nil || !errors.Is(second, first) || first.Error() != "invalid artifact inventory" {
+		t.Fatal("invalid artifact inventory lost its stable cause or meaningful message")
+	}
+}
+
+func TestArtifactVerificationMissingDirectoryPreservesCause(t *testing.T) {
+	t.Parallel()
+
+	staged := new(model.Artifacts)
+	staged.Dir = filepath.Join(t.TempDir(), "missing")
+
+	err := compiler.VerifyArtifacts(*staged)
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal("missing artifact directory lost its filesystem cause", err)
 	}
 }

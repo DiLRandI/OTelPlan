@@ -15,55 +15,93 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+const (
+	artifactStagingDirectoryMode = 0o700
+	artifactStagingFileMode      = 0o600
+)
+
+var (
+	errInvalidArtifactPath          = errors.New("invalid or duplicate artifact path")
+	errInvalidArtifactInventory     = errors.New("invalid artifact inventory")
+	errNonregularStagedArtifact     = errors.New("artifact is not a regular file")
+	errUnexpectedStagedArtifact     = errors.New("unexpected artifact file")
+	errStagedArtifactDigestMismatch = errors.New("artifact digest mismatch")
+	errMissingStagedArtifact        = errors.New("artifact file is missing")
+)
+
 // StageArtifacts creates a private, fresh directory under parent. The caller
 // owns its lifetime and must remove it when compilation or building is finished.
 func StageArtifacts(parent string, files []otelc.GeneratedFile) (model.Artifacts, error) {
-	artifacts := model.Artifacts{Files: make([]model.ArtifactFile, 0, len(files))}
+	var empty model.Artifacts
 
-	seen := map[string]bool{}
-	for _, file := range files {
-		if !artifactPath(file.Path) || seen[file.Path] {
-			return model.Artifacts{}, errors.New("invalid or duplicate artifact path")
-		}
-
-		seen[file.Path] = true
-
-		artifacts.Files = append(artifacts.Files, model.ArtifactFile{Path: file.Path, Digest: artifactDigest(file.Data)})
+	inventory, err := generatedArtifactInventory(files)
+	if err != nil {
+		return empty, err
 	}
-
-	sort.Slice(artifacts.Files, func(i, j int) bool { return artifacts.Files[i].Path < artifacts.Files[j].Path })
 
 	dir, err := os.MkdirTemp(parent, "otelplan-artifacts-")
 	if err != nil {
-		return model.Artifacts{}, fmt.Errorf("create artifact directory: %w", err)
+		return empty, fmt.Errorf("create artifact directory: %w", err)
 	}
 
 	succeeded := false
-
 	defer func() {
 		if !succeeded {
 			_ = os.RemoveAll(dir)
 		}
 	}()
 
-	for _, file := range files {
-		filename := filepath.Join(dir, filepath.FromSlash(file.Path))
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return empty, fmt.Errorf("open fresh artifact directory: %w", err)
+	}
 
-		err := os.MkdirAll(filepath.Dir(filename), 0o700)
-		if err != nil {
-			return model.Artifacts{}, fmt.Errorf("create artifact subdirectory: %w", err)
+	defer func() { _ = root.Close() }()
+
+	err = writeGeneratedArtifacts(root, files)
+	if err != nil {
+		return empty, err
+	}
+
+	succeeded = true
+
+	return model.Artifacts{Dir: dir, Files: inventory}, nil
+}
+
+func generatedArtifactInventory(files []otelc.GeneratedFile) ([]model.ArtifactFile, error) {
+	inventory := make([]model.ArtifactFile, 0, len(files))
+	seen := make(map[string]bool, len(files))
+
+	for _, file := range files {
+		if !artifactPath(file.Path) || seen[file.Path] {
+			return nil, errInvalidArtifactPath
 		}
 
-		err = os.WriteFile(filename, file.Data, 0o600)
+		seen[file.Path] = true
+		inventory = append(inventory, model.ArtifactFile{Path: file.Path, Digest: artifactDigest(file.Data)})
+	}
+
+	sort.Slice(inventory, func(i, j int) bool { return inventory[i].Path < inventory[j].Path })
+
+	return inventory, nil
+}
+
+func writeGeneratedArtifacts(root *os.Root, files []otelc.GeneratedFile) error {
+	for _, file := range files {
+		name := filepath.FromSlash(file.Path)
+
+		err := root.MkdirAll(filepath.Dir(name), artifactStagingDirectoryMode)
 		if err != nil {
-			return model.Artifacts{}, fmt.Errorf("write artifact: %w", err)
+			return fmt.Errorf("create artifact subdirectory: %w", err)
+		}
+
+		err = root.WriteFile(name, file.Data, artifactStagingFileMode)
+		if err != nil {
+			return fmt.Errorf("write artifact: %w", err)
 		}
 	}
 
-	artifacts.Dir = dir
-	succeeded = true
-
-	return artifacts, nil
+	return nil
 }
 
 func artifactPath(path string) bool {
@@ -75,13 +113,9 @@ func artifactDigest(data []byte) string { return fmt.Sprintf("sha256:%x", sha256
 // VerifyArtifacts checks the complete file set, rejecting links and non-regular
 // files. Expected hashes must come from trusted compilation or lock state.
 func VerifyArtifacts(artifacts model.Artifacts) error {
-	expected := map[string]string{}
-	for _, file := range artifacts.Files {
-		if !artifactPath(file.Path) || expected[file.Path] != "" || !validArtifactDigest(file.Digest) {
-			return errors.New("invalid artifact inventory")
-		}
-
-		expected[file.Path] = file.Digest
+	expected, err := expectedArtifactInventory(artifacts.Files)
+	if err != nil {
+		return err
 	}
 
 	root, err := os.OpenRoot(artifacts.Dir)
@@ -93,31 +127,18 @@ func VerifyArtifacts(artifacts model.Artifacts) error {
 
 	count := 0
 
-	err = fs.WalkDir(root.FS(), ".", func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	err = fs.WalkDir(root.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return fmt.Errorf("read artifact entry: %w", walkErr)
 		}
 
 		if entry.IsDir() {
 			return nil
 		}
 
-		if !entry.Type().IsRegular() {
-			return errors.New("artifact is not a regular file")
-		}
-
-		digest, ok := expected[path]
-		if !ok {
-			return errors.New("unexpected artifact file")
-		}
-
-		data, err := root.ReadFile(path)
+		err := verifyStagedArtifactFile(root, expected, path, entry.Type())
 		if err != nil {
 			return err
-		}
-
-		if artifactDigest(data) != digest {
-			return errors.New("artifact digest mismatch")
 		}
 
 		count++
@@ -129,7 +150,42 @@ func VerifyArtifacts(artifacts model.Artifacts) error {
 	}
 
 	if count != len(expected) {
-		return errors.New("artifact file is missing")
+		return errMissingStagedArtifact
+	}
+
+	return nil
+}
+
+func expectedArtifactInventory(files []model.ArtifactFile) (map[string]string, error) {
+	expected := make(map[string]string, len(files))
+	for _, file := range files {
+		if !artifactPath(file.Path) || expected[file.Path] != "" || !validArtifactDigest(file.Digest) {
+			return nil, errInvalidArtifactInventory
+		}
+
+		expected[file.Path] = file.Digest
+	}
+
+	return expected, nil
+}
+
+func verifyStagedArtifactFile(root *os.Root, expected map[string]string, path string, mode fs.FileMode) error {
+	if !mode.IsRegular() {
+		return errNonregularStagedArtifact
+	}
+
+	digest, exists := expected[path]
+	if !exists {
+		return errUnexpectedStagedArtifact
+	}
+
+	data, err := root.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read staged artifact contents: %w", err)
+	}
+
+	if artifactDigest(data) != digest {
+		return errStagedArtifactDigestMismatch
 	}
 
 	return nil

@@ -14,8 +14,17 @@ import (
 	"sort"
 )
 
-func materializeVendorWorkspace(ctx context.Context, workspace PreparedWorkspace, originalVendor string, env []string) error {
-	if _, err := os.Stat(filepath.Join(originalVendor, "modules.txt")); err != nil {
+var (
+	errNonregularAnalyzedVendorFile = errors.New("is not regular")
+	errAddedVendorFile              = errors.New("was added")
+	errChangedVendorFile            = errors.New("changed")
+	errNonregularVendorEntry        = errors.New("vendor entry is not a regular file")
+)
+
+func materializeVendorWorkspace(ctx context.Context, workspace PreparedWorkspace,
+	originalVendor string, env []string) error {
+	_, err := os.Stat(filepath.Join(originalVendor, "modules.txt"))
+	if err != nil {
 		return fmt.Errorf("read analyzed vendor manifest: %w", err)
 	}
 
@@ -23,15 +32,19 @@ func materializeVendorWorkspace(ctx context.Context, workspace PreparedWorkspace
 	command.Dir = workspace.Dir
 	command.Env = append(append([]string(nil), env...), "GOWORK="+workspace.WorkspaceFile, "GOFLAGS=")
 
-	if err := command.Run(); err != nil {
+	err = command.Run()
+	if err != nil {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return fmt.Errorf("materialize isolated vendor workspace: %w", ctx.Err())
 		}
 
-		return fmt.Errorf("materialize isolated vendor workspace (dependencies must be available in the module cache): %w", err)
+		return fmt.Errorf(
+			"materialize isolated vendor workspace (dependencies must be available in the module cache): %w", err,
+		)
 	}
 
-	if err := compareVendorFiles(originalVendor, filepath.Join(workspace.Dir, "vendor")); err != nil {
+	err = compareVendorFiles(originalVendor, filepath.Join(workspace.Dir, "vendor"))
+	if err != nil {
 		return fmt.Errorf("isolated vendor content differs from analyzed source: %w", err)
 	}
 
@@ -55,7 +68,7 @@ func compareVendorFiles(originalDir, generatedDir string) error {
 
 	err = fs.WalkDir(original.FS(), ".", func(vendorPath string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return walkErr
+			return fmt.Errorf("read analyzed vendor entry: %w", walkErr)
 		}
 
 		if entry.IsDir() || vendorPath == "modules.txt" {
@@ -63,7 +76,7 @@ func compareVendorFiles(originalDir, generatedDir string) error {
 		}
 
 		if !entry.Type().IsRegular() {
-			return fmt.Errorf("analyzed vendor file %s is not regular", vendorPath)
+			return fmt.Errorf("analyzed vendor file %s %w", vendorPath, errNonregularAnalyzedVendorFile)
 		}
 
 		directory, name := path.Split(vendorPath)
@@ -80,7 +93,9 @@ func compareVendorFiles(originalDir, generatedDir string) error {
 	if err != nil {
 		return fmt.Errorf("compare vendor trees: %w", err)
 	}
-	if err := rejectAddedVendorFiles(generated, originalFiles); err != nil {
+
+	err = rejectAddedVendorFiles(generated, originalFiles)
+	if err != nil {
 		return err
 	}
 
@@ -103,7 +118,7 @@ func rejectAddedVendorFiles(generated *os.Root, originals map[string]map[string]
 
 		for _, entry := range entries {
 			if !entry.IsDir() && !originals[directory][entry.Name()] {
-				return fmt.Errorf("vendored file %s was added", path.Join(directory, entry.Name()))
+				return fmt.Errorf("vendored file %s %w", path.Join(directory, entry.Name()), errAddedVendorFile)
 			}
 		}
 	}
@@ -123,7 +138,7 @@ func compareVendorFile(original, generated *os.Root, path string) error {
 	}
 
 	if originalDigest != generatedDigest {
-		return fmt.Errorf("vendored file %s changed", path)
+		return fmt.Errorf("vendored file %s %w", path, errChangedVendorFile)
 	}
 
 	return nil
@@ -142,13 +157,14 @@ func vendorFileDigest(root *os.Root, path string) ([sha256.Size]byte, error) {
 	}
 
 	if !info.Mode().IsRegular() {
-		return [sha256.Size]byte{}, errors.New("vendor entry is not a regular file")
+		return [sha256.Size]byte{}, errNonregularVendorEntry
 	}
 
 	hash := sha256.New()
 
-	if _, err := io.Copy(hash, file); err != nil {
-		return [sha256.Size]byte{}, err
+	_, err = io.Copy(hash, file)
+	if err != nil {
+		return [sha256.Size]byte{}, fmt.Errorf("digest vendor file: %w", err)
 	}
 
 	return [sha256.Size]byte(hash.Sum(nil)), nil

@@ -1,6 +1,7 @@
 package otelc
 
 import (
+	"errors"
 	"go/ast"
 	"reflect"
 	"sort"
@@ -15,7 +16,8 @@ func TestGenericAttributesUseDirectTypedInputs(t *testing.T) {
 
 	_, code, target := accessorFixture(t)
 	symbol, _ := code.Symbol(target.SymbolID)
-	symbol.Generics = &model.GenericInfo{TypeParams: []string{"T"}}
+	symbol.Generics = new(model.GenericInfo)
+	symbol.Generics.TypeParams = []string{"T"}
 	target.ContextStrategy = model.ContextStrategy{Strategy: model.ContextStrategyRoot, Index: 0}
 	target.SpanName = "generic.capture"
 	target.ErrorStrategy = model.ErrorStrategy{Record: true, Indexes: []int{1}}
@@ -50,18 +52,20 @@ func TestGenericAttributesUseDirectTypedInputs(t *testing.T) {
 }
 
 func TestAttributeHooksAreTypedAndBound(t *testing.T) {
+	t.Parallel()
+
 	_, code, target := accessorFixture(t)
 	target.SpanName = "accessor.operation"
 	target.Attributes = []model.AttributePlan{
-		{Key: "request.bool", From: model.AttributeSource{Argument: "req.Enabled"}},
-		{Key: "request.float", From: model.AttributeSource{Argument: "req.Inner.Score"}},
-		{Key: "request.int", From: model.AttributeSource{Argument: "req.Signed"}},
-		{Key: "request.string", From: model.AttributeSource{Argument: "req.ID"}},
-		{Key: "result.int", From: model.AttributeSource{Result: "result.Big"}},
-		{Key: "result.string", From: model.AttributeSource{Result: "result.Message"}},
-		{Key: "fixed.bool", From: model.AttributeSource{Constant: false}},
+		accessorAttributePlan("request.bool", argumentAttributeSource("req.Enabled")),
+		accessorAttributePlan("request.float", argumentAttributeSource("req.Inner.Score")),
+		accessorAttributePlan("request.int", argumentAttributeSource("req.Signed")),
+		accessorAttributePlan("request.string", argumentAttributeSource("req.ID")),
+		accessorAttributePlan("result.int", model.AttributeSource{Argument: "", Result: "result.Big", Constant: nil}),
+		accessorAttributePlan("result.string", model.AttributeSource{Argument: "", Result: "result.Message", Constant: nil}),
+		accessorAttributePlan("fixed.bool", constantAccessorSource(false)),
 	}
-	plan := model.ResolvedPlan{Targets: []model.ResolvedTarget{target}}
+	plan := resolvedPlanWithTargets(target)
 	original := append([]model.AttributePlan(nil), target.Attributes...)
 
 	source, err := RenderHooks(SupportedVersion, "runtime", code, plan, hookImportPath)
@@ -80,6 +84,27 @@ func TestAttributeHooksAreTypedAndBound(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	assertAttributeHookLinks(t, file, source, expected)
+
+	_, hooks, err := RenderRules(SupportedVersion, code, plan, hookImportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	before := findFunction(t, file, hooks[0].Before)
+
+	after := findFunction(t, file, hooks[0].After)
+
+	assertAttributeHookReads(t, before, after, source, expected)
+	assertAttributeHookConstructors(t, source)
+	assertAttributeHookOrdering(t, source)
+
+	assertAttributeHookReordering(t, code, plan, target.Attributes, source)
+}
+
+func assertAttributeHookLinks(t *testing.T, file *ast.File, source []byte, expected []AccessorBinding) {
+	t.Helper()
+
 	imports := importedPaths(file)
 	if imports["example.com/accessorprobe/ops"] {
 		t.Fatalf("generated hooks import application package: %s", source)
@@ -91,42 +116,61 @@ func TestAttributeHooksAreTypedAndBound(t *testing.T) {
 			t.Errorf("missing linkname declaration %q", want)
 		}
 	}
+}
 
-	_, hooks, err := RenderRules(SupportedVersion, code, plan, hookImportPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	before := findFunction(t, file, hooks[0].Before)
-
-	after := findFunction(t, file, hooks[0].After)
+func assertAttributeHookReads(t *testing.T, before, after *ast.FuncDecl, source []byte, expected []AccessorBinding) {
+	t.Helper()
 
 	if !containsCall(before, "IsRecording") || !containsCall(after, "IsRecording") {
 		t.Fatal("attribute access is not guarded by span.IsRecording")
 	}
 
 	for _, binding := range expected {
-		if !containsCall(before, "read_"+binding.Function) && !containsCall(after, "read_"+binding.Function) {
-			t.Errorf("accessor %q is not called", binding.Function)
+		reader := "read_" + binding.Function
+		readHook, otherHook := before, after
+
+		if binding.Source == accessorResultSource {
+			readHook, otherHook = after, before
 		}
 
-		if !strings.Contains(string(source), "read_"+binding.Function+"(") || !strings.Contains(string(source), ", ok") {
+		assertAccessorReadGuarded(t, readHook, reader)
+
+		if containsCall(otherHook, reader) {
+			t.Errorf("accessor %q is called in the wrong lifecycle phase", binding.Function)
+		}
+
+		if !strings.Contains(string(source), reader+"(") || !strings.Contains(string(source), ", ok") {
 			t.Errorf("accessor %q does not expose availability handling", binding.Function)
 		}
 	}
+}
+
+func assertAttributeHookConstructors(t *testing.T, source []byte) {
+	t.Helper()
 
 	for _, want := range []string{"attribute.Bool(", "attribute.Float64(", "attribute.Int64(", "attribute.String("} {
 		if !strings.Contains(string(source), want) {
 			t.Errorf("missing scalar constructor %s", want)
 		}
 	}
+}
+
+func assertAttributeHookOrdering(t *testing.T, source []byte) {
+	t.Helper()
 
 	if strings.Index(string(source), "result.int") < strings.Index(string(source), "request.int") {
 		t.Fatal("result attributes were emitted before argument attributes")
 	}
+}
 
-	reordered := append([]model.AttributePlan(nil), target.Attributes...)
+func assertAttributeHookReordering(t *testing.T, code *model.CodeModel, plan model.ResolvedPlan,
+	attributes []model.AttributePlan, source []byte) {
+	t.Helper()
+
+	reordered := append([]model.AttributePlan(nil), attributes...)
 	sort.Slice(reordered, func(i, j int) bool { return reordered[i].Key > reordered[j].Key })
+
+	plan.Targets = append([]model.ResolvedTarget(nil), plan.Targets...)
 	plan.Targets[0].Attributes = reordered
 
 	reorderedSource, err := RenderHooks(SupportedVersion, "runtime", code, plan, hookImportPath)
@@ -135,7 +179,80 @@ func TestAttributeHooksAreTypedAndBound(t *testing.T) {
 	}
 }
 
+func assertAccessorReadGuarded(t *testing.T, function *ast.FuncDecl, reader string) {
+	t.Helper()
+
+	guarded := recordingGuardedCalls(function)
+	reads := 0
+
+	ast.Inspect(function.Body, func(node ast.Node) bool {
+		call, isCall := node.(*ast.CallExpr)
+		if !isCall {
+			return true
+		}
+
+		callee, isIdentifier := call.Fun.(*ast.Ident)
+		if !isIdentifier || callee.Name != reader {
+			return true
+		}
+
+		reads++
+
+		if !guarded[call] {
+			t.Errorf("accessor %q is evaluated outside span.IsRecording", reader)
+		}
+
+		return true
+	})
+
+	if reads != 1 {
+		t.Errorf("accessor %q is evaluated %d times, want once", reader, reads)
+	}
+}
+
+func recordingGuardedCalls(function *ast.FuncDecl) map[*ast.CallExpr]bool {
+	guarded := map[*ast.CallExpr]bool{}
+
+	ast.Inspect(function.Body, func(node ast.Node) bool {
+		statement, isIf := node.(*ast.IfStmt)
+		if !isIf || !isRecordingGuard(statement) {
+			return true
+		}
+
+		ast.Inspect(statement.Body, func(node ast.Node) bool {
+			call, isCall := node.(*ast.CallExpr)
+			if isCall {
+				guarded[call] = true
+			}
+
+			return true
+		})
+
+		return true
+	})
+
+	return guarded
+}
+
+func isRecordingGuard(statement *ast.IfStmt) bool {
+	call, isCall := statement.Cond.(*ast.CallExpr)
+	if !isCall {
+		return false
+	}
+
+	selector, isSelector := call.Fun.(*ast.SelectorExpr)
+	if !isSelector || selector.Sel.Name != "IsRecording" {
+		return false
+	}
+
+	receiver, isIdentifier := selector.X.(*ast.Ident)
+
+	return isIdentifier && receiver.Name == "span"
+}
+
 func TestAttributeHooksOffsetMethodReceiver(t *testing.T) {
+	t.Parallel()
+
 	_, code, target := accessorFixture(t)
 
 	symbol, ok := code.Symbol(target.SymbolID)
@@ -145,7 +262,8 @@ func TestAttributeHooksOffsetMethodReceiver(t *testing.T) {
 
 	method := *symbol
 	method.Kind = model.SymbolMethod
-	method.Receiver = &model.Receiver{Type: "Worker", Pointer: true}
+	method.Receiver = new(model.Receiver)
+	method.Receiver.Type, method.Receiver.Pointer = "Worker", true
 	method.ID = model.MethodID(method.PackageImportPath, *method.Receiver, method.Name)
 
 	method.Parameters = append([]model.Parameter(nil), symbol.Parameters...)
@@ -154,8 +272,8 @@ func TestAttributeHooksOffsetMethodReceiver(t *testing.T) {
 	target.SymbolID = method.ID
 	target.Signature = method.Signature
 	target.SpanName = "method.operation"
-	target.Attributes = []model.AttributePlan{{Key: "request.id", From: model.AttributeSource{Argument: "req.ID"}}}
-	plan := model.ResolvedPlan{Targets: []model.ResolvedTarget{target}}
+	target.Attributes = []model.AttributePlan{accessorAttributePlan("request.id", argumentAttributeSource("req.ID"))}
+	plan := resolvedPlanWithTargets(target)
 
 	source, err := RenderHooks(SupportedVersion, "runtime", code, plan, hookImportPath)
 	if err != nil {
@@ -177,16 +295,26 @@ func TestAttributeHooksOffsetMethodReceiver(t *testing.T) {
 }
 
 func TestAttributeHooksRejectsUnsafeAttributeWithoutPartialOutput(t *testing.T) {
+	t.Parallel()
+
 	_, code, target := accessorFixture(t)
+	target.SpanName = "unsafe.capture"
 	target.Attributes = []model.AttributePlan{{
 		Key:            "request.secret",
-		From:           model.AttributeSource{Argument: "req.Secret"},
+		From:           argumentAttributeSource("req.Secret"),
 		Classification: model.ClassificationSecret,
+		Allow:          false,
 	}}
 
-	data, err := RenderHooks(SupportedVersion, "runtime", code, model.ResolvedPlan{Targets: []model.ResolvedTarget{target}}, hookImportPath)
+	plan := resolvedPlanWithTargets(target)
+
+	data, err := RenderHooks(SupportedVersion, "runtime", code, plan, hookImportPath)
 	if err == nil || data != nil {
 		t.Fatalf("unsafe attribute produced partial hooks: %q, %v", data, err)
+	}
+
+	if !errors.Is(err, errAccessorUnsafePlan) {
+		t.Fatalf("unsafe attribute failed for an unrelated reason: %v", err)
 	}
 }
 

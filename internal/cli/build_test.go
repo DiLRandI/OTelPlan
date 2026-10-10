@@ -414,26 +414,82 @@ func TestBuildCLILibraryWithoutOutput(t *testing.T) {
 
 	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	prepareOfflineIntegration(t)
-	root, original := cliFixture(t)
+	runLibraryBuildContract(t)
+}
 
-	var out, errout bytes.Buffer
+func runLibraryBuildContract(t *testing.T) {
+	t.Helper()
 
-	if exit := Run(t.Context(), []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "."}, &out, &errout); exit != 0 {
-		t.Fatalf("library build exit=%d: %s %s", exit, &out, &errout)
+	root, _ := cliFixture(t)
+	original := snapshotPinnedBuildFixture(t, root)
+
+	var stdout, stderr bytes.Buffer
+
+	args := []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "."}
+
+	exit := Run(t.Context(), args, &stdout, &stderr)
+	if exit != 0 || stderr.Len() != 0 {
+		t.Fatalf("library build exit=%d: stdout=%s stderr=%s", exit, &stdout, &stderr)
 	}
 
-	var reply struct {
-		OK   bool         `json:"ok"`
-		Data buildSummary `json:"data"`
+	assertLibraryBuildReply(t, stdout.Bytes())
+
+	assertLibraryFixtureUnchanged(t, root, original)
+}
+
+func assertLibraryBuildReply(t *testing.T, output []byte) {
+	t.Helper()
+
+	var reply libraryBuildReply
+
+	err := json.Unmarshal(output, &reply)
+	if err != nil {
+		t.Fatalf("invalid library response: %v, %s", err, output)
 	}
 
-	if err := json.Unmarshal(out.Bytes(), &reply); err != nil || !reply.OK || reply.Data.Path != "" {
-		t.Fatalf("unexpected library output: %s", &out)
+	assertLibraryBuildEnvelope(t, reply, output)
+
+	if string(reply.Diagnostics) != "[]" || len(reply.Data) == 0 || string(reply.Data) == "null" {
+		t.Fatalf("library build response omitted data: %s", output)
 	}
 
-	entries, err := os.ReadDir(root)
-	if err != nil || len(entries) != len(original) {
-		t.Fatal("library build wrote project files")
+	var summary buildSummary
+
+	err = json.Unmarshal(reply.Data, &summary)
+	if err != nil || len(summary.Path) != 0 || len(summary.Digest) != 0 || len(summary.Files) != 0 {
+		t.Fatalf("library build unexpectedly published output: %s", output)
+	}
+}
+
+func assertLibraryBuildEnvelope(t *testing.T, reply libraryBuildReply, output []byte) {
+	t.Helper()
+
+	if reply.APIVersion != APIVersion || reply.Command != "build" || !reply.OK {
+		t.Fatalf("unexpected library output: %s", output)
+	}
+}
+
+type libraryBuildReply struct {
+	APIVersion  string          `json:"apiVersion"`
+	Command     string          `json:"command"`
+	OK          bool            `json:"ok"`
+	Diagnostics json.RawMessage `json:"diagnostics"`
+	Data        json.RawMessage `json:"data"`
+}
+
+func assertLibraryFixtureUnchanged(t *testing.T, root string, original map[string][]byte) {
+	t.Helper()
+
+	current := snapshotPinnedBuildFixture(t, root)
+	if len(current) != len(original) {
+		t.Fatalf("library build changed file set: got %d files, want %d", len(current), len(original))
+	}
+
+	for name, want := range original {
+		got, exists := current[name]
+		if !exists || !bytes.Equal(got, want) {
+			t.Fatalf("library build changed %s", name)
+		}
 	}
 }
 
@@ -599,20 +655,45 @@ func readWorkspaceArtifact(t *testing.T, publishedPath string) []byte {
 }
 
 func TestBuildSummaryText(t *testing.T) {
-	for _, tc := range []struct {
-		data buildSummary
-		want string
-	}{
-		{buildSummary{}, "build succeeded; no executable output\n"},
-		{buildSummary{Path: "app", Digest: "one"}, "built app one\n"},
-		{buildSummary{Files: []buildFile{{Path: "bin/first", Digest: "one"}, {Path: "bin/second", Digest: "two"}}}, "built bin/first one\nbuilt bin/second two\n"},
-	} {
-		var out bytes.Buffer
+	t.Parallel()
 
-		err := emit(&out, options{format: "text"}, response{OK: true, Data: tc.data})
-		if err != nil || out.String() != tc.want {
-			t.Fatalf("output=%q, %v; want %q", out.String(), err, tc.want)
-		}
+	tests := []struct {
+		name   string
+		path   string
+		digest string
+		files  []buildFile
+		want   string
+	}{
+		{name: "empty", path: "", digest: "", files: nil, want: "build succeeded; no executable output\n"},
+		{name: "executable", path: "app", digest: "one", files: nil, want: "built app one\n"},
+		{name: "directory", files: []buildFile{
+			{Path: "bin/first", Digest: "one"}, {Path: "bin/second", Digest: "two"},
+		}, path: "", digest: "", want: "built bin/first one\nbuilt bin/second two\n"},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var summary buildSummary
+
+			summary.Path, summary.Digest = testCase.path, testCase.digest
+			summary.Files = append(summary.Files, testCase.files...)
+
+			var options options
+
+			options.format = "text"
+
+			var reply response
+
+			reply.OK, reply.Data = true, summary
+
+			var output bytes.Buffer
+
+			err := emit(&output, options, reply)
+			if err != nil || output.String() != testCase.want {
+				t.Fatalf("output=%q, %v; want %q", output.String(), err, testCase.want)
+			}
+		})
 	}
 }
 

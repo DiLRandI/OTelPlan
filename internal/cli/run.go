@@ -10,9 +10,12 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+// APIVersion identifies the versioned JSON response contract.
 const APIVersion = "otelplan.io/cli/v1alpha1"
 
 const (
+	helpCommandName    = "help"
+	versionCommandName = "version"
 	inspectCommandName = "inspect"
 	explainCommandName = "explain"
 	compileCommandName = "compile"
@@ -24,6 +27,7 @@ const (
 		"<init|scan|inspect|explain|validate|lock|diff|compile|build|version> [arguments]"
 )
 
+// Version is the tool identity recorded in responses and generated artifacts.
 var Version = "dev"
 
 type response struct {
@@ -47,11 +51,14 @@ type options struct {
 	quiet, verbose, noColor, dependencies, interfaces, help bool
 }
 
+// Run executes arguments with caller cancellation and returns a CLI exit code.
+// The caller retains ownership of the output writers.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	return run(ctx, args, nil, stdout, stderr)
 }
 
-// RunWithInput runs the CLI with explicit input for interactive commands.
+// RunWithInput supplies caller-owned input for interactive commands.
+// Cancellation stops the CLI; the caller remains responsible for releasing a blocked input reader.
 func RunWithInput(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return run(ctx, args, stdin, stdout, stderr)
 }
@@ -59,12 +66,7 @@ func RunWithInput(ctx context.Context, args []string, stdin io.Reader, stdout, s
 func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	opts, positionals, err := parse(args)
 	if err != nil {
-		command := ""
-		if len(positionals) > 0 {
-			command = positionals[0]
-		}
-
-		return usageError(opts, command, err.Error(), stdout, stderr)
+		return usageError(opts, firstCommand(positionals), err.Error(), stdout, stderr)
 	}
 
 	if opts.verbose {
@@ -72,7 +74,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	}
 
 	if opts.help {
-		positionals = []string{"help"}
+		positionals = []string{helpCommandName}
 	}
 
 	if len(positionals) == 0 {
@@ -80,84 +82,92 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	}
 
 	command := positionals[0]
-	rest := positionals[1:]
-	output := response{APIVersion: APIVersion, Command: command, OK: true, Diagnostics: model.DiagnosticErrorList{}}
+	data, exit, diagnostics := dispatchCommand(ctx, command, opts, positionals[1:], stdin, stderr)
+	reply := commandResponse(command, data, exit, diagnostics)
 
-	fail := func(exit int, code model.Code, message string) int {
-		output.OK = false
-
-		output.Diagnostics = append(output.Diagnostics, model.DiagnosticError{Severity: model.SeverityError, Code: code, Message: message})
-
-		err := emit(stdout, opts, output)
-		if err != nil {
-			_, _ = fmt.Fprintln(stderr, err)
-
-			return 1
-		}
-
-		return exit
-	}
-
-	optionErr := validateCommandOptions(command, opts, stdin)
-	if optionErr != nil {
-		return fail(exitUsage, model.CodeInvalidPolicy, optionErr.Error())
-	}
-
-	exitCode := 0
-
-	switch command {
-	case "help":
-		if len(rest) > 0 {
-			return fail(2, model.CodeInvalidPolicy, "help takes no positional arguments")
-		}
-
-		output.Data = commandUsage + "\ninit [packages...] writes a starter policy; " +
-			"scan [packages...] lists Go symbols; inspect resolves policy; " +
-			"explain <symbol> shows rule decisions"
-	case "version":
-		if len(rest) > 0 {
-			return fail(2, model.CodeInvalidPolicy, "version takes no positional arguments")
-		}
-
-		output.Data = map[string]string{"otelplan": Version, "go": runtime.Version()}
-	case "scan":
-		inventory, err := discovery.LoadContext(ctx, discovery.Options{
-			Root: opts.root, Patterns: rest, IncludeDependencies: opts.dependencies,
-			CallGraph: opts.callGraph, Offline: opts.offline,
-		})
-		if err != nil {
-			recordFailure(opts, model.CodeUnresolvedSymbol, "analyze Go project", err)
-
-			return fail(4, model.CodeUnresolvedSymbol, err.Error())
-		}
-
-		recordBuildContext(opts, inventory.EffectiveBuild)
-		output.Data = inventory
-	case initCommandName:
-		var diagnostics model.DiagnosticErrorList
-
-		output.Data, exitCode, diagnostics = initCommand(ctx, opts, rest, stdin, stderr)
-		output.Diagnostics = append(output.Diagnostics, diagnostics...)
-		output.OK = exitCode == 0
-	case inspectCommandName, explainCommandName, validateCommandName, lockCommandName,
-		diffCommandName, compileCommandName, buildCommandName:
-		var diagnostics model.DiagnosticErrorList
-
-		output.Data, exitCode, diagnostics = runPolicyCommand(ctx, command, opts, rest)
-		output.Diagnostics = append(output.Diagnostics, diagnostics...)
-		output.OK = exitCode == 0
-
-	default:
-		return fail(2, model.CodeInvalidPolicy, "unknown command: "+command)
-	}
-
-	if err := emit(stdout, opts, output); err != nil {
+	err = emit(stdout, opts, reply)
+	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
 
 		return 1
 	}
 
-	return exitCode
+	return exit
+}
+
+func firstCommand(positionals []string) string {
+	if len(positionals) == 0 {
+		return ""
+	}
+
+	return positionals[0]
+}
+
+func dispatchCommand(ctx context.Context, command string, opts options, args []string,
+	stdin io.Reader, stderr io.Writer) (any, int, model.DiagnosticErrorList) {
+	err := validateCommandOptions(command, opts, stdin)
+	if err != nil {
+		return nil, exitUsage, compileDiagnostic(model.CodeInvalidPolicy, err.Error())
+	}
+
+	switch command {
+	case helpCommandName, versionCommandName:
+		return describeCommand(command, args)
+	case "scan":
+		return scanCommand(ctx, opts, args)
+	case initCommandName:
+		return initCommand(ctx, opts, args, stdin, stderr)
+	default:
+		if isPolicyCommand(command) {
+			return runPolicyCommand(ctx, command, opts, args)
+		}
+
+		return nil, exitUsage, compileDiagnostic(model.CodeInvalidPolicy, "unknown command: "+command)
+	}
+}
+
+func commandResponse(command string, data any, exit int, diagnostics model.DiagnosticErrorList) response {
+	if diagnostics == nil {
+		diagnostics = model.DiagnosticErrorList{}
+	}
+
+	return response{
+		APIVersion: APIVersion, Command: command, OK: exit == 0, Diagnostics: diagnostics, Data: data, Details: nil,
+	}
+}
+
+func describeCommand(command string, args []string) (any, int, model.DiagnosticErrorList) {
+	if len(args) != 0 {
+		return nil, exitUsage, compileDiagnostic(model.CodeInvalidPolicy, command+" takes no positional arguments")
+	}
+
+	if command == helpCommandName {
+		overview := commandUsage + "\ninit [packages...] writes a starter policy; " +
+			"scan [packages...] lists Go symbols; inspect resolves policy; " +
+			"explain <symbol> shows rule decisions"
+
+		return overview, 0, nil
+	}
+
+	return map[string]string{"otelplan": Version, "go": runtime.Version()}, 0, nil
+}
+
+func scanCommand(ctx context.Context, opts options, patterns []string) (any, int, model.DiagnosticErrorList) {
+	var analysis discovery.Options
+
+	analysis.Root, analysis.Patterns = opts.root, patterns
+	analysis.IncludeDependencies, analysis.CallGraph, analysis.Offline = opts.dependencies, opts.callGraph, opts.offline
+
+	inventory, err := discovery.LoadContext(ctx, analysis)
+	if err != nil {
+		recordFailure(opts, model.CodeUnresolvedSymbol, "analyze Go project", err)
+
+		return nil, exitAnalysis, compileDiagnostic(model.CodeUnresolvedSymbol, err.Error())
+	}
+
+	recordBuildContext(opts, inventory.EffectiveBuild)
+
+	return inventory, 0, nil
 }
 
 func previewPlan(plan model.ResolvedPlan) model.ResolvedPlan {

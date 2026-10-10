@@ -25,6 +25,7 @@ func TestLoadNormalizesBooleanAndDiagnosticFlags(t *testing.T) {
 
 	code, err := discovery.Load(discovery.Options{
 		Root: root, Patterns: nil, BuildTags: nil, CallGraph: false,
+		CacheDir:     "",
 		BuildFlags:   []string{"-p=8", "-x", "-trimpath", "-trimpath=false", "-buildvcs=auto"},
 		IncludeTests: false, IncludeDependencies: false, GOOS: "", GOARCH: "", Offline: true,
 		Env: []string{"GOWORK=off", "GOFLAGS="},

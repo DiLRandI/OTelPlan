@@ -18,10 +18,14 @@ import (
 const APIVersion = "otelplan.io/cli/v1alpha1"
 
 const (
-	initCommandName = "init"
-	jsonFormat      = "json"
-	exitUsage       = 2
-	commandUsage    = "usage: otelplan [global flags] " +
+	inspectCommandName = "inspect"
+	explainCommandName = "explain"
+	compileCommandName = "compile"
+	buildCommandName   = "build"
+	initCommandName    = "init"
+	jsonFormat         = "json"
+	exitUsage          = 2
+	commandUsage       = "usage: otelplan [global flags] " +
 		"<init|scan|inspect|explain|validate|lock|diff|compile|build|version> [arguments]"
 )
 
@@ -98,53 +102,10 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 
 		return exit
 	}
-	if opts.check && opts.dryRun {
-		return fail(2, model.CodeInvalidPolicy, "cannot combine --check and --dry-run")
-	}
 
-	if (opts.dependencies || opts.interfaces || opts.callGraph) && command != "scan" {
-		return fail(2, model.CodeInvalidPolicy, "--dependencies, --interfaces, and --calls are supported by scan")
-	}
-
-	policyCommand := command == "inspect" || command == "explain" || command == "validate" || command == "lock" || command == "diff" || command == "compile" || command == "build"
-	if (opts.strict || opts.allowLargePlan || opts.configSet) && !policyCommand {
-		return fail(2, model.CodeInvalidPolicy, "--config, --strict, and --allow-large-plan require a policy command")
-	}
-
-	if command == "compile" && opts.output == "" {
-		return fail(2, model.CodeInvalidPolicy, "--output must not be empty")
-	}
-
-	if opts.outputSet && command != "compile" && command != initCommandName {
-		return fail(exitUsage, model.CodeInvalidPolicy, "--output is supported by init and compile")
-	}
-
-	if opts.clean && command != "compile" {
-		return fail(exitUsage, model.CodeInvalidPolicy, "--clean is supported by compile")
-	}
-
-	if (opts.force || opts.interactive || opts.nonInteractive) && command != initCommandName {
-		return fail(exitUsage, model.CodeInvalidPolicy, "--force, --interactive, and --non-interactive are supported by init")
-	}
-
-	if opts.interactive && opts.nonInteractive {
-		return fail(exitUsage, model.CodeInvalidPolicy, "cannot combine --interactive and --non-interactive")
-	}
-
-	if opts.interactive && opts.format == jsonFormat {
-		return fail(exitUsage, model.CodeInvalidPolicy, "--interactive requires text output")
-	}
-
-	if opts.interactive && stdin == nil {
-		return fail(exitUsage, model.CodeInvalidPolicy, "--interactive requires an input stream")
-	}
-
-	if opts.check && command != "lock" && command != "diff" {
-		return fail(2, model.CodeInvalidPolicy, "--check is supported by lock and diff")
-	}
-
-	if opts.dryRun && command != "lock" {
-		return fail(2, model.CodeInvalidPolicy, "--dry-run is supported by lock")
+	optionErr := validateCommandOptions(command, opts, stdin)
+	if optionErr != nil {
+		return fail(exitUsage, model.CodeInvalidPolicy, optionErr.Error())
 	}
 
 	exitCode := 0
@@ -183,18 +144,19 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		output.Data, exitCode, diagnostics = initCommand(ctx, opts, rest, stdin, stderr)
 		output.Diagnostics = append(output.Diagnostics, diagnostics...)
 		output.OK = exitCode == 0
-	case "inspect", "explain", "validate", "lock", "diff", "compile", "build":
-		if command == "explain" && len(rest) != 1 {
+	case inspectCommandName, explainCommandName, validateCommandName, lockCommandName,
+		diffCommandName, compileCommandName, buildCommandName:
+		if command == explainCommandName && len(rest) != 1 {
 			return fail(2, model.CodeInvalidPolicy, "explain requires one canonical symbol")
 		}
 
-		if command != "explain" && command != "build" && len(rest) != 0 {
+		if command != explainCommandName && command != buildCommandName && len(rest) != 0 {
 			return fail(2, model.CodeInvalidPolicy, command+" takes no positional arguments")
 		}
 
 		var buildArgs buildArguments
 
-		if command == "build" {
+		if command == buildCommandName {
 			var err error
 
 			buildArgs, err = parseBuildArguments(rest)
@@ -256,9 +218,9 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 			exitCode = 7
 		}
 
-		if command == "inspect" {
+		if command == inspectCommandName {
 			output.Data = previewPlan(result.Plan)
-		} else if command == "explain" {
+		} else if command == explainCommandName {
 			for _, explanation := range result.Explanations {
 				if string(explanation.SymbolID) == rest[0] {
 					output.Data = explanation
@@ -274,9 +236,9 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 			var diags model.DiagnosticErrorList
 
 			switch command {
-			case "build":
+			case buildCommandName:
 				output.Data, exitCode, diags = buildCommand(ctx, opts, buildArgs, p, inventory, result.Plan)
-			case "compile":
+			case compileCommandName:
 				output.Data, exitCode, diags = compileCommand(ctx, opts, p, inventory, result.Plan)
 			default:
 				output.Data, exitCode, diags = lockCommand(command, opts, p, inventory, result.Plan)

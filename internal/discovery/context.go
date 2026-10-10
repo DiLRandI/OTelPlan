@@ -259,56 +259,6 @@ func selectModuleMode(root string, build buildEnvironment, explicitMode string) 
 	return mode
 }
 
-func isolateModuleManifest(original string) (string, func(), error) {
-	data, readErr := os.ReadFile(original)
-	if readErr != nil {
-		return "", nil, fmt.Errorf("read effective module manifest: %w", readErr)
-	}
-
-	tmp, createErr := os.CreateTemp("", "otelplan-effective-*.mod")
-	if createErr != nil {
-		return "", nil, fmt.Errorf("create isolated module manifest: %w", createErr)
-	}
-
-	tmpName := tmp.Name()
-
-	_, writeErr := tmp.Write(data)
-	if writeErr != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-
-		return "", nil, fmt.Errorf("write isolated module manifest: %w", writeErr)
-	}
-
-	closeErr := tmp.Close()
-	if closeErr != nil {
-		_ = os.Remove(tmpName)
-
-		return "", nil, fmt.Errorf("close isolated module manifest: %w", closeErr)
-	}
-
-	sum, sumErr := os.ReadFile(companionSum(original))
-	if sumErr == nil {
-		writeErr := os.WriteFile(strings.TrimSuffix(tmpName, ".mod")+".sum", sum, isolatedManifestMode)
-		if writeErr != nil {
-			_ = os.Remove(tmpName)
-
-			return "", nil, fmt.Errorf("write isolated module checksums: %w", writeErr)
-		}
-	} else if !os.IsNotExist(sumErr) {
-		_ = os.Remove(tmpName)
-
-		return "", nil, fmt.Errorf("read effective module checksums: %w", sumErr)
-	}
-
-	cleanup := func() {
-		_ = os.Remove(tmpName)
-		_ = os.Remove(strings.TrimSuffix(tmpName, ".mod") + ".sum")
-	}
-
-	return tmpName, cleanup, nil
-}
-
 func recordedBuildEnvironment(build buildEnvironment, mode, modFile string, tags []string,
 	parsed goFlags) model.BuildEnvironment {
 	return model.BuildEnvironment{
@@ -330,7 +280,7 @@ func expandWorkspacePatterns(opts *Options, workspace string) error {
 
 	if os.IsNotExist(statErr) && filepath.Dir(workspace) == opts.Root && len(opts.Patterns) == 1 &&
 		opts.Patterns[0] == "./..." {
-		data, err := os.ReadFile(workspace)
+		data, err := readBuildMetadata(workspace)
 		if err != nil {
 			return fmt.Errorf("read workspace: %w", err)
 		}

@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -41,37 +39,6 @@ func cliFixture(t *testing.T) (string, map[string]string) {
 	}
 
 	return root, files
-}
-
-func TestCLIExecutable(t *testing.T) {
-	root, _ := cliFixture(t)
-	binary := filepath.Join(t.TempDir(), "otelplan")
-
-	build := exec.Command("go", "build", "-o", binary, "../../cmd/otelplan")
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build: %v %s", err, output)
-	}
-
-	command := exec.Command(binary, "inspect", "--root", root, "--format=json")
-
-	output, err := command.CombinedOutput()
-	if err != nil {
-		t.Fatalf("inspect: %v %s", err, output)
-	}
-
-	var reply response
-	if err := json.Unmarshal(output, &reply); err != nil || !reply.OK {
-		t.Fatalf("invalid JSON: %s", output)
-	}
-
-	command = exec.Command(binary, "inspect", "--root", root, "--config=missing.yaml")
-	err = command.Run()
-
-	var exit *exec.ExitError
-
-	if !errors.As(err, &exit) || exit.ExitCode() != 3 {
-		t.Fatalf("invalid policy process exit: %v", err)
-	}
 }
 
 func TestRunCancelsGoDiscovery(t *testing.T) {

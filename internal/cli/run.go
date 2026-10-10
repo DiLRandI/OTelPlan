@@ -3,8 +3,6 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -300,114 +298,6 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	}
 
 	return exitCode
-}
-
-func parse(args []string) (options, []string, error) {
-	var opts options
-
-	flags := flag.NewFlagSet("otelplan", flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
-	flags.StringVar(&opts.output, "output", ".otelplan/build", "artifact output relative to root")
-	flags.BoolVar(&opts.clean, "clean", false, "replace verified artifact output")
-	flags.BoolVar(&opts.force, "force", false, "replace an existing starter policy")
-	flags.BoolVar(&opts.interactive, "interactive", false, "review starter suggestions one by one")
-	flags.BoolVar(&opts.nonInteractive, "non-interactive", false, "generate a starter policy without prompts")
-	flags.StringVar(&opts.root, "root", ".", "project root")
-	flags.StringVar(&opts.config, "config", "otelplan.yaml", "policy path relative to root")
-	flags.StringVar(&opts.format, "format", "text", "text or json")
-	flags.BoolVar(&opts.strict, "strict", false, "fail on warnings")
-	flags.BoolVar(&opts.offline, "offline", false, "disable Go network resolution")
-	flags.BoolVar(&opts.check, "check", false, "check without writing")
-	flags.BoolVar(&opts.dryRun, "dry-run", false, "preview without writing")
-	flags.BoolVar(&opts.allowLargePlan, "allow-large-plan", false, "acknowledge large target count")
-	flags.BoolVar(&opts.help, "help", false, "show usage")
-	flags.BoolVar(&opts.help, "h", false, "show usage")
-	flags.BoolVar(&opts.quiet, "quiet", false, "suppress informational text")
-	flags.BoolVar(&opts.verbose, "verbose", false, "include safe error causes and build context")
-	flags.BoolVar(&opts.noColor, "no-color", false, "disable color")
-	flags.BoolVar(&opts.dependencies, "dependencies", false, "include dependency code in scan")
-	flags.BoolVar(&opts.callGraph, "calls", false, "include conservative advisory calls in scan")
-	flags.BoolVar(&opts.interfaces, "interfaces", false, "show interface methods in text scans")
-
-	var (
-		flagArgs, positionals []string
-		usageErr              error
-	)
-
-	formatHint := opts.format
-
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			positionals = append(positionals, args[i+1:]...)
-
-			break
-		}
-
-		if !strings.HasPrefix(arg, "-") || arg == "-" {
-			positionals = append(positionals, arg)
-
-			continue
-		}
-
-		name, value, hasValue := strings.Cut(strings.TrimLeft(arg, "-"), "=")
-
-		option := flags.Lookup(name)
-		if option == nil {
-			if usageErr == nil {
-				usageErr = fmt.Errorf("unknown flag: --%s", name)
-			}
-
-			continue
-		}
-
-		flagArgs = append(flagArgs, arg)
-
-		boolean, ok := option.Value.(interface{ IsBoolFlag() bool })
-		if !hasValue && (!ok || !boolean.IsBoolFlag()) {
-			i++
-			if i == len(args) {
-				if usageErr == nil {
-					usageErr = fmt.Errorf("flag --%s requires a value", name)
-				}
-
-				break
-			}
-
-			value = args[i]
-			flagArgs = append(flagArgs, value)
-		}
-
-		if name == "format" {
-			formatHint = value
-		}
-	}
-
-	err := flags.Parse(flagArgs)
-	if err != nil && usageErr == nil {
-		usageErr = errors.New("invalid flag value or syntax")
-	}
-
-	opts.format = formatHint
-	if usageErr != nil {
-		return opts, positionals, usageErr
-	}
-
-	if opts.format != "text" && opts.format != jsonFormat {
-		return opts, positionals, errors.New("format must be text or json")
-	}
-
-	flags.Visit(func(f *flag.Flag) {
-		if f.Name == "output" {
-			opts.outputSet = true
-		}
-
-		if f.Name == "config" {
-			opts.configSet = true
-		}
-	})
-
-	return opts, positionals, nil
 }
 
 func usageError(opts options, command, message string, stdout, stderr io.Writer) int {

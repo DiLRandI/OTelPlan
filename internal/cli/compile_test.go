@@ -22,97 +22,185 @@ func TestCompileCLI(t *testing.T) {
 	prepareOfflineIntegration(t)
 	root, originals := cliFixture(t)
 
-	for _, format := range []string{"json", "text"} {
-		var out, errout bytes.Buffer
+	project, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		code := Run(t.Context(), []string{"compile", "--root", root, "--format", format, "--offline", "--verbose"},
-			&out, &errout)
-		if code != 0 {
-			t.Fatalf("compile exit=%d: %s %s", code, &out, &errout)
+	t.Cleanup(func() {
+		closeErr := project.Close()
+		if closeErr != nil {
+			t.Errorf("close project root: %v", closeErr)
+		}
+	})
+
+	for _, format := range []string{"json", "text"} {
+		verifyCompileOutput(t, root, format)
+	}
+
+	verifyCompiledCLIArtifacts(t, root, originals, project)
+}
+
+func verifyCompileOutput(t *testing.T, root, format string) {
+	t.Helper()
+
+	var out, errout bytes.Buffer
+
+	args := []string{"compile", "--root", root, "--format", format, "--offline", "--verbose"}
+
+	code := Run(t.Context(), args, &out, &errout)
+	if code != 0 {
+		t.Fatalf("compile exit=%d: %s %s", code, &out, &errout)
+	}
+
+	if format == "json" {
+		var reply struct {
+			OK   bool           `json:"ok"`
+			Data compileSummary `json:"data"`
 		}
 
-		if format == "json" {
-			var reply struct {
-				OK   bool           `json:"ok"`
-				Data compileSummary `json:"data"`
-			}
+		err := json.Unmarshal(out.Bytes(), &reply)
+		if err != nil {
+			t.Fatalf("decode compile response: %v", err)
+		}
 
-			err := json.Unmarshal(out.Bytes(), &reply)
+		if !reply.OK || reply.Data.Backend.Digest == "" || reply.Data.Files == 0 {
+			t.Fatalf("invalid compile response: %s", &out)
+		}
 
-			if err != nil || !reply.OK || reply.Data.Backend.Digest == "" || reply.Data.Files == 0 {
-				t.Fatalf("invalid compile response: %s", &out)
-			}
-		} else if !strings.Contains(out.String(), "artifacts=") {
-			t.Fatalf("missing text summary: %s", &out)
+		return
+	}
+
+	if !strings.Contains(out.String(), "artifacts=") || !strings.Contains(out.String(), "BUILD ") {
+		t.Fatalf("missing text compile summary: %s", &out)
+	}
+}
+
+func verifyCompiledCLIArtifacts(t *testing.T, root string, originals map[string]string, project *os.Root) {
+	t.Helper()
+
+	binaryDir := t.TempDir()
+	binary := filepath.Join(binaryDir, "otelplan")
+	buildCLI(t, binary)
+
+	for _, args := range [][]string{
+		{"compile", "--root", root, "--format=json", "--offline"},
+		{"compile", "--root", root, "--output", "custom-build", "--format=json", "--offline"},
+	} {
+		command := exec.CommandContext(t.Context(), "./otelplan", args...)
+		command.Dir = binaryDir
+
+		output, err := command.CombinedOutput()
+		if err != nil {
+			t.Fatalf("compile executable with %v: %v %s", args, err, output)
 		}
 	}
 
-	binary := filepath.Join(t.TempDir(), "otelplan")
+	verifyPublishedArtifacts(t, root)
+	verifySourcesAndLock(t, originals, project)
+	verifyCleanRetainsUnrelatedFile(t, root, project)
+}
 
-	build := exec.Command("go", "build", "-o", binary, "../../cmd/otelplan")
-	if output, err := build.CombinedOutput(); err != nil {
+func buildCLI(t *testing.T, binary string) {
+	t.Helper()
+
+	build := exec.CommandContext(t.Context(), "go", "build", "-o", binary, "../../cmd/otelplan")
+
+	output, err := build.CombinedOutput()
+	if err != nil {
 		t.Fatalf("build CLI: %v %s", err, output)
 	}
+}
 
-	command := exec.Command(binary, "compile", "--root", root, "--output", "custom-build", "--format=json", "--offline")
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("compile executable: %v %s", err, output)
+func verifyPublishedArtifacts(t *testing.T, root string) {
+	t.Helper()
+
+	_, err := compiler.ReadArtifacts(filepath.Join(root, ".otelplan", "build"))
+	if err != nil {
+		t.Fatalf("read default CLI artifacts: %v", err)
 	}
 
-	if _, err := compiler.ReadArtifacts(filepath.Join(root, "custom-build")); err != nil {
-		t.Fatal(err)
+	_, err = compiler.ReadArtifacts(filepath.Join(root, "custom-build"))
+	if err != nil {
+		t.Fatalf("read custom CLI artifacts: %v", err)
 	}
+}
 
-	output := filepath.Join(root, ".otelplan", "build")
-	if _, err := compiler.ReadArtifacts(output); err != nil {
-		t.Fatal(err)
-	}
+func verifySourcesAndLock(t *testing.T, originals map[string]string, project *os.Root) {
+	t.Helper()
 
 	for name, want := range originals {
-		data, err := os.ReadFile(filepath.Join(root, name))
-		if err != nil || string(data) != want {
+		data, err := project.ReadFile(name)
+		if err != nil {
+			t.Fatalf("read source file %s: %v", name, err)
+		}
+
+		if string(data) != want {
 			t.Fatalf("changed application file %s", name)
 		}
 	}
 
-	if _, err := os.Stat(filepath.Join(root, "otelplan.lock")); !os.IsNotExist(err) {
+	_, err := project.Stat("otelplan.lock")
+	if !os.IsNotExist(err) {
 		t.Fatal("compile changed resolution lock")
 	}
+}
 
-	if err := os.WriteFile(filepath.Join(output, "unrelated"), []byte("keep"), 0o600); err != nil {
+func verifyCleanRetainsUnrelatedFile(t *testing.T, root string, project *os.Root) {
+	t.Helper()
+
+	err := project.WriteFile(".otelplan/build/unrelated", []byte("keep"), 0o600)
+	if err != nil {
 		t.Fatal(err)
 	}
 
 	var out, errout bytes.Buffer
 
 	args := []string{"compile", "--root", root, "--clean", "--format=json", "--offline"}
-	if code := Run(t.Context(), args, &out, &errout); code != 1 {
+
+	code := Run(t.Context(), args, &out, &errout)
+	if code != 1 {
 		t.Fatalf("clean exit=%d: %s", code, &out)
 	}
 
-	data, err := os.ReadFile(filepath.Join(output, "unrelated"))
+	data, err := project.ReadFile(".otelplan/build/unrelated")
 	if err != nil || string(data) != "keep" {
 		t.Fatal("clean removed unrelated output")
 	}
 }
 
 func TestCompileCLIUsage(t *testing.T) {
-	for _, args := range [][]string{{"compile", "extra"}, {"compile", "--output="}, {"inspect", "--output=build"}, {"scan", "--clean"}, {"compile", "--check"}} {
-		for _, format := range []string{"text", "json"} {
-			var out, errout bytes.Buffer
-			if code := Run(t.Context(), append(args, "--format="+format), &out, &errout); code != 2 {
-				t.Fatalf("%v: exit=%d %s %s", args, code, &out, &errout)
-			}
+	t.Parallel()
 
-			if format == "json" {
-				var reply response
+	invalidArgs := [][]string{
+		{"compile", "extra"},
+		{"compile", "--output="},
+		{"inspect", "--output=build"},
+		{"scan", "--clean"},
+		{"compile", "--check"},
+	}
+	for _, args := range invalidArgs {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			t.Parallel()
 
-				err := json.Unmarshal(out.Bytes(), &reply)
-				if err != nil || reply.OK || len(reply.Diagnostics) == 0 {
-					t.Fatalf("invalid error JSON: %s", &out)
+			for _, format := range []string{"text", "json"} {
+				var out, errout bytes.Buffer
+				if code := Run(t.Context(), append(args, "--format="+format), &out, &errout); code != 2 {
+					t.Fatalf("%v: exit=%d %s %s", args, code, &out, &errout)
+				}
+
+				if format == "json" {
+					var reply response
+
+					err := json.Unmarshal(out.Bytes(), &reply)
+					if err != nil || reply.OK || len(reply.Diagnostics) == 0 {
+						t.Fatalf("invalid error JSON: %s", &out)
+					}
+				} else if out.Len() == 0 && errout.Len() == 0 {
+					t.Fatal("text usage error did not include a diagnostic")
 				}
 			}
-		}
+		})
 	}
 }
 
@@ -131,24 +219,57 @@ func TestCompileOfflineDisablesProxyBypass(t *testing.T) {
 
 	wrapperDir := t.TempDir()
 	marker := filepath.Join(wrapperDir, "checked")
-	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
 
-	script := "#!/bin/sh\nif [ \"$1\" = test ]; then\n [ \"$GOPROXY\" = off ] && [ \"$GONOPROXY\" = none ] && [ \"$GOSUMDB\" = off ] || exit 91\n touch " + quote(marker) + "\nfi\nexec " + quote(realGo) + " \"$@\"\n"
-	if err := os.WriteFile(filepath.Join(wrapperDir, "go"), []byte(script), 0o700); err != nil {
+	wrapperRoot, err := os.OpenRoot(wrapperDir)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Cleanup(func() {
+		closeErr := wrapperRoot.Close()
+		if closeErr != nil {
+			t.Errorf("close wrapper root: %v", closeErr)
+		}
+	})
+
+	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
+
+	script := strings.Join([]string{
+		"#!/bin/sh",
+		"if [ \"$1\" = test ]; then",
+		" [ \"$GOPROXY\" = off ] && [ \"$GONOPROXY\" = none ] && [ \"$GOSUMDB\" = off ] || exit 91",
+		" touch " + quote(marker),
+		"fi",
+		"exec " + quote(realGo) + " \"$@\"",
+		"",
+	}, "\n")
+
+	err = wrapperRoot.WriteFile("go", []byte(script), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = wrapperRoot.Chmod("go", 0o700)
+	if err != nil {
+		t.Fatalf("make Go wrapper executable: %v", err)
+	}
+
+	path := strings.Join([]string{wrapperDir, filepath.Dir(executable), os.Getenv("PATH")}, string(os.PathListSeparator))
+	t.Setenv("PATH", path)
 	t.Setenv("GONOPROXY", "*")
 	root, _ := cliFixture(t)
 
 	var out, errout bytes.Buffer
 
-	if code := Run(t.Context(), []string{"compile", "--root", root, "--offline", "--format=json"}, &out, &errout); code != 0 {
+	args := []string{"compile", "--root", root, "--offline", "--format=json"}
+
+	code := Run(t.Context(), args, &out, &errout)
+	if code != 0 {
 		t.Fatalf("offline compile exit=%d: %s %s", code, &out, &errout)
 	}
 
-	if _, err := os.Stat(marker); err != nil {
+	_, err = wrapperRoot.Stat("checked")
+	if err != nil {
 		t.Fatal("generated-source compilation did not enforce offline environment")
 	}
 }

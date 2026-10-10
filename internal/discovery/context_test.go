@@ -182,6 +182,55 @@ func TestIsolatedModuleChecksumsCannotEscapeRoot(t *testing.T) {
 	}
 }
 
+func TestWorkspaceChecksumsCannotEscapeRoot(t *testing.T) {
+	t.Parallel()
+
+	source := t.TempDir()
+	original := filepath.Join(source, "go.work")
+
+	err := os.WriteFile(original+".sum", []byte("fixture workspace checksums"), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	victim := filepath.Join(t.TempDir(), "keep")
+	unchanged := []byte("outside the owned workspace directory")
+
+	err = os.WriteFile(victim, unchanged, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	directory := t.TempDir()
+
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		err := root.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	})
+
+	err = os.Symlink(victim, filepath.Join(directory, "go.work.sum"))
+	if err != nil {
+		t.Fatalf("create workspace checksum escape fixture: %v", err)
+	}
+
+	err = writeWorkspaceMetadata(root, original, []byte("go 1.27\n"))
+	if err == nil || !strings.Contains(err.Error(), "write isolated workspace checksums") {
+		t.Fatalf("workspace checksum escape was not rejected: %v", err)
+	}
+
+	got := readOwnedModuleFixture(t, victim)
+	if !slices.Equal(got, unchanged) {
+		t.Fatal("isolated workspace checksum write changed an outside file")
+	}
+}
+
 func TestLoadRespectsEnvironment(t *testing.T) {
 	t.Setenv("GOARCH", "386")
 	root := fixture(t, map[string]string{"app.go": "package shop\nfunc Run() {}\n"})

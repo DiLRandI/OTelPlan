@@ -1,3 +1,5 @@
+// Package cli executes OTelPlan commands with caller-owned contexts and streams.
+// It returns stable diagnostics and exit codes without taking ownership of the caller's I/O.
 package cli
 
 import (

@@ -1,3 +1,5 @@
+// Command otelplan resolves instrumentation policies and builds isolated applications.
+// It cancels CLI operations on interrupt or termination signals.
 package main
 
 import (

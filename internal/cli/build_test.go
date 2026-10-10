@@ -447,92 +447,155 @@ func TestBuildCLIFromWorkspaceRoot(t *testing.T) {
 	prepareOfflineIntegration(t)
 	t.Setenv("GOWORK", "")
 
+	root := workspaceBuildFixture(t)
+
+	original := snapshotPinnedBuildFixture(t, root)
+
+	published := runWorkspaceBuild(t, root)
+	if filepath.Dir(published.Path) != root {
+		t.Fatalf("output not published in original working directory: %s", published.Path)
+	}
+
+	assertPinnedArtifact(t, published, published.Path)
+	assertPinnedTrace(t, published.Path)
+	assertWorkspaceFixtureUnchanged(t, root, original, published.Path)
+	publishedBytes := readWorkspaceArtifact(t, published.Path)
+
+	var stdout, stderr bytes.Buffer
+
+	exit := Run(t.Context(), []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false"},
+		&stdout, &stderr)
+	if exit == 0 {
+		t.Fatal("workspace build without target silently selected a module")
+	}
+
+	assertWorkspaceFailure(t, stdout.Bytes(), stderr.Bytes(), published.Path, publishedBytes)
+	assertWorkspaceFixtureUnchanged(t, root, original, published.Path)
+}
+
+func workspaceBuildFixture(t *testing.T) string {
+	t.Helper()
+
 	fixture, err := filepath.Abs("../backend/otelc/testdata/accessors")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	root := t.TempDir()
+	workspace := t.TempDir()
 
-	copied, err := compiler.CopySourceTree(t.Context(), fixture, root)
+	copied, err := compiler.CopySourceTree(t.Context(), fixture, workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := os.Rename(copied, filepath.Join(root, "app")); err != nil {
-		t.Fatal(err)
-	}
+	directory := openIntegrationDirectory(t, workspace)
 
-	for name, data := range map[string]string{
-		"go.work":       "go 1.27.0\nuse ./app\n",
-		"otelplan.yaml": "apiVersion: otelplan.io/v1alpha1\nkind: InstrumentationPlan\nbackend: {name: otelc, version: v1.1.0}\nproject: {packages: [./app/ops]}\nrules:\n- id: operation\n  match:\n    methods: [Handle]\n",
-	} {
-		err := os.WriteFile(filepath.Join(root, name), []byte(data), 0o600)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	original := map[string][]byte{}
-
-	if err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if entry.IsDir() {
-			return nil
-		}
-
-		data, err := os.ReadFile(path)
-		original[path] = data
-
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	var out, errout bytes.Buffer
-	if exit := Run(t.Context(), []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "./app"}, &out, &errout); exit != 0 {
-		t.Fatalf("workspace build exit=%d: %s %s", exit, &out, &errout)
-	}
-
-	var reply struct {
-		OK   bool         `json:"ok"`
-		Data buildSummary `json:"data"`
-	}
-
-	if err := json.Unmarshal(out.Bytes(), &reply); err != nil || !reply.OK || reply.Data.Path == "" || reply.Data.Digest == "" {
-		t.Fatalf("invalid build response: %s", &out)
-	}
-
-	if filepath.Dir(reply.Data.Path) != root {
-		t.Fatal("output not published in original working directory")
-	}
-
-	output, err := exec.Command(reply.Data.Path).Output()
+	err = directory.Rename(filepath.Base(copied), "app")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var traces struct{ Spans []struct{ Name string } }
-	if err := json.Unmarshal(output, &traces); err != nil || len(traces.Spans) != 5 {
-		t.Fatalf("missing instrumented spans: %s", output)
+	writeWorkspaceFile(t, directory, "go.work", "go 1.27.0\nuse ./app\n")
+	writeWorkspaceFile(t, directory, "otelplan.yaml",
+		"apiVersion: otelplan.io/v1alpha1\nkind: InstrumentationPlan\n"+
+			"backend: {name: otelc, version: v1.1.0}\nproject: {packages: [./app/ops]}\n"+
+			"rules:\n- id: operation\n  match:\n    methods: [Handle]\n")
+
+	return workspace
+}
+
+func writeWorkspaceFile(t *testing.T, directory *os.Root, name, contents string) {
+	t.Helper()
+
+	err := directory.WriteFile(name, []byte(contents), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func runWorkspaceBuild(t *testing.T, root string) buildSummary {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+
+	args := []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "./app"}
+	exit := Run(t.Context(), args,
+		&stdout, &stderr)
+
+	if exit != 0 || stderr.Len() != 0 {
+		t.Fatalf("workspace build exit=%d: stdout=%s stderr=%s", exit, &stdout, &stderr)
 	}
 
-	out.Reset()
-	errout.Reset()
+	var reply pinnedBuildReply
 
-	if exit := Run(t.Context(), []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false"}, &out, &errout); exit == 0 {
-		t.Fatal("workspace build without target silently selected a module")
+	err := json.Unmarshal(stdout.Bytes(), &reply)
+	if err != nil || !reply.OK || reply.Data.Path == "" || reply.Data.Digest == "" {
+		t.Fatalf("invalid build response: %s", &stdout)
 	}
 
-	for path, want := range original {
-		got, err := os.ReadFile(path)
-		if err != nil || !bytes.Equal(got, want) {
-			t.Fatalf("changed source file %s", path)
+	return reply.Data
+}
+
+func assertWorkspaceFixtureUnchanged(t *testing.T, root string, original map[string][]byte, publishedPath string) {
+	t.Helper()
+
+	current := snapshotPinnedBuildFixture(t, root)
+
+	publishedName, err := filepath.Rel(root, publishedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	publishedName = filepath.ToSlash(publishedName)
+	if len(current) != len(original)+1 {
+		t.Fatalf("workspace changed file set: got %d files, want %d plus %s", len(current), len(original), publishedName)
+	}
+
+	for name, want := range original {
+		got, exists := current[name]
+		if !exists || !bytes.Equal(got, want) {
+			t.Fatalf("changed workspace source file %s", name)
 		}
 	}
+
+	if _, exists := current[publishedName]; !exists {
+		t.Fatalf("published artifact missing from workspace snapshot: %s", publishedName)
+	}
+
+	for name := range current {
+		if _, exists := original[name]; !exists && name != publishedName {
+			t.Fatalf("unexpected workspace output %s", name)
+		}
+	}
+}
+
+func assertWorkspaceFailure(t *testing.T, output, stderr []byte, publishedPath string, before []byte) {
+	t.Helper()
+
+	var reply response
+
+	err := json.Unmarshal(output, &reply)
+	if err != nil || reply.OK || len(reply.Diagnostics) == 0 || len(stderr) != 0 {
+		t.Fatalf("invalid no-target workspace response: stdout=%s stderr=%s", output, stderr)
+	}
+
+	after := readWorkspaceArtifact(t, publishedPath)
+	if !bytes.Equal(before, after) {
+		t.Fatal("failed workspace build changed published binary")
+	}
+}
+
+func readWorkspaceArtifact(t *testing.T, publishedPath string) []byte {
+	t.Helper()
+
+	directory := openIntegrationDirectory(t, filepath.Dir(publishedPath))
+
+	data, err := directory.ReadFile(filepath.Base(publishedPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return data
 }
 
 func TestBuildSummaryText(t *testing.T) {

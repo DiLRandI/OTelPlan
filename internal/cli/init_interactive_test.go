@@ -3,6 +3,7 @@ package cli_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +14,11 @@ import (
 
 	"github.com/DiLRandI/OTelPlan/internal/cli"
 	"github.com/DiLRandI/OTelPlan/internal/policy"
+)
+
+const (
+	interactiveDiscoveryTimeout    = 2 * time.Minute
+	interactiveCancellationTimeout = 10 * time.Second
 )
 
 func TestInteractiveInitSelectsReviewedSuggestions(t *testing.T) {
@@ -104,35 +110,49 @@ func TestInteractiveInitCanBeCanceledWhileWaitingForInput(t *testing.T) {
 	root, _, _ := callGraphFixture(t)
 
 	input, inputWriter := io.Pipe()
-	defer func() { _ = inputWriter.Close() }()
 
 	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
+	startupCtx, stopStartup := context.WithTimeout(ctx, interactiveDiscoveryTimeout)
+
+	defer stopStartup()
 
 	var stdout bytes.Buffer
 
-	prompts := &promptSignal{ready: make(chan struct{}), once: sync.Once{}}
+	var exit int
 
-	done := make(chan int, 1)
+	prompts := &promptSignal{ready: make(chan struct{}), once: sync.Once{}}
+	inputSignal := &interactiveInputSignal{input: input, reading: make(chan struct{}), once: sync.Once{}}
+	returned := make(chan struct{})
+
+	t.Cleanup(func() {
+		cleanupInteractiveRun(t, cancel, input, inputWriter, returned)
+	})
+
 	go func() {
-		done <- cli.RunWithInput(ctx, []string{"init", "--root", root, "--offline", "--interactive"},
-			input, &stdout, prompts)
+		exit = cli.RunWithInput(ctx, []string{"init", "--root", root, "--offline", "--interactive"},
+			inputSignal, &stdout, prompts)
+
+		close(returned)
 	}()
 
 	select {
 	case <-prompts.ready:
-	case <-time.After(10 * time.Second):
-		t.Fatal("interactive prompt was not shown")
+	case <-returned:
+		t.Fatalf("interactive init exited before its first prompt: exit=%d stdout=%s", exit, &stdout)
+	case <-startupCtx.Done():
+		t.Fatalf("interactive discovery did not reach its first prompt: %v", startupCtx.Err())
 	}
 
+	waitForInteractiveRead(startupCtx, t, inputSignal.reading, returned)
+	stopStartup()
 	cancel()
 
 	select {
-	case exit := <-done:
+	case <-returned:
 		if exit == 0 {
 			t.Fatalf("canceled interactive init succeeded: %s", &stdout)
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(interactiveCancellationTimeout):
 		t.Fatal("interactive input blocked cancellation")
 	}
 
@@ -140,6 +160,58 @@ func TestInteractiveInitCanBeCanceledWhileWaitingForInput(t *testing.T) {
 	if !os.IsNotExist(err) {
 		t.Fatal("canceled interactive init wrote a policy")
 	}
+}
+
+func waitForInteractiveRead(ctx context.Context, t *testing.T, reading, returned <-chan struct{}) {
+	t.Helper()
+
+	select {
+	case <-reading:
+	case <-returned:
+		t.Fatal("interactive CLI exited before attempting an input read")
+	case <-ctx.Done():
+		t.Fatalf("interactive CLI did not attempt an input read: %v", ctx.Err())
+	}
+}
+
+func cleanupInteractiveRun(t *testing.T, cancel context.CancelFunc, input *io.PipeReader,
+	inputWriter *io.PipeWriter, returned <-chan struct{},
+) {
+	t.Helper()
+	cancel()
+
+	err := inputWriter.Close()
+	if err != nil {
+		t.Errorf("close interactive input writer: %v", err)
+	}
+
+	err = input.Close()
+	if err != nil {
+		t.Errorf("close interactive input reader: %v", err)
+	}
+
+	select {
+	case <-returned:
+	case <-time.After(interactiveCancellationTimeout):
+		t.Error("interactive CLI did not finish during fixture cleanup")
+	}
+}
+
+type interactiveInputSignal struct {
+	input   *io.PipeReader
+	reading chan struct{}
+	once    sync.Once
+}
+
+func (signal *interactiveInputSignal) Read(data []byte) (int, error) {
+	signal.once.Do(func() { close(signal.reading) })
+
+	count, err := signal.input.Read(data)
+	if err != nil {
+		return count, fmt.Errorf("read interactive fixture input: %w", err)
+	}
+
+	return count, nil
 }
 
 type promptSignal struct {

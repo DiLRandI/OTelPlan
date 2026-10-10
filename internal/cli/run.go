@@ -4,14 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
 	"runtime"
 
-	"github.com/DiLRandI/OTelPlan/internal/backend/otelc"
 	"github.com/DiLRandI/OTelPlan/internal/discovery"
-	"github.com/DiLRandI/OTelPlan/internal/policy"
-	"github.com/DiLRandI/OTelPlan/internal/resolve"
-	"github.com/DiLRandI/OTelPlan/internal/validate"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
@@ -146,107 +141,12 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		output.OK = exitCode == 0
 	case inspectCommandName, explainCommandName, validateCommandName, lockCommandName,
 		diffCommandName, compileCommandName, buildCommandName:
-		if command == explainCommandName && len(rest) != 1 {
-			return fail(2, model.CodeInvalidPolicy, "explain requires one canonical symbol")
-		}
+		var diagnostics model.DiagnosticErrorList
 
-		if command != explainCommandName && command != buildCommandName && len(rest) != 0 {
-			return fail(2, model.CodeInvalidPolicy, command+" takes no positional arguments")
-		}
+		output.Data, exitCode, diagnostics = runPolicyCommand(ctx, command, opts, rest)
+		output.Diagnostics = append(output.Diagnostics, diagnostics...)
+		output.OK = exitCode == 0
 
-		var buildArgs buildArguments
-
-		if command == buildCommandName {
-			var err error
-
-			buildArgs, err = parseBuildArguments(rest)
-			if err != nil {
-				return fail(2, model.CodeInvalidPolicy, err.Error())
-			}
-		}
-
-		config := opts.config
-		if !filepath.IsAbs(config) {
-			config = filepath.Join(opts.root, config)
-		}
-
-		p, err := policy.Load(config)
-		if err != nil {
-			recordFailure(opts, model.CodeInvalidPolicy, "load policy", err)
-
-			return fail(3, model.CodeInvalidPolicy, "cannot read or parse policy at "+config)
-		}
-
-		output.Diagnostics = policy.Validate(p)
-		if output.Diagnostics.HasErrors() {
-			output.OK = false
-
-			err := emit(stdout, opts, output)
-			if err != nil {
-				_, _ = fmt.Fprintln(stderr, err)
-
-				return 1
-			}
-
-			return 3
-		}
-
-		inventory, err := discovery.LoadContext(ctx, discovery.Options{Root: opts.root, Patterns: p.Project.Packages, BuildFlags: buildArgs.AnalysisFlags, BuildTags: p.Project.BuildTags, IncludeTests: p.Project.IncludeTests, IncludeDependencies: p.Project.IncludeDependencies, Offline: opts.offline})
-		if err != nil {
-			recordFailure(opts, model.CodeUnresolvedSymbol, "analyze policy packages", err)
-
-			return fail(4, model.CodeUnresolvedSymbol, err.Error())
-		}
-
-		recordBuildContext(opts, inventory.EffectiveBuild)
-		result := resolve.Resolve(p, inventory)
-
-		output.Diagnostics = append(result.Diagnostics, validate.Safety(inventory, result.Plan, validate.Options{AllowLargePlan: opts.allowLargePlan})...)
-		if output.Diagnostics == nil {
-			output.Diagnostics = model.DiagnosticErrorList{}
-		}
-
-		backendDiags := otelc.Check(p.Backend.Version, inventory, result.Plan)
-		output.Diagnostics = append(output.Diagnostics, backendDiags...)
-
-		output.OK = !output.Diagnostics.HasErrors() && (!opts.strict || len(output.Diagnostics.Warnings()) == 0)
-		if !output.OK {
-			exitCode = 5
-		}
-
-		if backendDiags.HasErrors() {
-			exitCode = 7
-		}
-
-		if command == inspectCommandName {
-			output.Data = previewPlan(result.Plan)
-		} else if command == explainCommandName {
-			for _, explanation := range result.Explanations {
-				if string(explanation.SymbolID) == rest[0] {
-					output.Data = explanation
-
-					break
-				}
-			}
-
-			if output.Data == nil {
-				return fail(5, model.CodeUnresolvedSymbol, "symbol does not exist or policy could not be resolved")
-			}
-		} else if output.OK {
-			var diags model.DiagnosticErrorList
-
-			switch command {
-			case buildCommandName:
-				output.Data, exitCode, diags = buildCommand(ctx, opts, buildArgs, p, inventory, result.Plan)
-			case compileCommandName:
-				output.Data, exitCode, diags = compileCommand(ctx, opts, p, inventory, result.Plan)
-			default:
-				output.Data, exitCode, diags = lockCommand(command, opts, p, inventory, result.Plan)
-			}
-
-			output.Diagnostics = append(output.Diagnostics, diags...)
-			output.OK = exitCode == 0
-		}
 	default:
 		return fail(2, model.CodeInvalidPolicy, "unknown command: "+command)
 	}

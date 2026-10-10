@@ -17,8 +17,10 @@ import (
 )
 
 const (
-	buildTagsFlag    = "-tags"
-	vendorModuleMode = "vendor"
+	buildTagsFlag        = "-tags"
+	vendorModuleMode     = "vendor"
+	disabledGoSetting    = "off"
+	isolatedManifestMode = 0o600
 )
 
 type buildEnvironment struct {
@@ -68,6 +70,81 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 	}
 
 	opts.Root = root
+
+	env, err := prepareGoEnvironment(opts)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	build, err := readBuildEnvironment(ctx, root, env)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	parsed, err := parseGOFLAGS(build.GOFLAGS, opts.BuildFlags...)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	env = replaceEnv(env, "GOFLAGS", "")
+
+	mode, err := configureBuildSelection(opts, build, &parsed)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	env, err = prepareBuildMetadata(opts, build, &parsed, mode, env)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	flags := append([]string{"-mod=" + mode}, buildFlags(opts.BuildTags)...)
+	if parsed.modFile != "" {
+		flags = append(flags, "-modfile="+parsed.modFile)
+	}
+
+	flags = append(flags, parsed.semantic...)
+
+	return env, flags, nil
+}
+
+func prepareBuildMetadata(opts *Options, build buildEnvironment, parsed *goFlags, mode string,
+	env []string) ([]string, error) {
+	if mode != vendorModuleMode && opts.workspaceFile == "" {
+		original := build.GOMOD
+		if opts.effectiveBuild.ModFile != "" {
+			original = opts.effectiveBuild.ModFile
+		}
+
+		isolated, cleanup, moduleErr := isolateModuleManifest(original)
+		if moduleErr != nil {
+			return nil, moduleErr
+		}
+
+		parsed.modFile, opts.cleanup = isolated, cleanup
+	}
+
+	opts.effectiveBuild = recordedBuildEnvironment(build, mode, opts.effectiveBuild.ModFile, opts.BuildTags, *parsed)
+
+	err := expandWorkspacePatterns(opts, build.GOWORK)
+	if err != nil {
+		return nil, err
+	}
+
+	if opts.workspaceFile != "" {
+		workspace, cleanup, workspaceErr := isolateWorkspace(opts.workspaceFile)
+		if workspaceErr != nil {
+			return nil, workspaceErr
+		}
+
+		opts.cleanup = cleanup
+		env = replaceEnv(env, "GOWORK", workspace)
+	}
+
+	return env, nil
+}
+
+func prepareGoEnvironment(opts *Options) ([]string, error) {
 	env := append(os.Environ(), opts.Env...)
 	driver := ""
 
@@ -77,11 +154,11 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 		}
 	}
 
-	if driver != "" && driver != "off" {
-		return nil, nil, errCustomPackageDriver
+	if driver != "" && driver != disabledGoSetting {
+		return nil, errCustomPackageDriver
 	}
 
-	env = replaceEnv(env, "GOPACKAGESDRIVER", "off")
+	env = replaceEnv(env, "GOPACKAGESDRIVER", disabledGoSetting)
 	if opts.GOOS != "" {
 		env = append(env, "GOOS="+opts.GOOS)
 	}
@@ -94,50 +171,42 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 		env = append(env, "GOPROXY=off", "GONOPROXY=none", "GOSUMDB=off", "GOTOOLCHAIN=local")
 	}
 
-	command := exec.CommandContext(ctx, "go", "env", "-json", "GOOS", "GOARCH", "GOVERSION", "GOWORK", "GOFLAGS", "CGO_ENABLED", "GOEXPERIMENT", "GOFIPS140", "GOAMD64", "GOARM", "GOARM64", "GO386", "GOMIPS", "GOMIPS64", "GOPPC64", "GORISCV64", "GOWASM", "CGO_CFLAGS", "CGO_CPPFLAGS", "CGO_LDFLAGS", "CGO_FFLAGS", "GOTOOLCHAIN", "GOMOD", "CC", "CXX", "CGO_CXXFLAGS")
+	return env, nil
+}
+
+func readBuildEnvironment(ctx context.Context, root string, env []string) (buildEnvironment, error) {
+	var empty buildEnvironment
+
+	command := exec.CommandContext(ctx, "go", "env", "-json",
+		"GOOS", "GOARCH", "GOVERSION", "GOWORK", "GOFLAGS", "CGO_ENABLED", "GOEXPERIMENT", "GOFIPS140",
+		"GOAMD64", "GOARM", "GOARM64", "GO386", "GOMIPS", "GOMIPS64", "GOPPC64", "GORISCV64", "GOWASM",
+		"CGO_CFLAGS", "CGO_CPPFLAGS", "CGO_LDFLAGS", "CGO_FFLAGS", "GOTOOLCHAIN", "GOMOD", "CC", "CXX", "CGO_CXXFLAGS",
+	)
 	command.Dir = root
 	command.Env = env
 
 	output, err := command.Output()
 	if err != nil {
-		return nil, nil, fmt.Errorf("read Go build environment: %w", err)
+		return empty, fmt.Errorf("read Go build environment: %w", err)
 	}
 
 	var build buildEnvironment
-	if err := json.Unmarshal(output, &build); err != nil {
-		return nil, nil, fmt.Errorf("decode Go build environment: %w", err)
-	}
 
-	parsed, err := parseGOFLAGS(build.GOFLAGS, opts.BuildFlags...)
+	err = json.Unmarshal(output, &build)
 	if err != nil {
-		return nil, nil, err
+		return empty, fmt.Errorf("decode Go build environment: %w", err)
 	}
 
-	env = replaceEnv(env, "GOFLAGS", "")
+	return build, nil
+}
 
+func configureBuildSelection(opts *Options, build buildEnvironment, parsed *goFlags) (string, error) {
 	opts.GOOS, opts.GOARCH, opts.goVersion = build.GOOS, build.GOARCH, build.GOVERSION
-	if build.GOWORK != "off" {
+	if build.GOWORK != disabledGoSetting {
 		opts.workspaceFile = build.GOWORK
 	}
 
-	vendorRoot := root
-	if build.GOMOD != "" && build.GOMOD != os.DevNull {
-		vendorRoot = filepath.Dir(build.GOMOD)
-	}
-
-	if build.GOWORK != "" && build.GOWORK != "off" {
-		vendorRoot = filepath.Dir(build.GOWORK)
-	}
-
-	mode := "readonly"
-
-	_, vendorErr := os.Stat(filepath.Join(vendorRoot, "vendor", "modules.txt"))
-
-	if parsed.moduleMode != "" {
-		mode = parsed.moduleMode
-	} else if vendorErr == nil {
-		mode = vendorModuleMode
-	}
+	mode := selectModuleMode(opts.Root, build, parsed.moduleMode)
 
 	for _, flag := range opts.BuildFlags {
 		name, _, _ := strings.Cut(flag, "=")
@@ -154,72 +223,48 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 
 	if parsed.modFile != "" {
 		if !strings.HasSuffix(parsed.modFile, ".mod") {
-			return nil, nil, errModuleManifestExtension
+			return "", errModuleManifestExtension
 		}
 
 		if !filepath.IsAbs(parsed.modFile) {
-			parsed.modFile = filepath.Join(root, parsed.modFile)
+			parsed.modFile = filepath.Join(opts.Root, parsed.modFile)
 		}
 
 		opts.effectiveBuild.ModFile = filepath.Clean(parsed.modFile)
 	}
 
-	if mode != "vendor" && opts.workspaceFile == "" {
-		original := build.GOMOD
-		if opts.effectiveBuild.ModFile != "" {
-			original = opts.effectiveBuild.ModFile
-		}
+	return mode, nil
+}
 
-		data, readErr := os.ReadFile(original)
-		if readErr != nil {
-			return nil, nil, fmt.Errorf("read effective module manifest: %w", readErr)
-		}
-
-		tmp, createErr := os.CreateTemp("", "otelplan-effective-*.mod")
-		if createErr != nil {
-			return nil, nil, fmt.Errorf("create isolated module manifest: %w", createErr)
-		}
-
-		tmpName := tmp.Name()
-
-		if _, writeErr := tmp.Write(data); writeErr != nil {
-			_ = tmp.Close()
-			_ = os.Remove(tmpName)
-
-			return nil, nil, fmt.Errorf("write isolated module manifest: %w", writeErr)
-		}
-
-		closeErr := tmp.Close()
-		if closeErr != nil {
-			_ = os.Remove(tmpName)
-
-			return nil, nil, fmt.Errorf("close isolated module manifest: %w", closeErr)
-		}
-
-		if sum, sumErr := os.ReadFile(companionSum(original)); sumErr == nil {
-			writeErr := os.WriteFile(strings.TrimSuffix(tmpName, ".mod")+".sum", sum, 0o600)
-			if writeErr != nil {
-				_ = os.Remove(tmpName)
-
-				return nil, nil, fmt.Errorf("write isolated module checksums: %w", writeErr)
-			}
-		} else if !os.IsNotExist(sumErr) {
-			_ = os.Remove(tmpName)
-
-			return nil, nil, fmt.Errorf("read effective module checksums: %w", sumErr)
-		}
-
-		opts.cleanup = func() {
-			_ = os.Remove(tmpName)
-			_ = os.Remove(strings.TrimSuffix(tmpName, ".mod") + ".sum")
-		}
-		parsed.modFile = tmpName
+func selectModuleMode(root string, build buildEnvironment, explicitMode string) string {
+	vendorRoot := root
+	if build.GOMOD != "" && build.GOMOD != os.DevNull {
+		vendorRoot = filepath.Dir(build.GOMOD)
 	}
 
-	opts.effectiveBuild = model.BuildEnvironment{
+	if build.GOWORK != "" && build.GOWORK != disabledGoSetting {
+		vendorRoot = filepath.Dir(build.GOWORK)
+	}
+
+	mode := "readonly"
+
+	_, vendorErr := os.Stat(filepath.Join(vendorRoot, "vendor", "modules.txt"))
+
+	if explicitMode != "" {
+		mode = explicitMode
+	} else if vendorErr == nil {
+		mode = vendorModuleMode
+	}
+
+	return mode
+}
+
+func recordedBuildEnvironment(build buildEnvironment, mode, modFile string, tags []string,
+	parsed goFlags) model.BuildEnvironment {
+	return model.BuildEnvironment{
 		GoVersion: build.GOVERSION, GOOS: build.GOOS, GOARCH: build.GOARCH,
-		BuildTags: append([]string(nil), opts.BuildTags...), ModuleMode: mode,
-		ModFile: opts.effectiveBuild.ModFile, Workspace: build.GOWORK != "" && build.GOWORK != "off",
+		BuildTags: append([]string(nil), tags...), ModuleMode: mode,
+		ModFile: modFile, Workspace: build.GOWORK != "" && build.GOWORK != disabledGoSetting,
 		CGOEnabled: build.CGOEnabled, GOEXPERIMENT: build.GOEXPERIMENT, GOFIPS140: build.GOFIPS140,
 		GOAMD64: build.GOAMD64, GOARM: build.GOARM, GOARM64: build.GOARM64, GO386: build.GO386, GOMIPS: build.GOMIPS,
 		GOMIPS64: build.GOMIPS64, GOPPC64: build.GOPPC64, GORISCV64: build.GORISCV64,
@@ -228,15 +273,21 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 		SemanticFlags: append([]string(nil), parsed.semantic...),
 		CC:            build.CC, CXX: build.CXX, CGOCXXFLAGS: build.CGOCXXFLAGS,
 	}
-	if _, err := os.Stat(filepath.Join(root, "go.mod")); os.IsNotExist(err) && filepath.Dir(build.GOWORK) == root && len(opts.Patterns) == 1 && opts.Patterns[0] == "./..." {
-		data, err := os.ReadFile(build.GOWORK)
+}
+
+func expandWorkspacePatterns(opts *Options, workspace string) error {
+	_, statErr := os.Stat(filepath.Join(opts.Root, "go.mod"))
+
+	if os.IsNotExist(statErr) && filepath.Dir(workspace) == opts.Root && len(opts.Patterns) == 1 &&
+		opts.Patterns[0] == "./..." {
+		data, err := readBuildMetadata(workspace)
 		if err != nil {
-			return nil, nil, fmt.Errorf("read workspace: %w", err)
+			return fmt.Errorf("read workspace: %w", err)
 		}
 
-		work, err := modfile.ParseWork(build.GOWORK, data, nil)
+		work, err := modfile.ParseWork(workspace, data, nil)
 		if err != nil {
-			return nil, nil, fmt.Errorf("parse workspace: %w", err)
+			return fmt.Errorf("parse workspace: %w", err)
 		}
 
 		opts.Patterns = nil
@@ -244,31 +295,14 @@ func prepare(ctx context.Context, opts *Options) ([]string, []string, error) {
 		for _, use := range work.Use {
 			module := use.Path
 			if !filepath.IsAbs(module) {
-				module = filepath.Join(root, module)
+				module = filepath.Join(opts.Root, module)
 			}
 
 			opts.Patterns = append(opts.Patterns, filepath.ToSlash(filepath.Join(module, "...")))
 		}
 	}
 
-	if opts.workspaceFile != "" {
-		workspace, cleanup, err := isolateWorkspace(opts.workspaceFile)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		opts.cleanup = cleanup
-		env = replaceEnv(env, "GOWORK", workspace)
-	}
-
-	flags := append([]string{"-mod=" + mode}, buildFlags(opts.BuildTags)...)
-	if parsed.modFile != "" {
-		flags = append(flags, "-modfile="+parsed.modFile)
-	}
-
-	flags = append(flags, parsed.semantic...)
-
-	return env, flags, nil
+	return nil
 }
 
 func companionSum(modfile string) string {
@@ -321,24 +355,24 @@ func splitQuoted(raw string) ([]string, error) {
 			quote := raw[0]
 			raw = raw[1:]
 
-			i := strings.IndexByte(raw, quote)
-			if i < 0 {
+			quoteEnd := strings.IndexByte(raw, quote)
+			if quoteEnd < 0 {
 				return nil, errUnterminatedQuote
 			}
 
-			out = append(out, raw[:i])
-			raw = raw[i+1:]
+			out = append(out, raw[:quoteEnd])
+			raw = raw[quoteEnd+1:]
 
 			continue
 		}
 
-		i := 0
-		for i < len(raw) && !strings.ContainsRune(" \t\n\r", rune(raw[i])) {
-			i++
+		tokenEnd := 0
+		for tokenEnd < len(raw) && !strings.ContainsRune(" \t\n\r", rune(raw[tokenEnd])) {
+			tokenEnd++
 		}
 
-		out = append(out, raw[:i])
-		raw = raw[i:]
+		out = append(out, raw[:tokenEnd])
+		raw = raw[tokenEnd:]
 	}
 
 	return out, nil

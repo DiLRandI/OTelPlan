@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -22,7 +23,11 @@ const (
 	variadicStringType = "string"
 )
 
-var errUnsupportedOTelCVersion = errors.New("unsupported otelc version; expected " + SupportedVersion)
+var (
+	errUnsupportedOTelCVersion   = errors.New("unsupported otelc version; expected " + SupportedVersion)
+	errUnrecognizedVersion       = errors.New("unrecognized otelc version output")
+	errExecutableVersionMismatch = errors.New("otelc executable does not match pinned version")
+)
 
 // Identity returns the capabilities verified for the pinned backend version.
 // Executable verification supplies its digest separately.
@@ -194,29 +199,75 @@ func VerifyExecutable(ctx context.Context, executable, version string) (model.Lo
 		return identity, fmt.Errorf("read otelc version: %w", err)
 	}
 
+	err = validateReportedVersion(output, version)
+	if err != nil {
+		return identity, err
+	}
+
+	identity.Digest, err = executableDigest(path)
+	if err != nil {
+		return identity, err
+	}
+
+	return identity, nil
+}
+
+func validateReportedVersion(output []byte, version string) error {
 	fields := strings.Fields(string(output))
 	if len(fields) < 3 || fields[0] != "otelc" || fields[1] != "version" {
-		return identity, errors.New("unrecognized otelc version output")
+		return errUnrecognizedVersion
 	}
 
 	reported, _, _ := strings.Cut(fields[2], "+")
 	if reported != version {
-		return identity, errors.New("otelc executable does not match pinned version")
+		return errExecutableVersionMismatch
 	}
 
-	file, err := os.Open(path)
+	return nil
+}
+
+func executableDigest(path string) (string, error) {
+	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return identity, fmt.Errorf("open otelc executable: %w", err)
+		return "", fmt.Errorf("resolve otelc executable: %w", err)
 	}
 
-	defer func() { _ = file.Close() }()
+	root, err := os.OpenRoot(filepath.Dir(resolved))
+	if err != nil {
+		return "", fmt.Errorf("open otelc executable directory: %w", err)
+	}
+
+	digest, readErr := hashExecutable(root, filepath.Base(resolved))
+
+	closeErr := root.Close()
+	if closeErr != nil {
+		closeErr = fmt.Errorf("close otelc executable directory: %w", closeErr)
+	}
+
+	if readErr != nil || closeErr != nil {
+		return "", errors.Join(readErr, closeErr)
+	}
+
+	return digest, nil
+}
+
+func hashExecutable(root *os.Root, name string) (string, error) {
+	file, err := root.Open(name)
+	if err != nil {
+		return "", fmt.Errorf("open otelc executable: %w", err)
+	}
 
 	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return identity, fmt.Errorf("digest otelc executable: %w", err)
+	_, readErr := io.Copy(hash, file)
+
+	closeErr := file.Close()
+	if closeErr != nil {
+		closeErr = fmt.Errorf("close otelc executable: %w", closeErr)
 	}
 
-	identity.Digest = fmt.Sprintf("sha256:%x", hash.Sum(nil))
+	if readErr != nil || closeErr != nil {
+		return "", fmt.Errorf("digest otelc executable: %w", errors.Join(readErr, closeErr))
+	}
 
-	return identity, nil
+	return fmt.Sprintf("sha256:%x", hash.Sum(nil)), nil
 }

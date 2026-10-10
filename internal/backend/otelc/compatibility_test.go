@@ -1,8 +1,11 @@
 package otelc
 
 import (
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -339,5 +342,75 @@ func TestPinnedExecutableIdentity(t *testing.T) {
 	if identity.Version != SupportedVersion || !strings.HasPrefix(identity.Digest, "sha256:") ||
 		len(identity.Digest) != 71 {
 		t.Fatalf("invalid executable identity: %+v", identity)
+	}
+}
+
+func TestReportedExecutableVersionContracts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		output  string
+		message string
+	}{
+		{name: "pinned", output: "otelc version v1.1.0\n", message: ""},
+		{name: "build metadata", output: "otelc version v1.1.0+custom-build\n", message: ""},
+		{name: "trailing context", output: "otelc version v1.1.0 built with Go\n", message: ""},
+		{name: "empty", output: "", message: "unrecognized otelc version output"},
+		{name: "wrong label", output: "private-label version v1.1.0", message: "unrecognized otelc version output"},
+		{name: "missing version", output: "otelc version", message: "unrecognized otelc version output"},
+		{name: "different pin", output: "otelc version v1.2.0+private-build",
+			message: "otelc executable does not match pinned version"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			first := validateReportedVersion([]byte(testCase.output), SupportedVersion)
+			second := validateReportedVersion([]byte(testCase.output), SupportedVersion)
+
+			if testCase.message == "" {
+				if first != nil || second != nil {
+					t.Fatalf("valid pinned version rejected: %v, %v", first, second)
+				}
+
+				return
+			}
+
+			if first == nil || first.Error() != testCase.message || !errors.Is(second, first) {
+				t.Fatalf("version error changed or lost its cause: first=%v second=%v", first, second)
+			}
+		})
+	}
+}
+
+func TestExecutableDigestPreservesSelectedSymlinkIdentity(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	selected := filepath.Join(directory, "otelc")
+	contents := []byte("selected backend bytes for hashing")
+
+	err := os.WriteFile(selected, contents, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	linked := filepath.Join(t.TempDir(), "selected-otelc")
+
+	err = os.Symlink(selected, linked)
+	if err != nil {
+		t.Fatalf("create selected backend symlink: %v", err)
+	}
+
+	sha := sha256.Sum256(contents)
+	want := fmt.Sprintf("sha256:%x", sha)
+
+	for _, filename := range []string{selected, linked} {
+		got, err := executableDigest(filename)
+		if err != nil || got != want {
+			t.Fatalf("selected digest=%s error=%v; want %s", got, err, want)
+		}
 	}
 }

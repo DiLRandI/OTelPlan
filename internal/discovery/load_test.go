@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"golang.org/x/tools/go/packages"
 )
 
 func fixture(t *testing.T, files map[string]string) string {
@@ -36,6 +37,32 @@ func fixture(t *testing.T, files map[string]string) string {
 	}
 
 	return root
+}
+
+func TestPackageAnalysisErrorsRemainSorted(t *testing.T) {
+	t.Parallel()
+
+	dependency := new(packages.Package)
+	dependency.ID = "example.com/dependency"
+	dependency.Errors = []packages.Error{
+		{Pos: "z.go:2:1", Msg: "last failure", Kind: packages.TypeError},
+		{Pos: "a.go:1:1", Msg: "first failure", Kind: packages.ParseError},
+	}
+	root := new(packages.Package)
+	root.ID = "example.com/app"
+	root.Imports = map[string]*packages.Package{"example.com/dependency": dependency}
+	root.Errors = []packages.Error{{Pos: "m.go:3:1", Msg: "middle failure", Kind: packages.TypeError}}
+
+	err := reportErrors([]*packages.Package{root, dependency})
+	want := "package analysis failed: a.go:1:1: first failure; m.go:3:1: middle failure; z.go:2:1: last failure"
+
+	if err == nil || err.Error() != want {
+		t.Fatalf("analysis errors=%v; want %q", err, want)
+	}
+
+	if !errors.Is(err, errPackageAnalysis) {
+		t.Fatalf("analysis errors lost their stable cause: %v", err)
+	}
 }
 
 func TestLoadSemanticInventory(t *testing.T) {

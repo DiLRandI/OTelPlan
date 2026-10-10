@@ -67,8 +67,11 @@ func loadContextResult(ctx context.Context, opts Options) (*model.CodeModel, boo
 
 	cfg := &packages.Config{
 		Context: ctx,
-		Mode:    packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports | packages.NeedModule | packages.NeedDeps | packages.NeedCompiledGoFiles,
-		Dir:     opts.Root, Tests: opts.IncludeTests, BuildFlags: flags, Env: env,
+		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes |
+			packages.NeedTypesInfo | packages.NeedImports | packages.NeedModule | packages.NeedDeps |
+			packages.NeedCompiledGoFiles,
+		Dir: opts.Root, Tests: opts.IncludeTests, BuildFlags: flags, Env: env,
+		Logf: nil, Fset: nil, ParseFile: nil, Overlay: nil,
 	}
 
 	if opts.CacheDir != "" {
@@ -91,7 +94,8 @@ func loadPreparedModel(ctx context.Context, opts Options, cfg *packages.Config) 
 		return preparedAnalysis{}, fmt.Errorf("load packages: %w", err)
 	}
 
-	if err := reportErrors(pkgs); err != nil {
+	err = reportErrors(pkgs)
+	if err != nil {
 		return preparedAnalysis{}, err
 	}
 
@@ -109,7 +113,7 @@ func loadPreparedModel(ctx context.Context, opts Options, cfg *packages.Config) 
 }
 
 func selectAnalysisPackages(pkgs []*packages.Package, opts Options) ([]*packages.Package, []*packages.Package) {
-	var selected, all []*packages.Package
+	var all []*packages.Package
 
 	seen := map[string]*packages.Package{}
 
@@ -124,6 +128,8 @@ func selectAnalysisPackages(pkgs []*packages.Package, opts Options) ([]*packages
 
 		return true
 	}, nil)
+
+	selected := make([]*packages.Package, 0, len(seen))
 
 	for _, p := range seen {
 		selected = append(selected, p)
@@ -153,7 +159,7 @@ func reportErrors(pkgs []*packages.Package) error {
 	sort.Strings(errs)
 
 	if len(errs) > 0 {
-		return fmt.Errorf("package analysis failed: %s", strings.Join(errs, "; "))
+		return fmt.Errorf("%w: %s", errPackageAnalysis, strings.Join(errs, "; "))
 	}
 
 	return nil

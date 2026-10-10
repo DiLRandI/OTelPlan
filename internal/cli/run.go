@@ -2,12 +2,10 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"github.com/DiLRandI/OTelPlan/internal/backend/otelc"
 	"github.com/DiLRandI/OTelPlan/internal/discovery"
@@ -298,150 +296,6 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	}
 
 	return exitCode
-}
-
-func usageError(opts options, command, message string, stdout, stderr io.Writer) int {
-	if opts.format != jsonFormat {
-		if _, err := fmt.Fprintln(stderr, message); err != nil {
-			return 1
-		}
-
-		return 2
-	}
-
-	reply := response{APIVersion: APIVersion, Command: command, OK: false, Diagnostics: model.DiagnosticErrorList{{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, Message: message}}}
-
-	err := emit(stdout, opts, reply)
-	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-
-		return 1
-	}
-
-	return 2
-}
-
-func emit(out io.Writer, opts options, reply response) error {
-	if inventory, ok := reply.Data.(*model.CodeModel); ok {
-		reply.Data = previewInventory(inventory)
-	}
-
-	if opts.details != nil && (opts.details.Build != nil || len(opts.details.Failures) > 0) {
-		reply.Details = opts.details
-	}
-
-	if opts.format == jsonFormat {
-		encoder := json.NewEncoder(out)
-		encoder.SetIndent("", "  ")
-
-		return encoder.Encode(reply)
-	}
-
-	for _, diag := range reply.Diagnostics {
-		if _, err := fmt.Fprintln(out, diag.Error()); err != nil {
-			return err
-		}
-	}
-
-	err := emitDiagnosticDetails(out, opts)
-	if err != nil {
-		return err
-	}
-
-	if opts.quiet {
-		return nil
-	}
-
-	var text strings.Builder
-
-	switch data := reply.Data.(type) {
-	case string:
-		fmt.Fprintln(&text, data)
-	case *model.CodeModel:
-		for _, symbol := range data.Symbols {
-			fmt.Fprintf(&text, "%s\n  signature %s\n  source %s:%d\n  context %v  errors %v\n", symbol.ID, symbol.Signature, symbol.Location.File, symbol.Location.Line, symbol.ContextIndexes, symbol.ErrorIndexes)
-		}
-
-		if data.CallGraph != nil {
-			fmt.Fprintf(&text, "CALLGRAPH %s conservative=%t scope=%s\n",
-				data.CallGraph.Algorithm, data.CallGraph.Conservative, data.CallGraph.Scope)
-
-			for _, limitation := range data.CallGraph.Limitations {
-				fmt.Fprintf(&text, "  limitation: %s\n", limitation)
-			}
-
-			for _, edge := range data.CallEdges {
-				fmt.Fprintf(&text, "CALL %s %s -> %s\n", edge.Precision, edge.Caller, edge.Callee)
-			}
-		}
-
-		if opts.interfaces {
-			for _, binding := range data.InterfaceMethods {
-				fmt.Fprintf(&text, "IMPLEMENTS %s %s\n", binding.InterfaceID, binding.SymbolID)
-			}
-		}
-	case model.ResolvedPlan:
-		for _, target := range data.Targets {
-			fmt.Fprintf(&text, "SELECTED %s\n  span %s\n  context %s[%d]\n  errors record=%t indexes=%v\n  rule %s\n", target.SymbolID, target.SpanName, target.ContextStrategy.Strategy, target.ContextStrategy.Index, target.ErrorStrategy.Record, target.ErrorStrategy.Indexes, target.RuleID)
-
-			for _, attr := range target.Attributes {
-				source := "constant"
-				if attr.From.Argument != "" {
-					source = "argument " + attr.From.Argument
-				}
-
-				if attr.From.Result != "" {
-					source = "result " + attr.From.Result
-				}
-
-				fmt.Fprintf(&text, "  attribute %s from %s\n", attr.Key, source)
-			}
-		}
-
-		for _, skip := range data.Skipped {
-			fmt.Fprintf(&text, "SKIPPED %s\n  rule %s: %s\n", skip.SymbolID, skip.RuleID, skip.Reason)
-		}
-	case resolve.Explanation:
-		fmt.Fprintf(&text, "%s selected=%t\n", data.SymbolID, data.Selected)
-
-		for _, decision := range data.Decisions {
-			fmt.Fprintf(&text, "  %s %s: %s\n", decision.RuleID, decision.Stage, decision.Reason)
-		}
-	case buildSummary:
-		if data.Path != "" {
-			fmt.Fprintf(&text, "built %s %s\n", data.Path, data.Digest)
-		}
-
-		for _, file := range data.Files {
-			fmt.Fprintf(&text, "built %s %s\n", file.Path, file.Digest)
-		}
-
-		if data.Path == "" && len(data.Files) == 0 {
-			fmt.Fprintln(&text, "build succeeded; no executable output")
-		}
-	case initSummary:
-		fmt.Fprintf(&text, "wrote %s with %d suggested rule(s)\n", data.Path, len(data.Suggestions))
-
-		for _, candidate := range data.Suggestions {
-			fmt.Fprintf(&text, "SUGGESTED %s confidence=%s score=%d\n",
-				candidate.SymbolID, candidate.Confidence, candidate.Score)
-		}
-
-	case compileSummary:
-		fmt.Fprintf(&text, "%s artifacts=%d\n", data.Path, data.Files)
-	case lockSummary:
-		fmt.Fprintf(&text, "%s targets=%d changed=%t dry-run=%t\n", data.Path, data.Targets, data.Changed, data.DryRun)
-	case model.LockDiff:
-		for _, entry := range data.Entries {
-			fmt.Fprintf(&text, "%s %s %s\n", entry.Classification, entry.Symbol, entry.Detail)
-		}
-	case map[string]string:
-		fmt.Fprintf(&text, "otelplan %s\nGo %s\n", data["otelplan"], data["go"])
-	}
-
-	_, err = io.WriteString(out, text.String())
-
-	return err
 }
 
 func previewPlan(plan model.ResolvedPlan) model.ResolvedPlan {

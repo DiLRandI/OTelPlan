@@ -61,6 +61,7 @@ func TestBuildContextTagsAndFingerprint(t *testing.T) {
 
 	code := loadBuildContext(t, options)
 	if !slices.Equal(code.EffectiveBuild.BuildTags, []string{"chosen"}) ||
+		code.EffectiveBuild.ModuleMode != "readonly" ||
 		!slices.Equal(code.EffectiveBuild.SemanticFlags, []string{"-trimpath=true"}) {
 		t.Fatalf("effective tags or semantic flags changed: %+v", code.EffectiveBuild)
 	}

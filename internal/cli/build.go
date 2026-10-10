@@ -24,98 +24,147 @@ type buildSummary struct {
 	Backend model.LockBackend `json:"backend"`
 }
 
-func buildCommand(ctx context.Context, opts options, args buildArguments, p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan) (any, int, model.DiagnosticErrorList) {
-	fail := func(exit int, code model.Code, message string) (any, int, model.DiagnosticErrorList) {
-		return nil, exit, model.DiagnosticErrorList{{Severity: model.SeverityError, Code: code, Message: message}}
-	}
+type buildDestination struct {
+	path      string
+	directory bool
+}
 
+func buildCommand(ctx context.Context, opts options, args buildArguments, policy *model.Policy,
+	code *model.CodeModel, plan model.ResolvedPlan) (any, int, model.DiagnosticErrorList) {
 	executable, err := exec.LookPath("otelc")
 	if err != nil {
 		recordFailure(opts, model.CodeBackendUnsupported, "find pinned backend", err)
 
-		return fail(7, model.CodeBackendUnsupported, "cannot find pinned otelc executable on PATH")
+		return buildFailure(exitBackend, model.CodeBackendUnsupported, "cannot find pinned otelc executable on PATH")
 	}
 
-	backend, err := otelc.VerifyExecutable(ctx, executable, p.Backend.Version)
+	backend, err := otelc.VerifyExecutable(ctx, executable, policy.Backend.Version)
 	if err != nil {
 		recordFailure(opts, model.CodeBackendVersionMismatch, "verify pinned backend", err)
 
-		return fail(7, model.CodeBackendVersionMismatch, "backend executable does not match pinned version")
+		return buildFailure(exitBackend, model.CodeBackendVersionMismatch, "backend executable does not match pinned version")
 	}
 
-	destination := args.Output
-	if destination != "" && !filepath.IsAbs(destination) {
-		destination = filepath.Join(opts.root, destination)
+	destination, diagnostics := selectBuildDestination(opts, args.Output, code)
+	if diagnostics != nil {
+		return nil, exitUsage, diagnostics
 	}
 
-	directoryOutput := strings.HasSuffix(args.Output, "/") || strings.HasSuffix(args.Output, "\\")
-	if info, err := os.Stat(destination); err == nil && info.IsDir() {
-		directoryOutput = true
-	}
-
-	if !directoryOutput && protectedBuildOutput(destination, opts, code) {
-		return fail(2, model.CodeInvalidPolicy, "build output must not replace Go source or module files")
-	}
-
-	built, err := compiler.BuildResolved(ctx, compiler.ResolvedBuildRequest{Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: Version, Env: os.Environ(), GoArgs: args.GoArgs, Offline: opts.offline, DefaultOutput: destination == "", DirectoryOutput: directoryOutput, Packages: args.Packages})
+	built, err := compiler.BuildResolved(ctx, compiler.ResolvedBuildRequest{
+		Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: Version,
+		WorkingDir: "", Parent: "", Env: os.Environ(), GoArgs: args.GoArgs, Offline: opts.offline,
+		DefaultOutput: destination.path == "", DirectoryOutput: destination.directory, Packages: args.Packages,
+	})
 	if err != nil {
 		recordFailure(opts, model.CodeCompilationFailed, "build isolated workspace", err)
 
-		return fail(8, model.CodeCompilationFailed, "isolated backend build failed")
+		return buildFailure(exitCompilation, model.CodeCompilationFailed, "isolated backend build failed")
 	}
 
 	defer func() { _ = os.RemoveAll(built.Dir) }()
 
-	result := buildSummary{Backend: backend}
+	destinations, exit, diagnostics := destination.resolveAll(opts, code, built.Files)
+	if diagnostics != nil {
+		return nil, exit, diagnostics
+	}
 
-	destinations := make([]string, len(built.Files))
+	return destination.publishAll(opts, backend, built.Files, destinations)
+}
 
-	for i, artifact := range built.Files {
-		target := destination
+func selectBuildDestination(opts options, output string, code *model.CodeModel) (buildDestination,
+	model.DiagnosticErrorList) {
+	destination := output
+	if destination != "" && !filepath.IsAbs(destination) {
+		destination = filepath.Join(opts.root, destination)
+	}
+
+	directoryOutput := strings.HasSuffix(output, "/") || strings.HasSuffix(output, "\\")
+	info, err := os.Stat(destination)
+
+	if err == nil && info.IsDir() {
+		directoryOutput = true
+	}
+
+	if !directoryOutput && protectedBuildOutput(destination, opts, code) {
+		var invalid buildDestination
+
+		return invalid, compileDiagnostic(model.CodeInvalidPolicy, "build output must not replace Go source or module files")
+	}
+
+	return buildDestination{path: destination, directory: directoryOutput}, nil
+}
+
+func (choice buildDestination) resolveAll(opts options, code *model.CodeModel,
+	files []compiler.BuildArtifact) ([]string, int, model.DiagnosticErrorList) {
+	destinations := make([]string, len(files))
+
+	for artifactIndex, artifact := range files {
+		target := choice.path
 		if target == "" {
 			target = filepath.Join(opts.root, artifact.DefaultName)
-		} else if directoryOutput {
+		} else if choice.directory {
 			target = filepath.Join(target, artifact.DefaultName)
 		}
 
-		target, err = filepath.Abs(target)
+		absolute, err := filepath.Abs(target)
 		if err != nil {
 			recordFailure(opts, model.CodeArtifactOutput, "resolve build output", err)
 
-			return fail(1, model.CodeArtifactOutput, "cannot resolve build output")
+			return buildDestinationFailure(1, model.CodeArtifactOutput, "cannot resolve build output")
 		}
+
+		target = absolute
 
 		if protectedBuildOutput(target, opts, code) {
-			return fail(2, model.CodeInvalidPolicy, "build output must not replace source or project metadata")
+			return buildDestinationFailure(exitUsage, model.CodeInvalidPolicy,
+				"build output must not replace source or project metadata")
 		}
 
-		if info, err := os.Lstat(target); err == nil && !info.Mode().IsRegular() {
-			return fail(1, model.CodeArtifactOutput, "build output cannot replace a directory or symlink")
+		info, err := os.Lstat(target)
+		if err == nil && !info.Mode().IsRegular() {
+			return buildDestinationFailure(1, model.CodeArtifactOutput, "build output cannot replace a directory or symlink")
 		} else if err != nil && !os.IsNotExist(err) {
 			recordFailure(opts, model.CodeArtifactOutput, "inspect build output", err)
 
-			return fail(1, model.CodeArtifactOutput, "cannot inspect build output")
+			return buildDestinationFailure(1, model.CodeArtifactOutput, "cannot inspect build output")
 		}
 
-		destinations[i] = target
+		destinations[artifactIndex] = target
 	}
 
-	for i, artifact := range built.Files {
-		err := compiler.PublishBuildArtifact(artifact, destinations[i])
+	return destinations, 0, nil
+}
+
+func (choice buildDestination) publishAll(opts options, backend model.LockBackend, files []compiler.BuildArtifact,
+	destinations []string) (any, int, model.DiagnosticErrorList) {
+	var result buildSummary
+
+	result.Backend = backend
+
+	for artifactIndex, artifact := range files {
+		err := compiler.PublishBuildArtifact(artifact, destinations[artifactIndex])
 		if err != nil {
 			recordFailure(opts, model.CodeArtifactOutput, "publish build output", err)
 
-			return fail(1, model.CodeArtifactOutput, "cannot publish verified build output")
+			return buildFailure(1, model.CodeArtifactOutput, "cannot publish verified build output")
 		}
 
-		if directoryOutput {
-			result.Files = append(result.Files, buildFile{Path: destinations[i], Digest: artifact.Digest})
+		if choice.directory {
+			result.Files = append(result.Files, buildFile{Path: destinations[artifactIndex], Digest: artifact.Digest})
 		} else {
-			result.Path, result.Digest = destinations[i], artifact.Digest
+			result.Path, result.Digest = destinations[artifactIndex], artifact.Digest
 		}
 	}
 
 	return result, 0, nil
+}
+
+func buildDestinationFailure(exit int, code model.Code, message string) ([]string, int, model.DiagnosticErrorList) {
+	return nil, exit, compileDiagnostic(code, message)
+}
+
+func buildFailure(exit int, code model.Code, message string) (any, int, model.DiagnosticErrorList) {
+	return nil, exit, compileDiagnostic(code, message)
 }
 
 func protectedBuildOutput(destination string, opts options, code *model.CodeModel) bool {
@@ -123,8 +172,7 @@ func protectedBuildOutput(destination string, opts options, code *model.CodeMode
 		return false
 	}
 
-	name := filepath.Base(destination)
-	if strings.HasSuffix(name, ".go") || name == "go.mod" || name == "go.sum" || name == "go.work" || name == "go.work.sum" {
+	if reservedBuildOutputName(filepath.Base(destination)) {
 		return true
 	}
 
@@ -138,7 +186,11 @@ func protectedBuildOutput(destination string, opts options, code *model.CodeMode
 		return true
 	}
 
-	for _, original := range []string{config, filepath.Join(opts.root, "otelplan.lock"), code.EffectiveBuild.ModFile, code.WorkspaceFile} {
+	originals := []string{
+		config, filepath.Join(opts.root, "otelplan.lock"), code.EffectiveBuild.ModFile, code.WorkspaceFile,
+	}
+
+	for _, original := range originals {
 		if original == "" {
 			continue
 		}
@@ -150,4 +202,17 @@ func protectedBuildOutput(destination string, opts options, code *model.CodeMode
 	}
 
 	return false
+}
+
+func reservedBuildOutputName(name string) bool {
+	if strings.HasSuffix(name, ".go") {
+		return true
+	}
+
+	switch name {
+	case "go.mod", "go.sum", "go.work", "go.work.sum":
+		return true
+	default:
+		return false
+	}
 }

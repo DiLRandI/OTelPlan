@@ -27,156 +27,147 @@ type fileFlags struct {
 }
 
 func buildModel(pkgs, all []*packages.Package, opts Options) *model.CodeModel {
-	b := &builder{
+	indexer := &builder{
 		types:     map[string]model.TypeInfo{},
 		modules:   map[string]*model.ModuleInfo{},
 		packages:  pkgs,
 		fileFlags: map[string]fileFlags{},
 	}
 
-	m := &model.CodeModel{
-		GoVersion:      opts.goVersion,
-		ModuleRoot:     opts.Root,
-		WorkspaceFile:  opts.workspaceFile,
-		GOOS:           opts.GOOS,
-		GOARCH:         opts.GOARCH,
-		EffectiveBuild: opts.effectiveBuild,
-	}
+	code := new(model.CodeModel)
+	code.GoVersion = opts.goVersion
+	code.ModuleRoot = opts.Root
+	code.WorkspaceFile = opts.workspaceFile
+	code.GOOS, code.GOARCH = opts.GOOS, opts.GOARCH
+	code.EffectiveBuild = opts.effectiveBuild
+
 	if len(opts.BuildTags) > 0 {
-		m.BuildTags = append([]string(nil), opts.BuildTags...)
+		code.BuildTags = append([]string(nil), opts.BuildTags...)
 	}
 
-	for _, p := range all {
-		b.collectModule(m, p)
+	for _, pkg := range all {
+		indexer.collectModule(code, pkg)
 	}
 
-	for _, p := range pkgs {
-		b.collectPackage(m, p)
+	for _, pkg := range pkgs {
+		indexer.collectPackage(code, pkg)
 	}
 
-	for _, p := range pkgs {
-		b.collectSymbols(m, p)
+	for _, pkg := range pkgs {
+		indexer.collectSymbols(code, pkg)
 	}
 
-	sort.Slice(m.Modules, func(i, j int) bool { return m.Modules[i].Path < m.Modules[j].Path })
-	sort.Strings(m.BuildTags)
-	b.collectInterfaceRelations(m)
+	sort.Slice(code.Modules, func(i, j int) bool { return code.Modules[i].Path < code.Modules[j].Path })
+	sort.Strings(code.BuildTags)
+	indexer.collectInterfaceRelations(code)
 
-	for _, info := range b.types {
-		m.Types = append(m.Types, info)
+	for _, info := range indexer.types {
+		code.Types = append(code.Types, info)
 	}
 
-	sort.Slice(m.Types, func(i, j int) bool { return m.Types[i].Type < m.Types[j].Type })
-	sort.Slice(m.Symbols, func(i, j int) bool { return m.Symbols[i].ID < m.Symbols[j].ID })
+	sort.Slice(code.Types, func(i, j int) bool { return code.Types[i].Type < code.Types[j].Type })
+	sort.Slice(code.Symbols, func(i, j int) bool { return code.Symbols[i].ID < code.Symbols[j].ID })
 
-	return m
+	return code
 }
 
-func (b *builder) collectModule(m *model.CodeModel, p *packages.Package) {
-	if p.Module == nil {
+func (indexer *builder) collectModule(code *model.CodeModel, pkg *packages.Package) {
+	if pkg.Module == nil {
 		return
 	}
 
-	if _, ok := b.modules[p.Module.Path]; ok {
+	if _, exists := indexer.modules[pkg.Module.Path]; exists {
 		return
 	}
 
-	info := &model.ModuleInfo{
-		Path:      p.Module.Path,
-		Version:   p.Module.Version,
-		Dir:       p.Module.Dir,
-		Main:      p.Module.Main,
-		Ownership: model.OwnershipApplication,
-	}
-	if !p.Module.Main {
+	info := new(model.ModuleInfo)
+	info.Path, info.Version, info.Dir = pkg.Module.Path, pkg.Module.Version, pkg.Module.Dir
+	info.Main = pkg.Module.Main
+	info.Ownership = model.OwnershipApplication
+
+	if !pkg.Module.Main {
 		info.Ownership = model.OwnershipDependency
 	}
 
-	if replacement := p.Module.Replace; replacement != nil {
+	if replacement := pkg.Module.Replace; replacement != nil {
 		info.Replace = &model.ModuleReplacement{Path: replacement.Path, Version: replacement.Version, Dir: replacement.Dir}
 	}
 
-	b.modules[p.Module.Path] = info
-	m.Modules = append(m.Modules, *info)
+	indexer.modules[pkg.Module.Path] = info
+	code.Modules = append(code.Modules, *info)
 }
 
-func (b *builder) collectPackage(m *model.CodeModel, p *packages.Package) {
-	if len(p.GoFiles) == 0 && len(p.Syntax) == 0 {
+func (indexer *builder) collectPackage(code *model.CodeModel, pkg *packages.Package) {
+	if len(pkg.GoFiles) == 0 && len(pkg.Syntax) == 0 {
 		return
 	}
 
-	info := model.PackageInfo{
-		ImportPath: p.PkgPath,
-		Name:       p.Name,
-	}
-	if p.Module != nil {
-		info.ModulePath = p.Module.Path
+	var info model.PackageInfo
+
+	info.ImportPath, info.Name = pkg.PkgPath, pkg.Name
+
+	if pkg.Module != nil {
+		info.ModulePath = pkg.Module.Path
 	}
 
-	for _, f := range p.Syntax {
-		pos := p.Fset.Position(f.Pos())
+	for _, f := range pkg.Syntax {
+		pos := pkg.Fset.Position(f.Pos())
 		flags := fileFlags{generated: ast.IsGenerated(f), test: strings.HasSuffix(pos.Filename, "_test.go")}
-		b.fileFlags[pos.Filename] = flags
+		indexer.fileFlags[pos.Filename] = flags
 
-		info.Files = append(info.Files, relFile(p, pos.Filename))
+		info.Files = append(info.Files, relFile(pkg, pos.Filename))
 	}
 
 	sort.Strings(info.Files)
-	m.Packages = append(m.Packages, info)
+	code.Packages = append(code.Packages, info)
 }
 
-func (b *builder) collectSymbols(m *model.CodeModel, p *packages.Package) {
-	for _, f := range p.Syntax {
+func (indexer *builder) collectSymbols(code *model.CodeModel, pkg *packages.Package) {
+	for _, f := range pkg.Syntax {
 		for _, decl := range f.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok {
+			declaration, exists := decl.(*ast.FuncDecl)
+			if !exists {
 				continue
 			}
 
-			sym := b.symbolFromDecl(p, fn)
+			sym := indexer.symbolFromDecl(pkg, declaration)
 			if sym == nil {
 				continue
 			}
 
-			m.Symbols = append(m.Symbols, *sym)
+			code.Symbols = append(code.Symbols, *sym)
 		}
 	}
 }
 
-func (b *builder) symbolFromDecl(p *packages.Package, fn *ast.FuncDecl) *model.Symbol {
-	if fn.Name.Name == "_" || fn.Name.Name == "init" {
+func (indexer *builder) symbolFromDecl(pkg *packages.Package, declaration *ast.FuncDecl) *model.Symbol {
+	if declaration.Name.Name == "_" || declaration.Name.Name == "init" {
 		return nil
 	}
 
-	obj, ok := p.TypesInfo.Defs[fn.Name]
-	if !ok || obj == nil {
+	obj, exists := pkg.TypesInfo.Defs[declaration.Name]
+	if !exists || obj == nil {
 		return nil
 	}
 
-	pos := p.Fset.Position(fn.Pos())
-	flags := b.fileFlags[pos.Filename]
+	pos := pkg.Fset.Position(declaration.Pos())
+	flags := indexer.fileFlags[pos.Filename]
 
-	sym := &model.Symbol{
-		PackageImportPath: p.PkgPath,
-		PackageName:       p.Name,
-		Name:              fn.Name.Name,
-		HasBody:           fn.Body != nil,
-		Location: model.SourceLocation{
-			File:   relFile(p, pos.Filename),
-			Line:   pos.Line,
-			Column: pos.Column,
-		},
-		Visibility: model.VisibilityExported,
-		Ownership:  ownership(p),
-		Generated:  flags.generated,
-		TestFile:   flags.test,
-	}
-	if !fn.Name.IsExported() {
+	sym := new(model.Symbol)
+	sym.PackageImportPath, sym.PackageName = pkg.PkgPath, pkg.Name
+	sym.Name = declaration.Name.Name
+	sym.HasBody = declaration.Body != nil
+	sym.Location = model.SourceLocation{File: relFile(pkg, pos.Filename), Line: pos.Line, Column: pos.Column}
+	sym.Visibility = model.VisibilityExported
+	sym.Ownership = ownership(pkg)
+	sym.Generated, sym.TestFile = flags.generated, flags.test
+
+	if !declaration.Name.IsExported() {
 		sym.Visibility = model.VisibilityUnexported
 	}
 
-	sig, ok := obj.Type().(*types.Signature)
-	if !ok {
+	sig, exists := obj.Type().(*types.Signature)
+	if !exists {
 		return nil
 	}
 
@@ -184,71 +175,82 @@ func (b *builder) symbolFromDecl(p *packages.Package, fn *ast.FuncDecl) *model.S
 
 	sym.Variadic = sig.Variadic()
 
-	for _, params := range []*types.TypeParamList{sig.TypeParams(), sig.RecvTypeParams()} {
-		for tparam := range params.TypeParams() {
-			if sym.Generics == nil {
-				sym.Generics = &model.GenericInfo{}
-			}
+	collectDeclarationTypeParameters(sym, sig)
 
-			sym.Generics.TypeParams = append(sym.Generics.TypeParams, types.TypeString(tparam, nil))
-		}
-	}
-
-	if fn.Recv != nil {
-		recv, err := b.receiver(p, fn)
+	if declaration.Recv != nil {
+		recv, err := indexer.receiver(pkg, declaration)
 		if err != nil {
 			return nil
 		}
 
 		sym.Kind = model.SymbolMethod
 		sym.Receiver = recv
-		sym.ID = model.MethodID(p.PkgPath, *recv, fn.Name.Name)
+		sym.ID = model.MethodID(pkg.PkgPath, *recv, declaration.Name.Name)
 	} else {
 		sym.Kind = model.SymbolFunction
-		sym.ID = model.FunctionID(p.PkgPath, fn.Name.Name)
+		sym.ID = model.FunctionID(pkg.PkgPath, declaration.Name.Name)
 	}
 
-	params := sig.Params()
-	for i := 0; i < params.Len(); i++ {
-		pv := params.At(i)
-
-		sym.Parameters = append(sym.Parameters, model.Parameter{
-			Name: pv.Name(),
-			Type: b.collectType(pv.Type()),
-		})
-
-		if isContextType(pv.Type()) {
-			sym.ContextIndexes = append(sym.ContextIndexes, i)
-		}
-	}
-
-	errorType := types.Universe.Lookup("error").Type()
-
-	results := sig.Results()
-	for i := 0; i < results.Len(); i++ {
-		rv := results.At(i)
-
-		sym.Results = append(sym.Results, model.Result{
-			Name: rv.Name(),
-			Type: b.collectType(rv.Type()),
-		})
-
-		if types.Identical(types.Unalias(rv.Type()), errorType) {
-			sym.ErrorIndexes = append(sym.ErrorIndexes, i)
-		}
-	}
+	indexer.collectDeclarationParameters(sym, sig)
+	indexer.collectDeclarationResults(sym, sig)
 
 	return sym
 }
 
-func (b *builder) receiver(p *packages.Package, fn *ast.FuncDecl) (*model.Receiver, error) {
-	obj, ok := p.TypesInfo.Defs[fn.Name]
-	if !ok || obj == nil {
+func collectDeclarationTypeParameters(sym *model.Symbol, sig *types.Signature) {
+	for _, params := range []*types.TypeParamList{sig.TypeParams(), sig.RecvTypeParams()} {
+		for tparam := range params.TypeParams() {
+			if sym.Generics == nil {
+				sym.Generics = new(model.GenericInfo)
+			}
+
+			sym.Generics.TypeParams = append(sym.Generics.TypeParams, types.TypeString(tparam, nil))
+		}
+	}
+}
+
+func (indexer *builder) collectDeclarationParameters(sym *model.Symbol, sig *types.Signature) {
+	params := sig.Params()
+	for parameterIndex := range params.Len() {
+		parameter := params.At(parameterIndex)
+
+		sym.Parameters = append(sym.Parameters, model.Parameter{
+			Name: parameter.Name(),
+			Type: indexer.collectType(parameter.Type()),
+		})
+
+		if isContextType(parameter.Type()) {
+			sym.ContextIndexes = append(sym.ContextIndexes, parameterIndex)
+		}
+	}
+}
+
+func (indexer *builder) collectDeclarationResults(sym *model.Symbol, sig *types.Signature) {
+	errorType := types.Universe.Lookup("error").Type()
+
+	results := sig.Results()
+	for resultIndex := range results.Len() {
+		result := results.At(resultIndex)
+
+		sym.Results = append(sym.Results, model.Result{
+			Name: result.Name(),
+			Type: indexer.collectType(result.Type()),
+		})
+
+		if types.Identical(types.Unalias(result.Type()), errorType) {
+			sym.ErrorIndexes = append(sym.ErrorIndexes, resultIndex)
+		}
+	}
+}
+
+func (indexer *builder) receiver(pkg *packages.Package, declaration *ast.FuncDecl) (*model.Receiver, error) {
+	obj, exists := pkg.TypesInfo.Defs[declaration.Name]
+	if !exists || obj == nil {
 		return nil, errReceiverUnknown
 	}
 
-	sig, ok := obj.Type().(*types.Signature)
-	if !ok || sig.Recv() == nil {
+	sig, exists := obj.Type().(*types.Signature)
+	if !exists || sig.Recv() == nil {
 		return nil, errReceiverUnknown
 	}
 
@@ -256,10 +258,10 @@ func (b *builder) receiver(p *packages.Package, fn *ast.FuncDecl) (*model.Receiv
 
 	recvField := sig.Recv()
 
-	if named, ok := recvField.Type().(*types.Named); ok {
+	if named, exists := recvField.Type().(*types.Named); exists {
 		recvName = named.Obj().Name()
-	} else if pointer, ok := recvField.Type().(*types.Pointer); ok {
-		if named, ok := pointer.Elem().(*types.Named); ok {
+	} else if pointer, exists := recvField.Type().(*types.Pointer); exists {
+		if named, exists := pointer.Elem().(*types.Named); exists {
 			recvName = named.Obj().Name()
 		}
 	}
@@ -276,14 +278,14 @@ func (b *builder) receiver(p *packages.Package, fn *ast.FuncDecl) (*model.Receiv
 }
 
 func isPointerReceiver(t types.Type) bool {
-	_, ok := t.(*types.Pointer)
+	_, exists := t.(*types.Pointer)
 
-	return ok
+	return exists
 }
 
 func isContextType(t types.Type) bool {
-	named, ok := types.Unalias(t).(*types.Named)
-	if !ok {
+	named, exists := types.Unalias(t).(*types.Named)
+	if !exists {
 		return false
 	}
 
@@ -292,9 +294,10 @@ func isContextType(t types.Type) bool {
 	return obj != nil && obj.Pkg() != nil && obj.Pkg().Path() == "context" && obj.Name() == "Context"
 }
 
-func relFile(p *packages.Package, file string) string {
-	if p.Module != nil && p.Module.Dir != "" {
-		if rel, err := filepath.Rel(p.Module.Dir, file); err == nil && !strings.HasPrefix(rel, "..") {
+func relFile(pkg *packages.Package, file string) string {
+	if pkg.Module != nil && pkg.Module.Dir != "" {
+		rel, err := filepath.Rel(pkg.Module.Dir, file)
+		if err == nil && !strings.HasPrefix(rel, "..") {
 			return filepath.ToSlash(rel)
 		}
 	}
@@ -302,8 +305,8 @@ func relFile(p *packages.Package, file string) string {
 	return filepath.ToSlash(file)
 }
 
-func ownership(p *packages.Package) model.Ownership {
-	if p.Module != nil && p.Module.Main {
+func ownership(pkg *packages.Package) model.Ownership {
+	if pkg.Module != nil && pkg.Module.Main {
 		return model.OwnershipApplication
 	}
 

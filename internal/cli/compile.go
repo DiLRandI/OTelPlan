@@ -17,79 +17,43 @@ type compileSummary struct {
 	Backend model.LockBackend `json:"backend"`
 }
 
-func compileCommand(ctx context.Context, opts options, p *model.Policy, code *model.CodeModel, plan model.ResolvedPlan) (any, int, model.DiagnosticErrorList) {
-	fail := func(exit int, message string) (any, int, model.DiagnosticErrorList) {
-		code := model.CodeBackendUnsupported
-		if exit == 8 {
-			code = model.CodeCompilationFailed
-		}
+const exitCompilation = 8
 
-		if exit == 1 {
-			code = model.CodeArtifactOutput
-		}
-
-		return nil, exit, model.DiagnosticErrorList{{Severity: model.SeverityError, Code: code, Message: message}}
-	}
-
+func compileCommand(ctx context.Context, opts options, policy *model.Policy, code *model.CodeModel,
+	plan model.ResolvedPlan) (any, int, model.DiagnosticErrorList) {
 	executable, err := exec.LookPath("otelc")
 	if err != nil {
 		recordFailure(opts, model.CodeBackendUnsupported, "find pinned backend", err)
 
-		return fail(7, "cannot find pinned otelc executable on PATH")
+		return compileFailure(exitBackend, "cannot find pinned otelc executable on PATH")
 	}
 
-	backend, err := otelc.VerifyExecutable(ctx, executable, p.Backend.Version)
+	backend, err := otelc.VerifyExecutable(ctx, executable, policy.Backend.Version)
 	if err != nil {
 		recordFailure(opts, model.CodeBackendUnsupported, "verify pinned backend", err)
 
-		return fail(7, "backend executable does not match the pinned version")
+		return compileFailure(exitBackend, "backend executable does not match the pinned version")
 	}
 
 	files, err := otelc.RenderBundle(backend, Version, code, plan, "otelplan.local/generated")
 	if err != nil {
 		recordFailure(opts, model.CodeBackendUnsupported, "render backend bundle", err)
 
-		return fail(7, err.Error())
+		return compileFailure(exitBackend, err.Error())
 	}
 
 	staged, err := compiler.StageArtifacts("", files)
 	if err != nil {
 		recordFailure(opts, model.CodeArtifactOutput, "stage generated artifacts", err)
 
-		return fail(1, "cannot stage compiler artifacts")
+		return compileFailure(1, "cannot stage compiler artifacts")
 	}
 
 	defer func() { _ = os.RemoveAll(staged.Dir) }()
 
-	env, buildFlags, err := compiler.RecordedBuildEnvironment(os.Environ(), code.EffectiveBuild)
-	if err != nil {
-		recordFailure(opts, model.CodeCompilationFailed, "restore analyzed build environment", err)
-
-		return fail(8, "cannot restore analyzed Go environment")
-	}
-
-	args := append([]string{"test", "-mod=readonly"}, buildFlags...)
-	command := exec.CommandContext(ctx, "go", append(args, "./...")...)
-	command.Dir = staged.Dir
-
-	command.Env = append(env, "GOWORK=off")
-
-	if opts.offline {
-		command.Env = append(command.Env, "GOPROXY=off", "GONOPROXY=none", "GOSUMDB=off", "GOTOOLCHAIN=local")
-	}
-
-	err = command.Run()
-	if err != nil {
-		recordFailure(opts, model.CodeCompilationFailed, "compile generated runtime", err)
-
-		return fail(8, "generated source compilation failed")
-	}
-
-	err = compiler.VerifyArtifacts(staged)
-	if err != nil {
-		recordFailure(opts, model.CodeCompilationFailed, "verify generated artifacts", err)
-
-		return fail(8, "generated source verification changed artifacts")
+	diagnostics := validateCompiledRuntime(ctx, opts, code.EffectiveBuild, staged)
+	if diagnostics != nil {
+		return nil, exitCompilation, diagnostics
 	}
 
 	destination := opts.output
@@ -101,8 +65,69 @@ func compileCommand(ctx context.Context, opts options, p *model.Policy, code *mo
 	if err != nil {
 		recordFailure(opts, model.CodeArtifactOutput, "publish generated artifacts", err)
 
-		return fail(1, err.Error())
+		return compileFailure(1, err.Error())
 	}
 
 	return compileSummary{Path: published.Dir, Files: len(published.Files), Backend: backend}, 0, nil
+}
+
+func validateCompiledRuntime(ctx context.Context, opts options, build model.BuildEnvironment,
+	staged model.Artifacts) model.DiagnosticErrorList {
+	env, buildFlags, err := compiler.RecordedBuildEnvironment(os.Environ(), build)
+	if err != nil {
+		recordFailure(opts, model.CodeCompilationFailed, "restore analyzed build environment", err)
+
+		return compileDiagnostic(model.CodeCompilationFailed, "cannot restore analyzed Go environment")
+	}
+
+	args := append([]string{"test", "-mod=readonly"}, buildFlags...)
+	args = append(args, "./...")
+	command := exec.CommandContext(ctx, "go", args...)
+	command.Dir = staged.Dir
+
+	env = append(env, "GOWORK=off")
+	command.Env = env
+
+	if opts.offline {
+		command.Env = append(command.Env, "GOPROXY=off", "GONOPROXY=none", "GOSUMDB=off", "GOTOOLCHAIN=local")
+	}
+
+	err = command.Run()
+	if err != nil {
+		recordFailure(opts, model.CodeCompilationFailed, "compile generated runtime", err)
+
+		return compileDiagnostic(model.CodeCompilationFailed, "generated source compilation failed")
+	}
+
+	err = compiler.VerifyArtifacts(staged)
+	if err != nil {
+		recordFailure(opts, model.CodeCompilationFailed, "verify generated artifacts", err)
+
+		return compileDiagnostic(model.CodeCompilationFailed, "generated source verification changed artifacts")
+	}
+
+	return nil
+}
+
+func compileFailure(exit int, message string) (any, int, model.DiagnosticErrorList) {
+	code := model.CodeBackendUnsupported
+
+	switch exit {
+	case exitCompilation:
+		code = model.CodeCompilationFailed
+	case 1:
+		code = model.CodeArtifactOutput
+	}
+
+	return nil, exit, compileDiagnostic(code, message)
+}
+
+func compileDiagnostic(code model.Code, message string) model.DiagnosticErrorList {
+	var diagnostic model.DiagnosticError
+
+	diagnostic.Severity = model.SeverityError
+	diagnostic.Code = code
+	diagnostic.Message = message
+
+	return model.DiagnosticErrorList{diagnostic}
 }

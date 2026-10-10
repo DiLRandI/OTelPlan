@@ -2,30 +2,25 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"flag"
 	"fmt"
 	"io"
-	"path/filepath"
 	"runtime"
-	"strings"
 
-	"github.com/DiLRandI/OTelPlan/internal/backend/otelc"
 	"github.com/DiLRandI/OTelPlan/internal/discovery"
-	"github.com/DiLRandI/OTelPlan/internal/policy"
-	"github.com/DiLRandI/OTelPlan/internal/resolve"
-	"github.com/DiLRandI/OTelPlan/internal/validate"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
 const APIVersion = "otelplan.io/cli/v1alpha1"
 
 const (
-	initCommandName = "init"
-	jsonFormat      = "json"
-	exitUsage       = 2
-	commandUsage    = "usage: otelplan [global flags] " +
+	inspectCommandName = "inspect"
+	explainCommandName = "explain"
+	compileCommandName = "compile"
+	buildCommandName   = "build"
+	initCommandName    = "init"
+	jsonFormat         = "json"
+	exitUsage          = 2
+	commandUsage       = "usage: otelplan [global flags] " +
 		"<init|scan|inspect|explain|validate|lock|diff|compile|build|version> [arguments]"
 )
 
@@ -102,53 +97,10 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 
 		return exit
 	}
-	if opts.check && opts.dryRun {
-		return fail(2, model.CodeInvalidPolicy, "cannot combine --check and --dry-run")
-	}
 
-	if (opts.dependencies || opts.interfaces || opts.callGraph) && command != "scan" {
-		return fail(2, model.CodeInvalidPolicy, "--dependencies, --interfaces, and --calls are supported by scan")
-	}
-
-	policyCommand := command == "inspect" || command == "explain" || command == "validate" || command == "lock" || command == "diff" || command == "compile" || command == "build"
-	if (opts.strict || opts.allowLargePlan || opts.configSet) && !policyCommand {
-		return fail(2, model.CodeInvalidPolicy, "--config, --strict, and --allow-large-plan require a policy command")
-	}
-
-	if command == "compile" && opts.output == "" {
-		return fail(2, model.CodeInvalidPolicy, "--output must not be empty")
-	}
-
-	if opts.outputSet && command != "compile" && command != initCommandName {
-		return fail(exitUsage, model.CodeInvalidPolicy, "--output is supported by init and compile")
-	}
-
-	if opts.clean && command != "compile" {
-		return fail(exitUsage, model.CodeInvalidPolicy, "--clean is supported by compile")
-	}
-
-	if (opts.force || opts.interactive || opts.nonInteractive) && command != initCommandName {
-		return fail(exitUsage, model.CodeInvalidPolicy, "--force, --interactive, and --non-interactive are supported by init")
-	}
-
-	if opts.interactive && opts.nonInteractive {
-		return fail(exitUsage, model.CodeInvalidPolicy, "cannot combine --interactive and --non-interactive")
-	}
-
-	if opts.interactive && opts.format == jsonFormat {
-		return fail(exitUsage, model.CodeInvalidPolicy, "--interactive requires text output")
-	}
-
-	if opts.interactive && stdin == nil {
-		return fail(exitUsage, model.CodeInvalidPolicy, "--interactive requires an input stream")
-	}
-
-	if opts.check && command != "lock" && command != "diff" {
-		return fail(2, model.CodeInvalidPolicy, "--check is supported by lock and diff")
-	}
-
-	if opts.dryRun && command != "lock" {
-		return fail(2, model.CodeInvalidPolicy, "--dry-run is supported by lock")
+	optionErr := validateCommandOptions(command, opts, stdin)
+	if optionErr != nil {
+		return fail(exitUsage, model.CodeInvalidPolicy, optionErr.Error())
 	}
 
 	exitCode := 0
@@ -187,108 +139,14 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		output.Data, exitCode, diagnostics = initCommand(ctx, opts, rest, stdin, stderr)
 		output.Diagnostics = append(output.Diagnostics, diagnostics...)
 		output.OK = exitCode == 0
-	case "inspect", "explain", "validate", "lock", "diff", "compile", "build":
-		if command == "explain" && len(rest) != 1 {
-			return fail(2, model.CodeInvalidPolicy, "explain requires one canonical symbol")
-		}
+	case inspectCommandName, explainCommandName, validateCommandName, lockCommandName,
+		diffCommandName, compileCommandName, buildCommandName:
+		var diagnostics model.DiagnosticErrorList
 
-		if command != "explain" && command != "build" && len(rest) != 0 {
-			return fail(2, model.CodeInvalidPolicy, command+" takes no positional arguments")
-		}
+		output.Data, exitCode, diagnostics = runPolicyCommand(ctx, command, opts, rest)
+		output.Diagnostics = append(output.Diagnostics, diagnostics...)
+		output.OK = exitCode == 0
 
-		var buildArgs buildArguments
-
-		if command == "build" {
-			var err error
-
-			buildArgs, err = parseBuildArguments(rest)
-			if err != nil {
-				return fail(2, model.CodeInvalidPolicy, err.Error())
-			}
-		}
-
-		config := opts.config
-		if !filepath.IsAbs(config) {
-			config = filepath.Join(opts.root, config)
-		}
-
-		p, err := policy.Load(config)
-		if err != nil {
-			recordFailure(opts, model.CodeInvalidPolicy, "load policy", err)
-
-			return fail(3, model.CodeInvalidPolicy, "cannot read or parse policy at "+config)
-		}
-
-		output.Diagnostics = policy.Validate(p)
-		if output.Diagnostics.HasErrors() {
-			output.OK = false
-
-			err := emit(stdout, opts, output)
-			if err != nil {
-				_, _ = fmt.Fprintln(stderr, err)
-
-				return 1
-			}
-
-			return 3
-		}
-
-		inventory, err := discovery.LoadContext(ctx, discovery.Options{Root: opts.root, Patterns: p.Project.Packages, BuildFlags: buildArgs.AnalysisFlags, BuildTags: p.Project.BuildTags, IncludeTests: p.Project.IncludeTests, IncludeDependencies: p.Project.IncludeDependencies, Offline: opts.offline})
-		if err != nil {
-			recordFailure(opts, model.CodeUnresolvedSymbol, "analyze policy packages", err)
-
-			return fail(4, model.CodeUnresolvedSymbol, err.Error())
-		}
-
-		recordBuildContext(opts, inventory.EffectiveBuild)
-		result := resolve.Resolve(p, inventory)
-
-		output.Diagnostics = append(result.Diagnostics, validate.Safety(inventory, result.Plan, validate.Options{AllowLargePlan: opts.allowLargePlan})...)
-		if output.Diagnostics == nil {
-			output.Diagnostics = model.DiagnosticErrorList{}
-		}
-
-		backendDiags := otelc.Check(p.Backend.Version, inventory, result.Plan)
-		output.Diagnostics = append(output.Diagnostics, backendDiags...)
-
-		output.OK = !output.Diagnostics.HasErrors() && (!opts.strict || len(output.Diagnostics.Warnings()) == 0)
-		if !output.OK {
-			exitCode = 5
-		}
-
-		if backendDiags.HasErrors() {
-			exitCode = 7
-		}
-
-		if command == "inspect" {
-			output.Data = previewPlan(result.Plan)
-		} else if command == "explain" {
-			for _, explanation := range result.Explanations {
-				if string(explanation.SymbolID) == rest[0] {
-					output.Data = explanation
-
-					break
-				}
-			}
-
-			if output.Data == nil {
-				return fail(5, model.CodeUnresolvedSymbol, "symbol does not exist or policy could not be resolved")
-			}
-		} else if output.OK {
-			var diags model.DiagnosticErrorList
-
-			switch command {
-			case "build":
-				output.Data, exitCode, diags = buildCommand(ctx, opts, buildArgs, p, inventory, result.Plan)
-			case "compile":
-				output.Data, exitCode, diags = compileCommand(ctx, opts, p, inventory, result.Plan)
-			default:
-				output.Data, exitCode, diags = lockCommand(command, opts, p, inventory, result.Plan)
-			}
-
-			output.Diagnostics = append(output.Diagnostics, diags...)
-			output.OK = exitCode == 0
-		}
 	default:
 		return fail(2, model.CodeInvalidPolicy, "unknown command: "+command)
 	}
@@ -300,258 +158,6 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	}
 
 	return exitCode
-}
-
-func parse(args []string) (options, []string, error) {
-	var opts options
-
-	flags := flag.NewFlagSet("otelplan", flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
-	flags.StringVar(&opts.output, "output", ".otelplan/build", "artifact output relative to root")
-	flags.BoolVar(&opts.clean, "clean", false, "replace verified artifact output")
-	flags.BoolVar(&opts.force, "force", false, "replace an existing starter policy")
-	flags.BoolVar(&opts.interactive, "interactive", false, "review starter suggestions one by one")
-	flags.BoolVar(&opts.nonInteractive, "non-interactive", false, "generate a starter policy without prompts")
-	flags.StringVar(&opts.root, "root", ".", "project root")
-	flags.StringVar(&opts.config, "config", "otelplan.yaml", "policy path relative to root")
-	flags.StringVar(&opts.format, "format", "text", "text or json")
-	flags.BoolVar(&opts.strict, "strict", false, "fail on warnings")
-	flags.BoolVar(&opts.offline, "offline", false, "disable Go network resolution")
-	flags.BoolVar(&opts.check, "check", false, "check without writing")
-	flags.BoolVar(&opts.dryRun, "dry-run", false, "preview without writing")
-	flags.BoolVar(&opts.allowLargePlan, "allow-large-plan", false, "acknowledge large target count")
-	flags.BoolVar(&opts.help, "help", false, "show usage")
-	flags.BoolVar(&opts.help, "h", false, "show usage")
-	flags.BoolVar(&opts.quiet, "quiet", false, "suppress informational text")
-	flags.BoolVar(&opts.verbose, "verbose", false, "include safe error causes and build context")
-	flags.BoolVar(&opts.noColor, "no-color", false, "disable color")
-	flags.BoolVar(&opts.dependencies, "dependencies", false, "include dependency code in scan")
-	flags.BoolVar(&opts.callGraph, "calls", false, "include conservative advisory calls in scan")
-	flags.BoolVar(&opts.interfaces, "interfaces", false, "show interface methods in text scans")
-
-	var (
-		flagArgs, positionals []string
-		usageErr              error
-	)
-
-	formatHint := opts.format
-
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			positionals = append(positionals, args[i+1:]...)
-
-			break
-		}
-
-		if !strings.HasPrefix(arg, "-") || arg == "-" {
-			positionals = append(positionals, arg)
-
-			continue
-		}
-
-		name, value, hasValue := strings.Cut(strings.TrimLeft(arg, "-"), "=")
-
-		option := flags.Lookup(name)
-		if option == nil {
-			if usageErr == nil {
-				usageErr = fmt.Errorf("unknown flag: --%s", name)
-			}
-
-			continue
-		}
-
-		flagArgs = append(flagArgs, arg)
-
-		boolean, ok := option.Value.(interface{ IsBoolFlag() bool })
-		if !hasValue && (!ok || !boolean.IsBoolFlag()) {
-			i++
-			if i == len(args) {
-				if usageErr == nil {
-					usageErr = fmt.Errorf("flag --%s requires a value", name)
-				}
-
-				break
-			}
-
-			value = args[i]
-			flagArgs = append(flagArgs, value)
-		}
-
-		if name == "format" {
-			formatHint = value
-		}
-	}
-
-	err := flags.Parse(flagArgs)
-	if err != nil && usageErr == nil {
-		usageErr = errors.New("invalid flag value or syntax")
-	}
-
-	opts.format = formatHint
-	if usageErr != nil {
-		return opts, positionals, usageErr
-	}
-
-	if opts.format != "text" && opts.format != jsonFormat {
-		return opts, positionals, errors.New("format must be text or json")
-	}
-
-	flags.Visit(func(f *flag.Flag) {
-		if f.Name == "output" {
-			opts.outputSet = true
-		}
-
-		if f.Name == "config" {
-			opts.configSet = true
-		}
-	})
-
-	return opts, positionals, nil
-}
-
-func usageError(opts options, command, message string, stdout, stderr io.Writer) int {
-	if opts.format != jsonFormat {
-		if _, err := fmt.Fprintln(stderr, message); err != nil {
-			return 1
-		}
-
-		return 2
-	}
-
-	reply := response{APIVersion: APIVersion, Command: command, OK: false, Diagnostics: model.DiagnosticErrorList{{Severity: model.SeverityError, Code: model.CodeInvalidPolicy, Message: message}}}
-
-	err := emit(stdout, opts, reply)
-	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-
-		return 1
-	}
-
-	return 2
-}
-
-func emit(out io.Writer, opts options, reply response) error {
-	if inventory, ok := reply.Data.(*model.CodeModel); ok {
-		reply.Data = previewInventory(inventory)
-	}
-
-	if opts.details != nil && (opts.details.Build != nil || len(opts.details.Failures) > 0) {
-		reply.Details = opts.details
-	}
-
-	if opts.format == jsonFormat {
-		encoder := json.NewEncoder(out)
-		encoder.SetIndent("", "  ")
-
-		return encoder.Encode(reply)
-	}
-
-	for _, diag := range reply.Diagnostics {
-		if _, err := fmt.Fprintln(out, diag.Error()); err != nil {
-			return err
-		}
-	}
-
-	err := emitDiagnosticDetails(out, opts)
-	if err != nil {
-		return err
-	}
-
-	if opts.quiet {
-		return nil
-	}
-
-	var text strings.Builder
-
-	switch data := reply.Data.(type) {
-	case string:
-		fmt.Fprintln(&text, data)
-	case *model.CodeModel:
-		for _, symbol := range data.Symbols {
-			fmt.Fprintf(&text, "%s\n  signature %s\n  source %s:%d\n  context %v  errors %v\n", symbol.ID, symbol.Signature, symbol.Location.File, symbol.Location.Line, symbol.ContextIndexes, symbol.ErrorIndexes)
-		}
-
-		if data.CallGraph != nil {
-			fmt.Fprintf(&text, "CALLGRAPH %s conservative=%t scope=%s\n",
-				data.CallGraph.Algorithm, data.CallGraph.Conservative, data.CallGraph.Scope)
-
-			for _, limitation := range data.CallGraph.Limitations {
-				fmt.Fprintf(&text, "  limitation: %s\n", limitation)
-			}
-
-			for _, edge := range data.CallEdges {
-				fmt.Fprintf(&text, "CALL %s %s -> %s\n", edge.Precision, edge.Caller, edge.Callee)
-			}
-		}
-
-		if opts.interfaces {
-			for _, binding := range data.InterfaceMethods {
-				fmt.Fprintf(&text, "IMPLEMENTS %s %s\n", binding.InterfaceID, binding.SymbolID)
-			}
-		}
-	case model.ResolvedPlan:
-		for _, target := range data.Targets {
-			fmt.Fprintf(&text, "SELECTED %s\n  span %s\n  context %s[%d]\n  errors record=%t indexes=%v\n  rule %s\n", target.SymbolID, target.SpanName, target.ContextStrategy.Strategy, target.ContextStrategy.Index, target.ErrorStrategy.Record, target.ErrorStrategy.Indexes, target.RuleID)
-
-			for _, attr := range target.Attributes {
-				source := "constant"
-				if attr.From.Argument != "" {
-					source = "argument " + attr.From.Argument
-				}
-
-				if attr.From.Result != "" {
-					source = "result " + attr.From.Result
-				}
-
-				fmt.Fprintf(&text, "  attribute %s from %s\n", attr.Key, source)
-			}
-		}
-
-		for _, skip := range data.Skipped {
-			fmt.Fprintf(&text, "SKIPPED %s\n  rule %s: %s\n", skip.SymbolID, skip.RuleID, skip.Reason)
-		}
-	case resolve.Explanation:
-		fmt.Fprintf(&text, "%s selected=%t\n", data.SymbolID, data.Selected)
-
-		for _, decision := range data.Decisions {
-			fmt.Fprintf(&text, "  %s %s: %s\n", decision.RuleID, decision.Stage, decision.Reason)
-		}
-	case buildSummary:
-		if data.Path != "" {
-			fmt.Fprintf(&text, "built %s %s\n", data.Path, data.Digest)
-		}
-
-		for _, file := range data.Files {
-			fmt.Fprintf(&text, "built %s %s\n", file.Path, file.Digest)
-		}
-
-		if data.Path == "" && len(data.Files) == 0 {
-			fmt.Fprintln(&text, "build succeeded; no executable output")
-		}
-	case initSummary:
-		fmt.Fprintf(&text, "wrote %s with %d suggested rule(s)\n", data.Path, len(data.Suggestions))
-
-		for _, candidate := range data.Suggestions {
-			fmt.Fprintf(&text, "SUGGESTED %s confidence=%s score=%d\n",
-				candidate.SymbolID, candidate.Confidence, candidate.Score)
-		}
-
-	case compileSummary:
-		fmt.Fprintf(&text, "%s artifacts=%d\n", data.Path, data.Files)
-	case lockSummary:
-		fmt.Fprintf(&text, "%s targets=%d changed=%t dry-run=%t\n", data.Path, data.Targets, data.Changed, data.DryRun)
-	case model.LockDiff:
-		for _, entry := range data.Entries {
-			fmt.Fprintf(&text, "%s %s %s\n", entry.Classification, entry.Symbol, entry.Detail)
-		}
-	case map[string]string:
-		fmt.Fprintf(&text, "otelplan %s\nGo %s\n", data["otelplan"], data["go"])
-	}
-
-	_, err = io.WriteString(out, text.String())
-
-	return err
 }
 
 func previewPlan(plan model.ResolvedPlan) model.ResolvedPlan {

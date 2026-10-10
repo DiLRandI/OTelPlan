@@ -2,6 +2,9 @@ package otelc
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"errors"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -14,7 +17,10 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
-const hookImportPath = "example.com/app/hooks"
+const (
+	hookImportPath    = "example.com/app/hooks"
+	hookFixtureDigest = "abafbd73d5e844e73135f50bb1ed2751c8895724588b03b387e0facc89629577"
+)
 
 func TestGenericRootHooksAvoidUnsupportedAPIs(t *testing.T) {
 	t.Parallel()
@@ -44,12 +50,19 @@ func TestGenericRootHooksAvoidUnsupportedAPIs(t *testing.T) {
 }
 
 func TestRenderHooksDeterministicAndDoesNotMutatePlan(t *testing.T) {
+	t.Parallel()
+
 	code, plan := hookFixture()
 	original := append([]model.ResolvedTarget(nil), plan.Targets...)
 
 	want, err := RenderHooks(SupportedVersion, "runtime-1.2.3", code, plan, hookImportPath)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	digest := fmt.Sprintf("%x", sha256.Sum256(want))
+	if digest != hookFixtureDigest {
+		t.Fatalf("generated fixture hash = %s, want %s", digest, hookFixtureDigest)
 	}
 
 	if !reflect.DeepEqual(plan.Targets, original) {
@@ -69,6 +82,8 @@ func TestRenderHooksDeterministicAndDoesNotMutatePlan(t *testing.T) {
 }
 
 func TestRenderHooksMatchesRuleBindingsAndSignatureIndexes(t *testing.T) {
+	t.Parallel()
+
 	code, plan := hookFixture()
 
 	source, err := RenderHooks(SupportedVersion, "runtime", code, plan, hookImportPath)
@@ -147,6 +162,8 @@ func TestRenderHooksUsesTypedVariadicParameter(t *testing.T) {
 }
 
 func TestRenderHooksUsesMethodContextOffsetAndStableResultIndexes(t *testing.T) {
+	t.Parallel()
+
 	code, plan := hookFixture()
 	method := &code.Symbols[1]
 	method.Parameters = []model.Parameter{{Name: "ctx", Type: "context.Context"}, {Name: "request", Type: "Request"}}
@@ -206,6 +223,8 @@ func TestRenderHooksUsesMethodContextOffsetAndStableResultIndexes(t *testing.T) 
 }
 
 func TestRenderHooksQuotesSpanAndRuntimeVersion(t *testing.T) {
+	t.Parallel()
+
 	code, plan := ruleFixture()
 	span := "line\n\"quoted\\span"
 	runtime := "runtime\n\"version\\suffix"
@@ -226,15 +245,20 @@ func TestRenderHooksQuotesSpanAndRuntimeVersion(t *testing.T) {
 		t.Fatalf("generated source did not preserve quoted values: %v", literals)
 	}
 
-	if !strings.Contains(string(source), "WithInstrumentationVersion") || !strings.Contains(string(source), "otelplan.io/business") {
+	if !strings.Contains(string(source), "WithInstrumentationVersion") ||
+		!strings.Contains(string(source), "otelplan.io/business") {
 		t.Fatalf("instrumentation scope/version missing: %s", source)
 	}
 }
 
 func TestRenderHooksEmptyPlanHasNoUnusedImports(t *testing.T) {
+	t.Parallel()
+
 	code, _ := ruleFixture()
 
-	source, err := RenderHooks(SupportedVersion, "runtime", code, model.ResolvedPlan{}, hookImportPath)
+	plan := new(model.ResolvedPlan)
+
+	source, err := RenderHooks(SupportedVersion, "runtime", code, *plan, hookImportPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,65 +270,117 @@ func TestRenderHooksEmptyPlanHasNoUnusedImports(t *testing.T) {
 }
 
 func TestRenderHooksRejectsUnsupportedPlansWithoutPartialOutput(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                string
 		change              func(*model.CodeModel, *model.ResolvedPlan)
 		blankRuntimeVersion bool
-		wantError           string
+		wantExactError      string
 	}{
-		{name: "invalid attribute source", change: func(_ *model.CodeModel, p *model.ResolvedPlan) {
-			p.Targets[0].Attributes = []model.AttributePlan{{Key: "request.id", From: model.AttributeSource{Argument: "request.ID"}}}
-		}},
-		{name: "variadic", change: func(c *model.CodeModel, _ *model.ResolvedPlan) { c.Symbols[0].Variadic = true }},
-		{name: "duplicate error indexes", wantError: "unique", change: func(c *model.CodeModel, p *model.ResolvedPlan) {
-			c.Symbols[0].Results = []model.Result{{Type: "error"}}
-			c.Symbols[0].ErrorIndexes = []int{0}
-			c.Symbols[0].Signature = "func() error"
-			p.Targets[0].Signature = c.Symbols[0].Signature
-			p.Targets[0].ErrorStrategy = model.ErrorStrategy{Record: true, Indexes: []int{0, 0}}
-		}},
-		{name: "blank runtime version", blankRuntimeVersion: true},
-		{name: "blank span name", change: func(_ *model.CodeModel, p *model.ResolvedPlan) { p.Targets[0].SpanName = "" }},
+		{
+			name: "invalid attribute source",
+			change: func(_ *model.CodeModel, plan *model.ResolvedPlan) {
+				attribute := new(model.AttributePlan)
+				attribute.Key = "request.id"
+				attribute.From.Argument = "request.ID"
+				plan.Targets[0].Attributes = []model.AttributePlan{*attribute}
+			},
+			blankRuntimeVersion: false,
+			wantExactError:      "",
+		},
+		{
+			name:                "variadic",
+			change:              func(code *model.CodeModel, _ *model.ResolvedPlan) { code.Symbols[0].Variadic = true },
+			blankRuntimeVersion: false,
+			wantExactError:      "",
+		},
+		{
+			name: "duplicate error indexes",
+			change: func(code *model.CodeModel, plan *model.ResolvedPlan) {
+				result := new(model.Result)
+				result.Type = "error"
+				code.Symbols[0].Results = []model.Result{*result}
+				code.Symbols[0].ErrorIndexes = []int{0}
+				code.Symbols[0].Signature = "func() error"
+				plan.Targets[0].Signature = code.Symbols[0].Signature
+				errorStrategy := new(model.ErrorStrategy)
+				errorStrategy.Record = true
+				errorStrategy.Indexes = []int{0, 0}
+				plan.Targets[0].ErrorStrategy = *errorStrategy
+			},
+			blankRuntimeVersion: false,
+			wantExactError:      "hook error result indexes must be unique",
+		},
+		{
+			name:                "blank runtime version",
+			change:              nil,
+			blankRuntimeVersion: true,
+			wantExactError:      "hook generation requires an instrumentation version",
+		},
+		{
+			name:                "blank span name",
+			change:              func(_ *model.CodeModel, plan *model.ResolvedPlan) { plan.Targets[0].SpanName = "" },
+			blankRuntimeVersion: false,
+			wantExactError:      "hook generation requires a span name",
+		},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
 			code, plan := hookFixture()
-			if tc.change != nil {
-				tc.change(code, &plan)
+			if testCase.change != nil {
+				testCase.change(code, &plan)
 			}
 
 			runtime := "runtime"
-			if tc.blankRuntimeVersion {
+			if testCase.blankRuntimeVersion {
 				runtime = ""
 			}
 
-			data, err := RenderHooks(SupportedVersion, runtime, code, plan, hookImportPath)
-			if err == nil || data != nil {
-				t.Fatalf("unsupported plan produced partial output: %q, %v", data, err)
+			data, firstErr := RenderHooks(SupportedVersion, runtime, code, plan, hookImportPath)
+			if firstErr == nil || data != nil {
+				t.Fatalf("unsupported plan produced partial output: %q, %v", data, firstErr)
 			}
 
-			if tc.wantError != "" && !strings.Contains(err.Error(), tc.wantError) {
-				t.Fatalf("error %q does not contain %q", err, tc.wantError)
+			if testCase.wantExactError == "" {
+				return
+			}
+
+			if firstErr.Error() != testCase.wantExactError {
+				t.Fatalf("error = %q, want %q", firstErr, testCase.wantExactError)
+			}
+
+			secondData, secondErr := RenderHooks(SupportedVersion, runtime, code, plan, hookImportPath)
+			if secondData != nil || !errors.Is(secondErr, firstErr) {
+				t.Fatalf("repeated error %q does not match first error %q", secondErr, firstErr)
 			}
 		})
 	}
 }
 
 func TestRenderHooksPropagatesRenderRulesValidation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
 		change func(*model.CodeModel)
 	}{
-		{name: "invalid", change: func(c *model.CodeModel) { c.Symbols[0].Name = "bad-name" }},
-		{name: "mismatched", change: func(c *model.CodeModel) { c.Symbols[0].Name = "Other" }},
+		{name: "invalid", change: func(code *model.CodeModel) { code.Symbols[0].Name = "bad-name" }},
+		{name: "mismatched", change: func(code *model.CodeModel) { code.Symbols[0].Name = "Other" }},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			code, plan := ruleFixture()
-			tc.change(code)
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-			if data, err := RenderHooks(SupportedVersion, "runtime", code, plan, hookImportPath); err == nil || data != nil {
-				t.Fatalf("invalid RenderRules target produced output: %q, %v", data, err)
+			code, plan := ruleFixture()
+			testCase.change(code)
+
+			data, renderErr := RenderHooks(SupportedVersion, "runtime", code, plan, hookImportPath)
+			if renderErr == nil || data != nil {
+				t.Fatalf("invalid RenderRules target produced output: %q, %v", data, renderErr)
 			}
 		})
 	}
@@ -322,9 +398,9 @@ func hookFixture() (*model.CodeModel, model.ResolvedPlan) {
 func parseGeneratedHooks(t *testing.T, source []byte) *ast.File {
 	t.Helper()
 
-	file, err := parser.ParseFile(token.NewFileSet(), "hooks.go", source, parser.AllErrors)
-	if err != nil {
-		t.Fatalf("generated hooks do not parse: %v\n%s", err, source)
+	file, parseErr := parser.ParseFile(token.NewFileSet(), "hooks.go", source, parser.AllErrors)
+	if parseErr != nil {
+		t.Fatalf("generated hooks do not parse: %v\n%s", parseErr, source)
 	}
 
 	return file

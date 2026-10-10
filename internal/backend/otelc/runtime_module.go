@@ -2,7 +2,6 @@ package otelc
 
 import (
 	_ "embed"
-	"errors"
 	"fmt"
 
 	"golang.org/x/mod/modfile"
@@ -16,8 +15,9 @@ var runtimeModule []byte
 var runtimeSums []byte
 
 func renderRuntimeModule(modulePath string) ([]GeneratedFile, error) {
-	if err := module.CheckPath(modulePath); err != nil {
-		return nil, errors.New("invalid generated module path")
+	err := module.CheckPath(modulePath)
+	if err != nil {
+		return nil, errBundleModulePath
 	}
 
 	file, err := modfile.Parse("go.mod", runtimeModule, nil)
@@ -25,7 +25,8 @@ func renderRuntimeModule(modulePath string) ([]GeneratedFile, error) {
 		return nil, fmt.Errorf("parse pinned runtime module: %w", err)
 	}
 
-	if err := file.AddModuleStmt(modulePath); err != nil {
+	err = file.AddModuleStmt(modulePath)
+	if err != nil {
 		return nil, fmt.Errorf("set runtime module path: %w", err)
 	}
 

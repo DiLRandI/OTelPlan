@@ -8,11 +8,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+// SupportedVersion pins the verified OTelC backend release.
 const SupportedVersion = "v1.1.0"
 
 const (
@@ -20,89 +22,133 @@ const (
 	variadicStringType = "string"
 )
 
+var errUnsupportedOTelCVersion = errors.New("unsupported otelc version; expected " + SupportedVersion)
+
+// Identity returns the capabilities verified for the pinned backend version.
+// Executable verification supplies its digest separately.
 func Identity(version string) (model.LockBackend, error) {
+	var identity model.LockBackend
+
 	if version != SupportedVersion {
-		return model.LockBackend{}, fmt.Errorf("unsupported otelc version; expected %s", SupportedVersion)
+		return identity, errUnsupportedOTelCVersion
 	}
 
-	return model.LockBackend{Name: model.BackendNameOTelC, Version: version, Capabilities: model.BackendCapabilities{BeforeHook: true, AfterHook: true, ArgumentRead: true, ArgumentReplace: true, ResultRead: true, ContextReplacement: true, FunctionEntrySelection: true}}, nil
+	identity.Name = model.BackendNameOTelC
+	identity.Version = version
+	identity.Capabilities = model.BackendCapabilities{
+		BeforeHook: true, AfterHook: true, ArgumentRead: true, ArgumentReplace: true, ResultRead: true,
+		PanicObservation: false, ContextReplacement: true, FunctionEntrySelection: true, FunctionCallSelection: false,
+	}
+
+	return identity, nil
 }
 
+// Check reports unsupported targets in plan order, preserving policy provenance.
 func Check(version string, code *model.CodeModel, plan model.ResolvedPlan) model.DiagnosticErrorList {
-	if _, err := Identity(version); err != nil {
-		return model.DiagnosticErrorList{{Severity: model.SeverityError, Code: model.CodeBackendVersionMismatch, Message: err.Error()}}
+	_, err := Identity(version)
+	if err != nil {
+		return model.DiagnosticErrorList{backendCompatibilityDiagnostic(model.CodeBackendVersionMismatch, err.Error())}
 	}
 
 	if code == nil {
-		return model.DiagnosticErrorList{{Severity: model.SeverityError, Code: model.CodeBackendUnsupported, Message: "backend requires an analyzed code model"}}
+		return model.DiagnosticErrorList{backendCompatibilityDiagnostic(model.CodeBackendUnsupported,
+			"backend requires an analyzed code model")}
 	}
 
-	var diags model.DiagnosticErrorList
+	var diagnostics model.DiagnosticErrorList
 
 	for _, target := range plan.Targets {
-		add := func(message string) {
-			diags = append(diags, model.DiagnosticError{Severity: model.SeverityError, Code: model.CodeBackendUnsupported, RuleID: target.RuleID, Symbol: target.SymbolID, Message: message})
+		symbol, exists := code.Symbol(target.SymbolID)
+
+		var issues []string
+
+		if !exists || symbol.Signature != target.Signature {
+			issues = []string{"backend target must match the analyzed symbol and signature"}
+		} else {
+			issues = symbolCompatibilityIssues(code, symbol, target)
+			issues = append(issues, contextCompatibilityIssues(symbol, target.ContextStrategy)...)
+			issues = append(issues, errorCompatibilityIssues(symbol, target.ErrorStrategy)...)
 		}
 
-		symbol, ok := code.Symbol(target.SymbolID)
-
-		if !ok || symbol.Signature != target.Signature {
-			add("backend target must match the analyzed symbol and signature")
-
-			continue
-		}
-
-		if symbol.PackageName == "main" {
-			add("main package targets require verified command-specific build scoping")
-		}
-
-		if symbol.Variadic {
-			if _, supported := variadicElementType(symbol); !supported {
-				add("variadic targets require a built-in element type that generated hooks can name safely")
-			}
-		}
-
-		if !symbol.HasBody {
-			add("backend cannot hook a declaration without a Go body")
-		}
-
-		if hasTypeParameters(symbol) {
-			if target.ContextStrategy.Strategy != model.ContextStrategyRoot {
-				add("otelc v1.1.0 cannot replace generic context arguments; see upstream issue 1280")
-			}
-
-			if issue := genericCaptureIssue(code, symbol, target.Attributes); issue != "" {
-				add(issue)
-			}
-		}
-
-		switch target.ContextStrategy.Strategy {
-		case model.ContextStrategyArgument:
-			index := target.ContextStrategy.Index
-			if len(symbol.ContextIndexes) != 1 || symbol.ContextIndexes[0] != index || index < 0 || index >= len(symbol.Parameters) {
-				add("context replacement requires the unique analyzed context argument")
-			}
-		case model.ContextStrategyRoot:
-		default:
-			add("unsupported context strategy")
-		}
-
-		for _, index := range target.ErrorStrategy.Indexes {
-			known := false
-
-			for _, candidate := range symbol.ErrorIndexes {
-				if candidate == index {
-					known = true
-				}
-			}
-
-			if !target.ErrorStrategy.Record || !known || index < 0 || index >= len(symbol.Results) {
-				add("error strategy refers to an invalid error result")
-			}
+		for _, message := range issues {
+			diagnostic := backendCompatibilityDiagnostic(model.CodeBackendUnsupported, message)
+			diagnostic.RuleID, diagnostic.Symbol = target.RuleID, target.SymbolID
+			diagnostics = append(diagnostics, diagnostic)
 		}
 	}
 
-	return diags
+	return diagnostics
+}
+
+func backendCompatibilityDiagnostic(code model.Code, message string) model.DiagnosticError {
+	var diagnostic model.DiagnosticError
+
+	diagnostic.Severity = model.SeverityError
+	diagnostic.Code = code
+	diagnostic.Message = message
+
+	return diagnostic
+}
+
+func symbolCompatibilityIssues(code *model.CodeModel, symbol *model.Symbol,
+	target model.ResolvedTarget) []string {
+	var issues []string
+
+	if symbol.PackageName == "main" {
+		issues = append(issues, "main package targets require verified command-specific build scoping")
+	}
+
+	if symbol.Variadic {
+		_, supported := variadicElementType(symbol)
+		if !supported {
+			issues = append(issues, "variadic targets require a built-in element type that generated hooks can name safely")
+		}
+	}
+
+	if !symbol.HasBody {
+		issues = append(issues, "backend cannot hook a declaration without a Go body")
+	}
+
+	if hasTypeParameters(symbol) {
+		if target.ContextStrategy.Strategy != model.ContextStrategyRoot {
+			issues = append(issues, "otelc v1.1.0 cannot replace generic context arguments; see upstream issue 1280")
+		}
+
+		issue := genericCaptureIssue(code, symbol, target.Attributes)
+		if issue != "" {
+			issues = append(issues, issue)
+		}
+	}
+
+	return issues
+}
+
+func contextCompatibilityIssues(symbol *model.Symbol, strategy model.ContextStrategy) []string {
+	switch strategy.Strategy {
+	case model.ContextStrategyArgument:
+		index := strategy.Index
+		if len(symbol.ContextIndexes) != 1 || symbol.ContextIndexes[0] != index ||
+			index < 0 || index >= len(symbol.Parameters) {
+			return []string{"context replacement requires the unique analyzed context argument"}
+		}
+	case model.ContextStrategyRoot:
+	default:
+		return []string{"unsupported context strategy"}
+	}
+
+	return nil
+}
+
+func errorCompatibilityIssues(symbol *model.Symbol, strategy model.ErrorStrategy) []string {
+	var issues []string
+
+	for _, index := range strategy.Indexes {
+		if !strategy.Record || !slices.Contains(symbol.ErrorIndexes, index) || index < 0 || index >= len(symbol.Results) {
+			issues = append(issues, "error strategy refers to an invalid error result")
+		}
+	}
+
+	return issues
 }
 
 func hasTypeParameters(symbol *model.Symbol) bool {
@@ -129,6 +175,7 @@ func variadicElementType(symbol *model.Symbol) (string, bool) {
 	}
 }
 
+// VerifyExecutable checks the selected executable version and returns its content digest.
 func VerifyExecutable(ctx context.Context, executable, version string) (model.LockBackend, error) {
 	identity, err := Identity(version)
 	if err != nil {

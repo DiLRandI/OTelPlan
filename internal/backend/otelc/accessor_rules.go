@@ -1,3 +1,4 @@
+// Package otelc validates and renders exact instrumentation for the pinned OTelC backend.
 package otelc
 
 import (
@@ -10,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// AccessorFile contains compile-only Go helpers injected into one target package.
 type AccessorFile struct {
 	Name   string
 	Source []byte
@@ -34,14 +36,16 @@ type accessorRule struct {
 func RenderAccessorRules(
 	version string, code *model.CodeModel, plan model.ResolvedPlan, provider string,
 ) ([]byte, []AccessorFile, error) {
-	if _, _, err := RenderRules(version, code, plan, provider); err != nil {
+	_, _, err := RenderRules(version, code, plan, provider)
+	if err != nil {
 		return nil, nil, err
 	}
 
 	targets := append([]model.ResolvedTarget(nil), plan.Targets...)
 	sort.Slice(targets, func(i, j int) bool { return targets[i].SymbolID < targets[j].SymbolID })
 
-	document := yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	document := new(yaml.Node)
+	document.Kind, document.Tag = yaml.MappingNode, "!!map"
 
 	files := make([]AccessorFile, 0, len(targets))
 
@@ -73,15 +77,18 @@ func RenderAccessorRules(
 
 		var node yaml.Node
 
-		if err := node.Encode(rule); err != nil {
+		err = node.Encode(rule)
+		if err != nil {
 			return nil, nil, fmt.Errorf("encode accessor rule: %w", err)
 		}
 
-		document.Content = append(document.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "otelplan_accessor_" + suffix}, &node)
+		key := new(yaml.Node)
+		key.Kind, key.Tag, key.Value = yaml.ScalarNode, "!!str", "otelplan_accessor_"+suffix
+		document.Content = append(document.Content, key, &node)
 		files = append(files, AccessorFile{Name: name, Source: source})
 	}
 
-	data, err := yaml.Marshal(&document)
+	data, err := yaml.Marshal(document)
 	if err != nil {
 		return nil, nil, fmt.Errorf("encode accessor rules: %w", err)
 	}

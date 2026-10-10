@@ -2,6 +2,8 @@ package otelc
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"errors"
 	"fmt"
 	"go/parser"
 	"math"
@@ -17,10 +19,12 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+const accessorSourceSHA256 = "013b2d884e1c75e3b8ec1bded359d5841f3a5564238c9b572b714e617fd55323"
+
 func TestGenericAccessorTypeParameterDetection(t *testing.T) {
 	t.Parallel()
 
-	for _, testCase := range []struct {
+	tests := []struct {
 		expression string
 		uses       bool
 	}{
@@ -33,43 +37,30 @@ func TestGenericAccessorTypeParameterDetection(t *testing.T) {
 		{expression: "func(T int) string", uses: false},
 		{expression: "func(value int) T", uses: true},
 		{expression: "Request[int]", uses: false},
-	} {
-		t.Run(testCase.expression, func(t *testing.T) {
+	}
+
+	for _, test := range tests {
+		t.Run(test.expression, func(t *testing.T) {
 			t.Parallel()
 
-			expression, err := parser.ParseExpr(testCase.expression)
+			expression, err := parser.ParseExpr(test.expression)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			if actual := expressionUsesTypeParameters(expression, map[string]bool{"T": true}); actual != testCase.uses {
-				t.Fatalf("type parameter detection=%t, want %t", actual, testCase.uses)
+			got := expressionUsesTypeParameters(expression, map[string]bool{"T": true})
+			if got != test.uses {
+				t.Fatalf("type parameter detection=%t, want %t", got, test.uses)
 			}
 		})
 	}
 }
 
 func TestTypedAccessorsCompileAndRun(t *testing.T) {
-	root, code, target := accessorFixture(t)
-	attrs := []model.AttributePlan{
-		{Key: "arg.alias", From: model.AttributeSource{Argument: "req.Code"}, Classification: model.ClassificationPublic},
-		{Key: "arg.direct_alias", From: model.AttributeSource{Argument: "code"}, Classification: model.ClassificationPublic},
-		{Key: "arg.bool", From: model.AttributeSource{Argument: "req.Enabled"}, Classification: model.ClassificationPublic},
-		{Key: "arg.float", From: model.AttributeSource{Argument: "req.Inner.Score"}, Classification: model.ClassificationPublic},
-		{Key: "arg.nested", From: model.AttributeSource{Argument: "req.Inner.Child.Value"}, Classification: model.ClassificationPublic},
-		{Key: "arg.string", From: model.AttributeSource{Argument: "req.ID"}, Classification: model.ClassificationPublic},
-		{Key: "arg.signed", From: model.AttributeSource{Argument: "req.Signed"}, Classification: model.ClassificationPublic},
-		{Key: "arg.uint64", From: model.AttributeSource{Argument: "req.Count"}, Classification: model.ClassificationPublic},
-		{Key: "constant.zero", From: model.AttributeSource{Constant: math.Copysign(0, -1)}},
-		{Key: "constant.bool", From: model.AttributeSource{Constant: false}, Classification: model.ClassificationPublic},
-		{Key: "constant.string", From: model.AttributeSource{Constant: "fixed"}, Classification: model.ClassificationPublic},
-		{Key: "constant.uint", From: model.AttributeSource{Constant: int64(7)}, Classification: model.ClassificationPublic},
-		{Key: "result.message", From: model.AttributeSource{Result: "result.Message"}, Classification: model.ClassificationPublic},
-		{Key: "result.nan", From: model.AttributeSource{Result: "result.NaN"}, Classification: model.ClassificationPublic},
-		{Key: "result.score", From: model.AttributeSource{Result: "result.Score"}, Classification: model.ClassificationPublic},
-		{Key: "result.uint64", From: model.AttributeSource{Result: "result.Big"}, Classification: model.ClassificationPublic},
-	}
-	target.Attributes = attrs
+	t.Parallel()
+
+	rootPath, code, target := accessorFixture(t)
+	target.Attributes = accessorAttributes()
 	original := append([]model.AttributePlan(nil), target.Attributes...)
 
 	source, bindings, err := RenderAccessors(code, target)
@@ -77,106 +68,363 @@ func TestTypedAccessorsCompileAndRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !reflect.DeepEqual(target.Attributes, original) {
-		t.Fatal("RenderAccessors mutated target attributes")
+	assertAccessorInputUnchanged(t, target.Attributes, original)
+	assertAccessorBindings(t, bindings, 16)
+	assertAccessorSourceIdentity(t, source)
+	assertAccessorReorderingStable(t, code, target, source, bindings)
+
+	fixtureRoot, err := os.OpenRoot(rootPath)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	keys := make([]string, len(bindings))
-	for i, binding := range bindings {
-		keys[i] = binding.Key
-
-		switch binding.Source {
-		case "constant":
-			if binding.Index != -1 {
-				t.Errorf("constant %q has index %d", binding.Key, binding.Index)
-			}
-		case "argument":
-			want := 1
-			if binding.Key == "arg.direct_alias" {
-				want = 2
-			}
-
-			if binding.Index != want {
-				t.Errorf("argument %q has index %d, want %d", binding.Key, binding.Index, want)
-			}
-		case "result":
-			if binding.Index != 0 {
-				t.Errorf("result %q has index %d, want 0", binding.Key, binding.Index)
-			}
+	t.Cleanup(func() {
+		err := fixtureRoot.Close()
+		if err != nil {
+			t.Errorf("close fixture root: %v", err)
 		}
-	}
-
-	if !sort.StringsAreSorted(keys) {
-		t.Fatalf("bindings are not sorted: %v", keys)
-	}
-
-	if len(bindings) != len(attrs) {
-		t.Fatalf("got %d bindings, want %d", len(bindings), len(attrs))
-	}
-
-	reordered := append([]model.AttributePlan(nil), attrs...)
-	sort.Slice(reordered, func(i, j int) bool { return reordered[i].Key > reordered[j].Key })
-	target.Attributes = reordered
-
-	reorderedSource, reorderedBindings, err := RenderAccessors(code, target)
-	if err != nil || !bytes.Equal(source, reorderedSource) || !reflect.DeepEqual(bindings, reorderedBindings) {
-		t.Fatalf("reordering attributes changed generated output")
-	}
-
-	target.Attributes = attrs
+	})
 
 	generated := strings.TrimPrefix(string(source), "//go:build ignore\n\n")
 	if generated == string(source) {
 		t.Fatal("generated accessor source is missing build-ignore directive")
 	}
 
-	opsDir := filepath.Join(root, "ops")
-	if err := os.WriteFile(filepath.Join(opsDir, "generated_accessors.go"), []byte(generated), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := os.WriteFile(filepath.Join(opsDir, "generated_accessors_test.go"), []byte(accessorRuntimeTest(bindings)), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeAccessorFixtureFile(t, fixtureRoot, "ops/generated_accessors.go", []byte(generated))
+	writeAccessorFixtureFile(t, fixtureRoot, "ops/generated_accessors_test.go", []byte(accessorRuntimeTest(bindings)))
 
 	cmd := exec.CommandContext(t.Context(), "go", "test", "./ops")
-	cmd.Dir = root
+	cmd.Dir = fixtureRoot.Name()
 
 	cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
 
-	if output, err := cmd.CombinedOutput(); err != nil {
+	output, err := cmd.CombinedOutput()
+	if err != nil {
 		t.Fatalf("generated accessors failed to compile or run: %v\n%s", err, output)
 	}
 }
 
-func TestTypedAccessorsRejectInvalidPlans(t *testing.T) {
-	_, code, target := accessorFixture(t)
-
-	cases := []struct {
-		name  string
-		attrs []model.AttributePlan
-	}{
-		{"non-finite constant", []model.AttributePlan{{Key: "nonfinite", From: model.AttributeSource{Constant: math.NaN()}}}},
-		{"blank key", []model.AttributePlan{{From: model.AttributeSource{Argument: "req.ID"}}}},
-		{"otel key", []model.AttributePlan{{Key: "otel.trace", From: model.AttributeSource{Argument: "req.ID"}}}},
-		{"duplicate key", []model.AttributePlan{{Key: "same", From: model.AttributeSource{Argument: "req.ID"}}, {Key: "same", From: model.AttributeSource{Argument: "req.Enabled"}}}},
-		{"unknown field", []model.AttributePlan{{Key: "bad", From: model.AttributeSource{Argument: "req.Missing"}}}},
-		{"object source", []model.AttributePlan{{Key: "bad", From: model.AttributeSource{Argument: "req"}}}},
-		{"unexported field", []model.AttributePlan{{Key: "bad", From: model.AttributeSource{Argument: "req.secret"}}}},
-		{"multiple sources", []model.AttributePlan{{Key: "bad", From: model.AttributeSource{Argument: "req.ID", Result: "result.Message"}}}},
-		{"secret without approval", []model.AttributePlan{{Key: "secret", From: model.AttributeSource{Argument: "req.Secret"}, Classification: model.ClassificationSecret}}},
+func accessorAttributes() []model.AttributePlan {
+	return []model.AttributePlan{
+		argumentAccessorAttribute("arg.alias", "req.Code"),
+		argumentAccessorAttribute("arg.direct_alias", "code"),
+		argumentAccessorAttribute("arg.bool", "req.Enabled"),
+		argumentAccessorAttribute("arg.float", "req.Inner.Score"),
+		argumentAccessorAttribute("arg.nested", "req.Inner.Child.Value"),
+		argumentAccessorAttribute("arg.string", "req.ID"),
+		argumentAccessorAttribute("arg.signed", "req.Signed"),
+		argumentAccessorAttribute("arg.uint64", "req.Count"),
+		accessorAttributePlan("constant.zero", constantAccessorSource(math.Copysign(0, -1))),
+		{
+			Key: "constant.bool",
+			From: model.AttributeSource{
+				Argument: "",
+				Result:   "",
+				Constant: false,
+			},
+			Classification: model.ClassificationPublic,
+			Allow:          false,
+		},
+		{
+			Key: "constant.string",
+			From: model.AttributeSource{
+				Argument: "",
+				Result:   "",
+				Constant: "fixed",
+			},
+			Classification: model.ClassificationPublic,
+			Allow:          false,
+		},
+		constantAccessorAttribute("constant.uint", int64(7)),
+		resultAccessorAttribute("result.message", "result.Message"),
+		resultAccessorAttribute("result.nan", "result.NaN"),
+		resultAccessorAttribute("result.score", "result.Score"),
+		resultAccessorAttribute("result.uint64", "result.Big"),
 	}
-	for _, test := range cases {
+}
+
+func argumentAccessorAttribute(key, argument string) model.AttributePlan {
+	return model.AttributePlan{
+		Key: key,
+		From: model.AttributeSource{
+			Argument: argument,
+			Result:   "",
+			Constant: nil,
+		},
+		Classification: model.ClassificationPublic,
+		Allow:          false,
+	}
+}
+
+func constantAccessorAttribute(key string, value any) model.AttributePlan {
+	return model.AttributePlan{
+		Key: key,
+		From: model.AttributeSource{
+			Argument: "",
+			Result:   "",
+			Constant: value,
+		},
+		Classification: model.ClassificationPublic,
+		Allow:          false,
+	}
+}
+
+func resultAccessorAttribute(key, result string) model.AttributePlan {
+	return model.AttributePlan{
+		Key: key,
+		From: model.AttributeSource{
+			Argument: "",
+			Result:   result,
+			Constant: nil,
+		},
+		Classification: model.ClassificationPublic,
+		Allow:          false,
+	}
+}
+
+func assertAccessorInputUnchanged(t *testing.T, got, want []model.AttributePlan) {
+	t.Helper()
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatal("RenderAccessors mutated target attributes")
+	}
+}
+
+func assertAccessorBindings(t *testing.T, bindings []AccessorBinding, wantCount int) {
+	t.Helper()
+
+	keys := make([]string, 0, len(bindings))
+
+	for _, binding := range bindings {
+		keys = append(keys, binding.Key)
+		wantIndex := expectedAccessorIndex(t, binding)
+
+		if binding.Index != wantIndex {
+			t.Errorf("attribute %q has index %d, want %d", binding.Key, binding.Index, wantIndex)
+		}
+	}
+
+	wantKeys := []string{
+		"arg.alias", "arg.bool", "arg.direct_alias", "arg.float", "arg.nested", "arg.signed", "arg.string", "arg.uint64",
+		"constant.bool", "constant.string", "constant.uint", "constant.zero",
+		"result.message", "result.nan", "result.score", "result.uint64",
+	}
+
+	if !reflect.DeepEqual(keys, wantKeys) {
+		t.Errorf("binding keys=%v, want %v", keys, wantKeys)
+	}
+
+	if !sort.StringsAreSorted(keys) {
+		t.Errorf("bindings are not sorted: %v", keys)
+	}
+
+	if len(bindings) != wantCount {
+		t.Fatalf("got %d bindings, want %d", len(bindings), wantCount)
+	}
+}
+
+func expectedAccessorIndex(t *testing.T, binding AccessorBinding) int {
+	t.Helper()
+
+	switch binding.Source {
+	case "constant":
+		return -1
+	case "argument":
+		if binding.Key == "arg.direct_alias" {
+			return 2
+		}
+
+		return 1
+	case "result":
+		return 0
+	default:
+		t.Errorf("attribute %q has unexpected source %q", binding.Key, binding.Source)
+
+		return 0
+	}
+}
+
+func assertAccessorSourceIdentity(t *testing.T, source []byte) {
+	t.Helper()
+
+	got := fmt.Sprintf("%x", sha256.Sum256(source))
+
+	if got != accessorSourceSHA256 {
+		t.Fatalf("generated accessor source SHA256=%s, want %s", got, accessorSourceSHA256)
+	}
+}
+
+func assertAccessorReorderingStable(
+	t *testing.T,
+	code *model.CodeModel,
+	target model.ResolvedTarget,
+	source []byte,
+	bindings []AccessorBinding,
+) {
+	t.Helper()
+
+	reordered := target
+	reordered.Attributes = append([]model.AttributePlan(nil), target.Attributes...)
+	sort.Slice(reordered.Attributes, func(i, j int) bool {
+		return reordered.Attributes[i].Key > reordered.Attributes[j].Key
+	})
+
+	gotSource, gotBindings, err := RenderAccessors(code, reordered)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(source, gotSource) || !reflect.DeepEqual(bindings, gotBindings) {
+		t.Fatal("reordering attributes changed generated output")
+	}
+}
+
+func TestTypedAccessorsRejectInvalidPlans(t *testing.T) {
+	t.Parallel()
+
+	_, code, target := accessorFixture(t)
+	tests := invalidAccessorCases()
+
+	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			target.Attributes = test.attrs
-			if source, bindings, err := RenderAccessors(code, target); err == nil || source != nil || bindings != nil {
+			t.Parallel()
+
+			localTarget := target
+			localTarget.Attributes = test.attributes
+
+			source, bindings, err := RenderAccessors(code, localTarget)
+			if err == nil || source != nil || bindings != nil {
 				t.Fatalf("expected no partial output, got source=%d bindings=%d err=%v", len(source), len(bindings), err)
 			}
 		})
 	}
 }
 
+type invalidAccessorCase struct {
+	name       string
+	attributes []model.AttributePlan
+}
+
+func constantAccessorSource(value any) model.AttributeSource {
+	var source model.AttributeSource
+
+	source.Constant = value
+
+	return source
+}
+
+func invalidAccessorCases() []invalidAccessorCase {
+	multipleSources := model.AttributeSource{Argument: "req.ID", Result: "result.Message", Constant: nil}
+	secret := argumentAccessorAttribute("secret", "req.Secret")
+	secret.Classification = model.ClassificationSecret
+
+	return []invalidAccessorCase{
+		{name: "non-finite constant", attributes: []model.AttributePlan{
+			accessorAttributePlan("nonfinite", constantAccessorSource(math.NaN())),
+		}},
+		{name: "blank key", attributes: []model.AttributePlan{
+			accessorAttributePlan("", argumentAttributeSource("req.ID")),
+		}},
+		{name: "reserved otel key", attributes: []model.AttributePlan{
+			accessorAttributePlan("otel.trace", argumentAttributeSource("req.ID")),
+		}},
+		{name: "duplicate key", attributes: []model.AttributePlan{
+			accessorAttributePlan("same", argumentAttributeSource("req.ID")),
+			accessorAttributePlan("same", argumentAttributeSource("req.Enabled")),
+		}},
+		{name: "unknown field", attributes: []model.AttributePlan{
+			accessorAttributePlan("bad", argumentAttributeSource("req.Missing")),
+		}},
+		{name: "object source", attributes: []model.AttributePlan{
+			accessorAttributePlan("bad", argumentAttributeSource("req")),
+		}},
+		{name: "unexported field", attributes: []model.AttributePlan{
+			accessorAttributePlan("bad", argumentAttributeSource("req.secret")),
+		}},
+		{name: "multiple sources", attributes: []model.AttributePlan{
+			accessorAttributePlan("bad", multipleSources),
+		}},
+		{name: "secret without approval", attributes: []model.AttributePlan{secret}},
+	}
+}
+
+func TestTypedAccessorFailuresShareCauses(t *testing.T) {
+	t.Parallel()
+
+	t.Run("invalid package identity", func(t *testing.T) {
+		t.Parallel()
+
+		_, code, target := accessorFixture(t)
+		localCode := *code
+		localCode.Symbols = append([]model.Symbol(nil), code.Symbols...)
+
+		symbol, ok := localCode.Symbol(target.SymbolID)
+		if !ok {
+			t.Fatal("fixture symbol missing")
+		}
+
+		symbol.PackageName = "_"
+
+		assertRepeatedAccessorFailureSharesCause(t, &localCode, target)
+	})
+
+	t.Run("unsafe attribute plan", func(t *testing.T) {
+		t.Parallel()
+
+		_, code, target := accessorFixture(t)
+		target.Attributes = []model.AttributePlan{{
+			Key:            "secret",
+			From:           model.AttributeSource{Argument: "req.Secret", Result: "", Constant: nil},
+			Classification: model.ClassificationSecret,
+			Allow:          false,
+		}}
+		assertRepeatedAccessorFailureSharesCause(t, code, target)
+	})
+}
+
+func assertRepeatedAccessorFailureSharesCause(t *testing.T, code *model.CodeModel, target model.ResolvedTarget) {
+	t.Helper()
+
+	firstSource, firstBindings, firstErr := RenderAccessors(code, target)
+	if firstErr == nil {
+		t.Fatal("first render unexpectedly succeeded")
+	}
+
+	if firstSource != nil || firstBindings != nil {
+		t.Fatalf("first render returned partial output: source=%d bindings=%d", len(firstSource), len(firstBindings))
+	}
+
+	cause := firstErrorCause(firstErr)
+
+	secondSource, secondBindings, secondErr := RenderAccessors(code, target)
+	if secondErr == nil {
+		t.Fatal("second render unexpectedly succeeded")
+	}
+
+	if secondSource != nil || secondBindings != nil {
+		t.Fatalf("second render returned partial output: source=%d bindings=%d", len(secondSource), len(secondBindings))
+	}
+
+	if secondErr.Error() != firstErr.Error() {
+		t.Fatalf("repeated errors differ: first=%q second=%q", firstErr, secondErr)
+	}
+
+	if !errors.Is(secondErr, cause) {
+		t.Fatalf("second render error %v does not share first cause %v", secondErr, cause)
+	}
+}
+
+func firstErrorCause(err error) error {
+	for errors.Unwrap(err) != nil {
+		err = errors.Unwrap(err)
+	}
+
+	return err
+}
+
 func TestTypedAccessorsEmptyPlan(t *testing.T) {
+	t.Parallel()
+
 	_, code, target := accessorFixture(t)
 
 	source, bindings, err := RenderAccessors(code, target)
@@ -191,51 +439,31 @@ func TestTypedAccessorsEmptyPlan(t *testing.T) {
 
 func accessorFixture(t *testing.T) (string, *model.CodeModel, model.ResolvedTarget) {
 	t.Helper()
-	root := t.TempDir()
-	write := func(name, contents string) {
-		t.Helper()
+	rootPath := t.TempDir()
 
-		path := filepath.Join(root, name)
-
-		err := os.MkdirAll(filepath.Dir(path), 0o700)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = os.WriteFile(path, []byte(contents), 0o600)
-		if err != nil {
-			t.Fatal(err)
-		}
+	fixtureRoot, err := os.OpenRoot(rootPath)
+	if err != nil {
+		t.Fatal(err)
 	}
-	write("go.mod", "module example.com/accessorprobe\n\ngo 1.27\n")
-	write("dep/dep.go", "package dep\n\ntype Code string\n")
-	write("ops/ops.go", `package ops
 
-import (
-    "context"
-    "math"
-    "example.com/accessorprobe/dep"
-)
+	t.Cleanup(func() {
+		err := fixtureRoot.Close()
+		if err != nil {
+			t.Errorf("close fixture root: %v", err)
+		}
+	})
 
-type InnerChild struct { Value float64 }
-type Inner struct { Score float64; Child *InnerChild }
-type request struct {
-    ID string
-    Enabled bool
-    Count uint64
-    Signed int64
-    Code dep.Code
-    Secret string
-    Inner *Inner
-    secret string
-}
-type output struct { Message string; Big uint64; Score float64; NaN float64 }
-func NewRequest() *request { return &request{ID: "", Enabled: false, Count: 9223372036854775808, Code: dep.Code("named"), Secret: "hidden", Inner: &Inner{Score: math.Inf(1), Child: nil}} }
-func NewResult() output { return output{Message: "", Big: 9223372036854775808, Score: math.Inf(1), NaN: math.NaN()} }
-func Handle(ctx context.Context, req *request, code dep.Code) (result output, err error) { return output{}, nil }
-`)
+	writeAccessorFixtureFile(t, fixtureRoot, "go.mod", []byte("module example.com/accessorprobe\n\ngo 1.27\n"))
+	writeAccessorFixtureFile(t, fixtureRoot, "dep/dep.go", []byte("package dep\n\ntype Code string\n"))
+	writeAccessorFixtureFile(t, fixtureRoot, "ops/ops.go", []byte(accessorPackageSource))
 
-	code, err := discovery.LoadContext(t.Context(), discovery.Options{Root: root, Patterns: []string{"./ops"}, Env: []string{"GOWORK=off", "GOFLAGS="}})
+	var options discovery.Options
+
+	options.Root = rootPath
+	options.Patterns = []string{"./ops"}
+	options.Env = []string{"GOWORK=off", "GOFLAGS="}
+
+	code, err := discovery.LoadContext(t.Context(), options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,31 +473,109 @@ func Handle(ctx context.Context, req *request, code dep.Code) (result output, er
 		t.Fatal("fixture symbol missing")
 	}
 
-	return root, code, model.ResolvedTarget{SymbolID: symbol.ID, Signature: symbol.Signature, ContextStrategy: model.ContextStrategy{Strategy: model.ContextStrategyArgument, Index: 0}}
+	var target model.ResolvedTarget
+
+	target.SymbolID = symbol.ID
+	target.Signature = symbol.Signature
+	target.ContextStrategy.Strategy = model.ContextStrategyArgument
+
+	return rootPath, code, target
+}
+
+const accessorPackageSource = `package ops
+
+import (
+	"context"
+	"math"
+	"example.com/accessorprobe/dep"
+)
+
+type InnerChild struct {
+	Value float64
+}
+
+type Inner struct {
+	Score float64
+	Child *InnerChild
+}
+
+type request struct {
+	ID      string
+	Enabled bool
+	Count   uint64
+	Signed  int64
+	Code    dep.Code
+	Secret  string
+	Inner   *Inner
+	secret  string
+}
+
+type output struct {
+	Message string
+	Big     uint64
+	Score   float64
+	NaN     float64
+}
+
+func NewRequest() *request {
+	return &request{
+		ID:      "",
+		Enabled: false,
+		Count:   9223372036854775808,
+		Code:    dep.Code("named"),
+		Secret:  "hidden",
+		Inner:   &Inner{Score: math.Inf(1), Child: nil},
+	}
+}
+
+func NewResult() output {
+	return output{Message: "", Big: 9223372036854775808, Score: math.Inf(1), NaN: math.NaN()}
+}
+
+func Handle(ctx context.Context, req *request, code dep.Code) (result output, err error) {
+	return output{}, nil
+}
+`
+
+func writeAccessorFixtureFile(t *testing.T, root *os.Root, path string, contents []byte) {
+	t.Helper()
+
+	err := root.MkdirAll(filepath.Dir(path), 0o700)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = root.WriteFile(path, contents, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func accessorRuntimeTest(bindings []AccessorBinding) string {
-	byKey := make(map[string]AccessorBinding, len(bindings))
+	functions := make(map[string]string, len(bindings))
 	for _, binding := range bindings {
-		byKey[binding.Key] = binding
+		functions[binding.Key] = binding.Function
 	}
 
-	call := func(key, arg string) string {
-		binding := byKey[key]
-		if binding.Function == "" {
-			return fmt.Sprintf("t.Fatalf(\"missing binding %s\")", key)
+	call := func(key, argument string) string {
+		function := functions[key]
+		if function == "" {
+			return fmt.Sprintf("missingAccessor(%q)", key)
 		}
 
-		return fmt.Sprintf("%s(%s)", binding.Function, arg)
+		return function + "(" + argument + ")"
 	}
 
 	return fmt.Sprintf(`package ops
 
-import ("testing"; "math")
+import (
+	"math"
+	"testing"
+)
 
 func TestGeneratedTypedAccessors(t *testing.T) {
-    if got, ok := %s; !ok || got != 0 || !math.Signbit(got) { t.Fatalf("negative zero lost: %%v,%%v", got,ok) }
-    req := NewRequest()
+	if got, ok := %s; !ok || got != 0 || !math.Signbit(got) { t.Fatalf("negative zero lost: %%v,%%v", got, ok) }
+	req := NewRequest()
 	result := NewResult()
 	code := req.Code
 	code = "direct"
@@ -298,7 +604,15 @@ func TestGeneratedTypedAccessors(t *testing.T) {
 	if got, ok := %s; !ok || got != 1.5 { t.Fatalf("float=%%v,%%v", got, ok) }
 	if got, ok := %s; !ok || got != 2.5 { t.Fatalf("nested=%%v,%%v", got, ok) }
 	if got, ok := %s; !ok || got != -7 { t.Fatalf("signed=%%d,%%v", got, ok) }
-	if got, ok := %s; !ok || got != 42 { t.Fatalf("result?=%%d,%%v", got, ok) }
+	if got, ok := %s; !ok || got != 42 { t.Fatalf("result=%%d,%%v", got, ok) }
 }
-`, call("constant.zero", "nil"), call("arg.string", "req"), call("arg.string", "42"), call("arg.string", "nilReq"), call("arg.bool", "req"), call("arg.alias", "req"), call("arg.direct_alias", "code"), call("arg.uint64", "req"), call("arg.float", "req"), call("arg.nested", "req"), call("result.message", "result"), call("result.uint64", "result"), call("result.nan", "result"), call("result.score", "result"), call("constant.bool", "nil"), call("constant.string", "nil"), call("constant.uint", "nil"), call("arg.uint64", "req"), call("arg.float", "req"), call("arg.nested", "req"), call("arg.signed", "req"), call("result.uint64", "result"))
+`,
+		call("constant.zero", "nil"), call("arg.string", "req"), call("arg.string", "42"),
+		call("arg.string", "nilReq"), call("arg.bool", "req"), call("arg.alias", "req"),
+		call("arg.direct_alias", "code"), call("arg.uint64", "req"), call("arg.float", "req"),
+		call("arg.nested", "req"), call("result.message", "result"), call("result.uint64", "result"),
+		call("result.nan", "result"), call("result.score", "result"), call("constant.bool", "nil"),
+		call("constant.string", "nil"), call("constant.uint", "nil"), call("arg.uint64", "req"),
+		call("arg.float", "req"), call("arg.nested", "req"), call("arg.signed", "req"),
+		call("result.uint64", "result"))
 }

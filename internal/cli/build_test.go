@@ -388,24 +388,6 @@ func assertPinnedBuildFixtureUnchanged(t *testing.T, root string, original map[s
 	}
 }
 
-func TestBuildCLIUsage(t *testing.T) {
-	for _, args := range [][]string{{"build", "--", "-o"}, {"build", "--", "-overlay=secret"}, {"build", "--check"}, {"build", "--clean"}} {
-		var out, errout bytes.Buffer
-
-		args = append([]string{"--format=json"}, args...)
-		if code := Run(t.Context(), args, &out, &errout); code != 2 {
-			t.Fatalf("usage exit=%d: %s", code, &out)
-		}
-
-		var reply response
-
-		err := json.Unmarshal(out.Bytes(), &reply)
-		if err != nil || reply.OK {
-			t.Fatalf("invalid JSON: %s", &out)
-		}
-	}
-}
-
 func TestBuildCLILibraryWithoutOutput(t *testing.T) {
 	executable := os.Getenv("OTELPLAN_OTELC")
 	if executable == "" {

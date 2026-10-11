@@ -402,7 +402,7 @@ func TestBuildCLILibraryWithoutOutput(t *testing.T) {
 func runLibraryBuildContract(t *testing.T) {
 	t.Helper()
 
-	root, _ := cliFixture(t)
+	root := cliFixture(t)
 	original := snapshotPinnedBuildFixture(t, root)
 
 	var stdout, stderr bytes.Buffer

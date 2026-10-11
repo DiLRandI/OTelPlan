@@ -18,7 +18,7 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
-func cliFixture(t *testing.T) (string, map[string]string) {
+func cliFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 
@@ -38,13 +38,13 @@ func cliFixture(t *testing.T) (string, map[string]string) {
 		}
 	}
 
-	return root, files
+	return root
 }
 
 func TestRunCancelsGoDiscovery(t *testing.T) {
 	const cancellationTimeout = 5 * time.Second
 
-	root, _ := cliFixture(t)
+	root := cliFixture(t)
 	binDir := t.TempDir()
 	ready := filepath.Join(root, "ready")
 
@@ -155,7 +155,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestVerboseBackendFailureRedactsSubprocessOutput(t *testing.T) {
-	root, _ := cliFixture(t)
+	root := cliFixture(t)
 	backendDir := copyVerboseTestBackend(t)
 	t.Setenv("PATH", backendDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("OTELPLAN_TEST_VERBOSE_BACKEND", "1")
@@ -230,7 +230,7 @@ type cyclicDiagnosticError struct{}
 func TestInventoryOutputPreservesInternalBuildFingerprint(t *testing.T) {
 	t.Parallel()
 
-	root, _ := cliFixture(t)
+	root := cliFixture(t)
 	analysis := new(discovery.Options)
 	analysis.Root, analysis.Offline = root, true
 

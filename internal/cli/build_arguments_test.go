@@ -221,7 +221,7 @@ func TestParseBuildArgumentsErrorsHaveStableCauses(t *testing.T) {
 func TestBuildArgumentsApplyEffectiveFlags(t *testing.T) {
 	t.Parallel()
 
-	root, _ := cliFixture(t)
+	root := cliFixture(t)
 
 	planned, err := parseBuildArguments([]string{
 		"-tags=first", "-tags=final", "-trimpath=false", "-trimpath", "-mod=readonly", "-p=2", ".",

@@ -2,20 +2,16 @@ package cli
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
-	"time"
 
+	"github.com/DiLRandI/OTelPlan/internal/testenv"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
@@ -37,7 +33,7 @@ func TestArchitectureTracesWithPinnedBackend(t *testing.T) {
 		t.Run(mode.name, func(t *testing.T) {
 			cache := t.TempDir()
 			t.Setenv("GOMODCACHE", cache)
-			configureIntegrationCache(t, cache)
+			testenv.ConfigureGoCache(t, cache)
 
 			if mode.offline {
 				prepareOfflineArchitectureCache(t)
@@ -292,38 +288,6 @@ func architectureFixture(t *testing.T, architecture string) string {
 	return root
 }
 
-func configureIntegrationCache(t *testing.T, cache string) {
-	t.Helper()
-
-	t.Setenv("GOENV", "off")
-	t.Setenv("GOWORK", "off")
-	t.Setenv("GOFLAGS", "")
-	t.Setenv("GOTOOLCHAIN", "local")
-	t.Setenv("GOPACKAGESDRIVER", "off")
-	t.Setenv("GOPROXY", "https://proxy.golang.org")
-	t.Setenv("GOSUMDB", "sum.golang.org")
-	t.Setenv("GOPRIVATE", "")
-	t.Setenv("GONOPROXY", "none")
-	t.Setenv("GONOSUMDB", "none")
-	t.Setenv("GOVCS", "*:off")
-	t.Setenv("GOTMPDIR", t.TempDir())
-
-	t.Cleanup(func() {
-		// Test contexts are canceled before cleanup; removing read-only module caches still needs a live context.
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 30*time.Second)
-		defer cancel()
-
-		command := exec.CommandContext(ctx, "go", "clean", "-modcache")
-
-		command.Env = append(os.Environ(), "GOMODCACHE="+cache)
-
-		output, err := command.CombinedOutput()
-		if err != nil {
-			t.Errorf("clean integration module cache: %v: %s", err, output)
-		}
-	})
-}
-
 func prepareOfflineArchitectureCache(t *testing.T) {
 	t.Helper()
 
@@ -345,38 +309,7 @@ func prepareOfflineArchitectureCache(t *testing.T) {
 		t.Fatalf("prepare pinned architecture dependencies: %v: %s", err, output)
 	}
 
-	denyIntegrationNetwork(t)
-}
-
-func denyIntegrationNetwork(t *testing.T) {
-	t.Helper()
-
-	var requests atomic.Int64
-
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		requests.Add(1)
-
-		writer.WriteHeader(http.StatusServiceUnavailable)
-	}))
-
-	t.Cleanup(func() {
-		server.Close()
-
-		if count := requests.Load(); count != 0 {
-			t.Errorf("offline integration workflow made %d network requests", count)
-		}
-	})
-
-	t.Setenv("GOPROXY", "off")
-	t.Setenv("GOSUMDB", "off")
-	t.Setenv("HTTP_PROXY", server.URL)
-	t.Setenv("HTTPS_PROXY", server.URL)
-	t.Setenv("ALL_PROXY", server.URL)
-	t.Setenv("NO_PROXY", "")
-	t.Setenv("http_proxy", server.URL)
-	t.Setenv("https_proxy", server.URL)
-	t.Setenv("all_proxy", server.URL)
-	t.Setenv("no_proxy", "")
+	testenv.DenyNetwork(t)
 }
 
 func invokeArchitecture(t *testing.T, root string, offline bool, want int, args ...string) response {
@@ -412,41 +345,7 @@ func invokeArchitecture(t *testing.T, root string, offline bool, want int, args 
 
 func prepareOfflineIntegration(t *testing.T) {
 	t.Helper()
-
-	cache := t.TempDir()
-	t.Setenv("GOMODCACHE", cache)
-	configureIntegrationCache(t, cache)
-	prepareIntegrationModules(t, "../..")
-	prepareIntegrationModules(t, filepath.Join("testdata", "architectures", "common"))
-	denyIntegrationNetwork(t)
-}
-
-func prepareIntegrationModules(t *testing.T, source string) {
-	t.Helper()
-
-	original := openIntegrationDirectory(t, source)
-	seed := t.TempDir()
-	destination := openIntegrationDirectory(t, seed)
-
-	for _, name := range []string{"go.mod", "go.sum"} {
-		data, err := original.ReadFile(name)
-		if err != nil {
-			t.Fatalf("read integration dependency manifest %s: %v", name, err)
-		}
-
-		err = destination.WriteFile(name, data, 0o600)
-		if err != nil {
-			t.Fatalf("write integration dependency manifest %s: %v", name, err)
-		}
-	}
-
-	command := exec.CommandContext(t.Context(), "go", "mod", "download", "all")
-	command.Dir = seed
-
-	output, err := command.CombinedOutput()
-	if err != nil {
-		t.Fatalf("prepare integration dependencies: %v: %s", err, output)
-	}
+	testenv.PrepareOffline(t, "../..", filepath.Join("testdata", "architectures", "common"))
 }
 
 func openIntegrationDirectory(t *testing.T, directory string) *os.Root {

@@ -29,6 +29,11 @@ linters:
         text: '^(?:G204: Subprocess launched with variable|G702: Command injection via taint analysis)$'
         linters:
           - gosec
+      - path: '^internal/cli/compile\.go$'
+        source: '^\s*command := exec\.CommandContext\(ctx, "go", args\.\.\.\)$'
+        text: '^(?:G204: Subprocess launched with variable)$'
+        linters:
+          - gosec
       - path: '^internal/compiler/build\.go$'
         source: '^\s*command := exec\.CommandContext\(ctx, executable, args\.\.\.\)$'
         text: '^G204: Subprocess launched with variable$'

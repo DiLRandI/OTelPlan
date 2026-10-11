@@ -408,7 +408,7 @@ func TestExecutableDigestPreservesSelectedSymlinkIdentity(t *testing.T) {
 	want := fmt.Sprintf("sha256:%x", sha)
 
 	for _, filename := range []string{selected, linked} {
-		got, err := executableDigest(filename)
+		got, err := ExecutableDigest(filename)
 		if err != nil || got != want {
 			t.Fatalf("selected digest=%s error=%v; want %s", got, err, want)
 		}

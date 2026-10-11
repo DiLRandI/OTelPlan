@@ -111,6 +111,20 @@ func verifyPreparedBuildBackend(ctx context.Context, name string, expected model
 		return "", fmt.Errorf("resolve build backend path: %w", err)
 	}
 
+	err = ctx.Err()
+	if err != nil {
+		return "", fmt.Errorf("verify build backend: %w", err)
+	}
+
+	digest, err := otelc.ExecutableDigest(executable)
+	if err != nil {
+		return "", fmt.Errorf("verify build backend digest: %w", err)
+	}
+
+	if digest != expected.Digest {
+		return "", errChangedBuildBackend
+	}
+
 	identity, err := otelc.VerifyExecutable(ctx, executable, expected.Version)
 	if err != nil {
 		if ctx.Err() != nil {

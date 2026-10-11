@@ -204,7 +204,7 @@ func VerifyExecutable(ctx context.Context, executable, version string) (model.Lo
 		return identity, err
 	}
 
-	identity.Digest, err = executableDigest(path)
+	identity.Digest, err = ExecutableDigest(path)
 	if err != nil {
 		return identity, err
 	}
@@ -226,7 +226,9 @@ func validateReportedVersion(output []byte, version string) error {
 	return nil
 }
 
-func executableDigest(path string) (string, error) {
+// ExecutableDigest hashes the selected file after resolving symbolic links,
+// without executing it.
+func ExecutableDigest(path string) (string, error) {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return "", fmt.Errorf("resolve otelc executable: %w", err)

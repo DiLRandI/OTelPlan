@@ -38,6 +38,7 @@ func TestLoadBuildConfigurationErrors(t *testing.T) {
 
 			code, err := discovery.Load(discovery.Options{
 				Root: root, Patterns: nil, BuildTags: nil, BuildFlags: []string{testCase.flag}, CallGraph: false,
+				CacheDir:     "",
 				IncludeTests: false, IncludeDependencies: false, GOOS: "", GOARCH: "", Offline: true,
 				Env: []string{"GOWORK=off", "GOFLAGS="},
 			})

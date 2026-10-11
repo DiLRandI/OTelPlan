@@ -186,6 +186,7 @@ func loadCallGraphFixture(t *testing.T, opts discovery.Options) *model.CodeModel
 func callGraphOptions(root string) discovery.Options {
 	return discovery.Options{
 		Root:                root,
+		CacheDir:            "",
 		Patterns:            nil,
 		BuildTags:           nil,
 		BuildFlags:          nil,

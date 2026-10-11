@@ -1,10 +1,14 @@
-package otelc
+package otelc_test
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
+	"github.com/DiLRandI/OTelPlan/internal/backend/otelc"
+	"github.com/DiLRandI/OTelPlan/internal/discovery"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 	"gopkg.in/yaml.v3"
 )
@@ -22,14 +26,14 @@ type decodedAccessorRules map[string]struct {
 func TestAccessorRules(t *testing.T) {
 	t.Parallel()
 
-	_, code, target := accessorFixture(t)
+	code, target := accessorRuleFixture(t)
 	target.Attributes = []model.AttributePlan{
 		accessorAttributePlan("request.id", argumentAttributeSource("req.ID")),
 	}
 	plan := resolvedPlanWithTargets(target)
 	provider := "example.com/generated/accessors"
 
-	rules, files, err := RenderAccessorRules(SupportedVersion, code, plan, provider)
+	rules, files, err := otelc.RenderAccessorRules(otelc.SupportedVersion, code, plan, provider)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +76,7 @@ func resolvedPlanWithTargets(targets ...model.ResolvedTarget) model.ResolvedPlan
 	return plan
 }
 
-func assertAccessorRuleInjection(t *testing.T, rules []byte, files []AccessorFile, provider string) {
+func assertAccessorRuleInjection(t *testing.T, rules []byte, files []otelc.AccessorFile, provider string) {
 	t.Helper()
 
 	if len(files) != 1 {
@@ -113,11 +117,11 @@ func assertAccessorRuleHelperSource(
 	t *testing.T,
 	code *model.CodeModel,
 	target model.ResolvedTarget,
-	files []AccessorFile,
+	files []otelc.AccessorFile,
 ) {
 	t.Helper()
 
-	expected, _, err := RenderAccessors(code, target)
+	expected, _, err := otelc.RenderAccessors(code, target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,11 +137,11 @@ func assertAccessorRuleDeterminism(
 	plan model.ResolvedPlan,
 	provider string,
 	rules []byte,
-	files []AccessorFile,
+	files []otelc.AccessorFile,
 ) {
 	t.Helper()
 
-	repeatedRules, repeatedFiles, err := RenderAccessorRules(SupportedVersion, code, plan, provider)
+	repeatedRules, repeatedFiles, err := otelc.RenderAccessorRules(otelc.SupportedVersion, code, plan, provider)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,14 +154,14 @@ func assertAccessorRuleDeterminism(
 func TestAccessorRulesRejectInvalidProvider(t *testing.T) {
 	t.Parallel()
 
-	_, code, target := accessorFixture(t)
+	code, target := accessorRuleFixture(t)
 	target.Attributes = []model.AttributePlan{
 		accessorAttributePlan("request.id", argumentAttributeSource("req.ID")),
 	}
 	plan := resolvedPlanWithTargets(target)
 
 	for _, provider := range []string{"../escape", "example.com/accessorprobe/ops"} {
-		rules, files, err := RenderAccessorRules(SupportedVersion, code, plan, provider)
+		rules, files, err := otelc.RenderAccessorRules(otelc.SupportedVersion, code, plan, provider)
 		if err == nil || rules != nil || files != nil {
 			t.Fatalf("accepted provider %q", provider)
 		}
@@ -167,7 +171,7 @@ func TestAccessorRulesRejectInvalidProvider(t *testing.T) {
 func TestAccessorRulesOrderingAndFailure(t *testing.T) {
 	t.Parallel()
 
-	code, plan := ruleFixture()
+	code, plan := bundleFixture()
 	for i := range plan.Targets {
 		plan.Targets[i].Attributes = []model.AttributePlan{
 			accessorAttributePlan("component", constantAttributeSource("app")),
@@ -177,7 +181,7 @@ func TestAccessorRulesOrderingAndFailure(t *testing.T) {
 	original := append([]model.ResolvedTarget(nil), plan.Targets...)
 	provider := "example.com/generated/accessors"
 
-	rules, files, err := RenderAccessorRules(SupportedVersion, code, plan, provider)
+	rules, files, err := otelc.RenderAccessorRules(otelc.SupportedVersion, code, plan, provider)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +200,7 @@ func TestAccessorRulesOrderingAndFailure(t *testing.T) {
 	plan.Targets[0].Attributes = []model.AttributePlan{
 		accessorAttributePlan("bad", argumentAttributeSource("missing")),
 	}
-	rules, files, err = RenderAccessorRules(SupportedVersion, code, plan, provider)
+	rules, files, err = otelc.RenderAccessorRules(otelc.SupportedVersion, code, plan, provider)
 
 	if err == nil || rules != nil || files != nil {
 		t.Fatal("invalid accessor returned partial output")
@@ -206,9 +210,9 @@ func TestAccessorRulesOrderingAndFailure(t *testing.T) {
 func TestAccessorRulesSkipTargetsWithoutCaptures(t *testing.T) {
 	t.Parallel()
 
-	code, plan := ruleFixture()
+	code, plan := bundleFixture()
 
-	rules, files, err := RenderAccessorRules(SupportedVersion, code, plan, "example.com/generated/accessors")
+	rules, files, err := otelc.RenderAccessorRules(otelc.SupportedVersion, code, plan, "example.com/generated/accessors")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,4 +224,69 @@ func TestAccessorRulesSkipTargetsWithoutCaptures(t *testing.T) {
 	if string(rules) != "{}\n" {
 		t.Fatalf("unexpected empty output: %s", rules)
 	}
+}
+
+func accessorRuleFixture(t *testing.T) (*model.CodeModel, model.ResolvedTarget) {
+	t.Helper()
+
+	source := openAccessorRuleRoot(t, "testdata/typed-accessor-contract")
+	path := t.TempDir()
+	directory := openAccessorRuleRoot(t, path)
+
+	for _, name := range []string{"go.mod", "dep/dep.go", "ops/ops.go"} {
+		contents, readErr := source.ReadFile(name)
+		if readErr != nil {
+			t.Fatalf("read accessor-rule fixture source %s: %v", name, readErr)
+		}
+
+		err := directory.MkdirAll(filepath.Dir(name), 0o700)
+		if err != nil {
+			t.Fatalf("create accessor-rule fixture directory: %v", err)
+		}
+
+		err = directory.WriteFile(name, contents, 0o600)
+		if err != nil {
+			t.Fatalf("write accessor-rule fixture %s: %v", name, err)
+		}
+	}
+
+	var options discovery.Options
+
+	options.Root, options.Patterns = path, []string{"./ops"}
+	options.Env = []string{"GOWORK=off", "GOFLAGS="}
+
+	code, err := discovery.LoadContext(t.Context(), options)
+	if err != nil {
+		t.Fatalf("discover accessor-rule fixture: %v", err)
+	}
+
+	symbol, exists := code.Symbol("example.com/accessorprobe/ops.Handle")
+	if !exists {
+		t.Fatal("accessor-rule fixture symbol missing")
+	}
+
+	var target model.ResolvedTarget
+
+	target.SymbolID, target.Signature = symbol.ID, symbol.Signature
+	target.ContextStrategy.Strategy = model.ContextStrategyArgument
+
+	return code, target
+}
+
+func openAccessorRuleRoot(t *testing.T, path string) *os.Root {
+	t.Helper()
+
+	directory, err := os.OpenRoot(path)
+	if err != nil {
+		t.Fatalf("open accessor-rule fixture root: %v", err)
+	}
+
+	t.Cleanup(func() {
+		closeErr := directory.Close()
+		if closeErr != nil {
+			t.Errorf("close accessor-rule fixture root: %v", closeErr)
+		}
+	})
+
+	return directory
 }

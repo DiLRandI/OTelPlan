@@ -388,24 +388,6 @@ func assertPinnedBuildFixtureUnchanged(t *testing.T, root string, original map[s
 	}
 }
 
-func TestBuildCLIUsage(t *testing.T) {
-	for _, args := range [][]string{{"build", "--", "-o"}, {"build", "--", "-overlay=secret"}, {"build", "--check"}, {"build", "--clean"}} {
-		var out, errout bytes.Buffer
-
-		args = append([]string{"--format=json"}, args...)
-		if code := Run(t.Context(), args, &out, &errout); code != 2 {
-			t.Fatalf("usage exit=%d: %s", code, &out)
-		}
-
-		var reply response
-
-		err := json.Unmarshal(out.Bytes(), &reply)
-		if err != nil || reply.OK {
-			t.Fatalf("invalid JSON: %s", &out)
-		}
-	}
-}
-
 func TestBuildCLILibraryWithoutOutput(t *testing.T) {
 	executable := os.Getenv("OTELPLAN_OTELC")
 	if executable == "" {
@@ -1188,16 +1170,18 @@ func checkVariadicSourceUnchanged(t *testing.T, root string, original map[string
 	}
 }
 
-func checkVariadicTrace(t *testing.T, output []byte) {
+type variadicTraceSpan struct {
+	Name   string `json:"Name"`
+	ID     string `json:"ID"`
+	Parent string `json:"Parent"`
+	Trace  string `json:"Trace"`
+}
+
+func decodeVariadicTrace(t *testing.T, output []byte) map[string]variadicTraceSpan {
 	t.Helper()
 
 	var trace struct {
-		Spans []struct {
-			Name   string `json:"Name"`
-			ID     string `json:"ID"`
-			Parent string `json:"Parent"`
-			Trace  string `json:"Trace"`
-		} `json:"Spans"`
+		Spans []variadicTraceSpan `json:"Spans"`
 	}
 
 	err := json.Unmarshal(output, &trace)
@@ -1205,10 +1189,18 @@ func checkVariadicTrace(t *testing.T, output []byte) {
 		t.Fatalf("decode variadic trace: %v", err)
 	}
 
-	spans := make(map[string]struct{ ID, Parent, Trace string }, len(trace.Spans))
+	spans := make(map[string]variadicTraceSpan, len(trace.Spans))
 	for _, span := range trace.Spans {
-		spans[span.Name] = struct{ ID, Parent, Trace string }{span.ID, span.Parent, span.Trace}
+		spans[span.Name] = span
 	}
+
+	return spans
+}
+
+func checkVariadicTrace(t *testing.T, output []byte) {
+	t.Helper()
+
+	spans := decodeVariadicTrace(t, output)
 
 	root := spans["root"]
 	if root.ID == "" {

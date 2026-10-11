@@ -24,6 +24,7 @@ func TestLoadDecodesGoEnvironmentNames(t *testing.T) {
 
 	code, err := discovery.Load(discovery.Options{
 		Root: root, Patterns: nil, BuildTags: nil, BuildFlags: nil, CallGraph: false,
+		CacheDir:     "",
 		IncludeTests: false, IncludeDependencies: false, GOOS: "linux", GOARCH: "amd64", Offline: true,
 		Env: []string{
 			"GOWORK=off", "GOFLAGS=", "CGO_ENABLED=0", "CGO_CFLAGS=-DTEST_C=1",

@@ -453,9 +453,26 @@ func accessorFixture(t *testing.T) (string, *model.CodeModel, model.ResolvedTarg
 		}
 	})
 
-	writeAccessorFixtureFile(t, fixtureRoot, "go.mod", []byte("module example.com/accessorprobe\n\ngo 1.27\n"))
-	writeAccessorFixtureFile(t, fixtureRoot, "dep/dep.go", []byte("package dep\n\ntype Code string\n"))
-	writeAccessorFixtureFile(t, fixtureRoot, "ops/ops.go", []byte(accessorPackageSource))
+	sourceRoot, err := os.OpenRoot("testdata/typed-accessor-contract")
+	if err != nil {
+		t.Fatalf("open typed-accessor contract source: %v", err)
+	}
+
+	t.Cleanup(func() {
+		closeErr := sourceRoot.Close()
+		if closeErr != nil {
+			t.Errorf("close typed-accessor contract source: %v", closeErr)
+		}
+	})
+
+	for _, name := range []string{"go.mod", "dep/dep.go", "ops/ops.go"} {
+		contents, readErr := sourceRoot.ReadFile(name)
+		if readErr != nil {
+			t.Fatalf("read typed-accessor contract source %s: %v", name, readErr)
+		}
+
+		writeAccessorFixtureFile(t, fixtureRoot, name, contents)
+	}
 
 	var options discovery.Options
 
@@ -481,61 +498,6 @@ func accessorFixture(t *testing.T) (string, *model.CodeModel, model.ResolvedTarg
 
 	return rootPath, code, target
 }
-
-const accessorPackageSource = `package ops
-
-import (
-	"context"
-	"math"
-	"example.com/accessorprobe/dep"
-)
-
-type InnerChild struct {
-	Value float64
-}
-
-type Inner struct {
-	Score float64
-	Child *InnerChild
-}
-
-type request struct {
-	ID      string
-	Enabled bool
-	Count   uint64
-	Signed  int64
-	Code    dep.Code
-	Secret  string
-	Inner   *Inner
-	secret  string
-}
-
-type output struct {
-	Message string
-	Big     uint64
-	Score   float64
-	NaN     float64
-}
-
-func NewRequest() *request {
-	return &request{
-		ID:      "",
-		Enabled: false,
-		Count:   9223372036854775808,
-		Code:    dep.Code("named"),
-		Secret:  "hidden",
-		Inner:   &Inner{Score: math.Inf(1), Child: nil},
-	}
-}
-
-func NewResult() output {
-	return output{Message: "", Big: 9223372036854775808, Score: math.Inf(1), NaN: math.NaN()}
-}
-
-func Handle(ctx context.Context, req *request, code dep.Code) (result output, err error) {
-	return output{}, nil
-}
-`
 
 func writeAccessorFixtureFile(t *testing.T, root *os.Root, path string, contents []byte) {
 	t.Helper()
@@ -615,4 +577,29 @@ func TestGeneratedTypedAccessors(t *testing.T) {
 		call("constant.string", "nil"), call("constant.uint", "nil"), call("arg.uint64", "req"),
 		call("arg.float", "req"), call("arg.nested", "req"), call("arg.signed", "req"),
 		call("result.uint64", "result"))
+}
+
+func accessorAttributePlan(key string, source model.AttributeSource) model.AttributePlan {
+	var attribute model.AttributePlan
+
+	attribute.Key = key
+	attribute.From = source
+
+	return attribute
+}
+
+func argumentAttributeSource(argument string) model.AttributeSource {
+	var source model.AttributeSource
+
+	source.Argument = argument
+
+	return source
+}
+
+func resolvedPlanWithTargets(targets ...model.ResolvedTarget) model.ResolvedPlan {
+	var plan model.ResolvedPlan
+
+	plan.Targets = targets
+
+	return plan
 }

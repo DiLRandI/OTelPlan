@@ -177,24 +177,31 @@ func checkArchitectureImmutability(t *testing.T, original, current map[string][]
 	}
 }
 
+type architectureSpan struct {
+	Name       string         `json:"Name"`
+	ID         string         `json:"ID"`
+	Parent     string         `json:"Parent"`
+	Trace      string         `json:"Trace"`
+	Scope      string         `json:"Scope"`
+	Kind       string         `json:"Kind"`
+	Error      bool           `json:"Error"`
+	Events     int            `json:"Events"`
+	Attributes map[string]any `json:"Attributes"`
+}
+
+type architectureTrace struct {
+	ReturnedError string             `json:"ReturnedError"`
+	Spans         []architectureSpan `json:"Spans"`
+}
+
 func checkArchitectureTrace(t *testing.T, output []byte) {
 	t.Helper()
 
-	type span struct {
-		Name, ID, Parent, Trace, Scope, Kind string
-		Error                                bool
-		Events                               int
-		Attributes                           map[string]any
-	}
-
-	var result struct {
-		ReturnedError string
-		Spans         []span
-	}
+	var result architectureTrace
 
 	err := json.Unmarshal(output, &result)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("decode architecture trace: %v", err)
 	}
 
 	if result.ReturnedError != "declined" || len(result.Spans) != 4 {
@@ -205,25 +212,44 @@ func checkArchitectureTrace(t *testing.T, output []byte) {
 		t.Fatal("private argument captured")
 	}
 
-	byName := map[string]span{}
+	byName := indexArchitectureSpans(t, result.Spans, output)
+	checkArchitectureParentage(t, byName, output)
+}
+
+func indexArchitectureSpans(t *testing.T, spans []architectureSpan, output []byte) map[string]architectureSpan {
+	t.Helper()
+
+	byName := map[string]architectureSpan{}
 
 	ids := map[string]bool{}
 
-	for _, item := range result.Spans {
+	for _, item := range spans {
 		if _, exists := byName[item.Name]; exists || item.ID == "0000000000000000" || ids[item.ID] {
 			t.Fatalf("duplicate or invalid span: %s", output)
 		}
 
 		byName[item.Name], ids[item.ID] = item, true
 
-		if (item.Name == "root" || item.Name == "downstream") && (item.Error || item.Events != 0) {
-			t.Fatalf("manual span changed: %s", output)
-		}
-
-		if len(item.Attributes) != 0 {
-			t.Fatalf("unexpected attribute capture: %s", output)
-		}
+		checkArchitectureCapture(t, item, output)
 	}
+
+	return byName
+}
+
+func checkArchitectureCapture(t *testing.T, item architectureSpan, output []byte) {
+	t.Helper()
+
+	if (item.Name == "root" || item.Name == "downstream") && (item.Error || item.Events != 0) {
+		t.Fatalf("manual span changed: %s", output)
+	}
+
+	if len(item.Attributes) != 0 {
+		t.Fatalf("unexpected attribute capture: %s", output)
+	}
+}
+
+func checkArchitectureParentage(t *testing.T, byName map[string]architectureSpan, output []byte) {
+	t.Helper()
 
 	parent, exists := byName["root"]
 	if !exists || parent.Parent != "0000000000000000" || parent.Trace == "00000000000000000000000000000000" {
@@ -236,11 +262,19 @@ func checkArchitectureTrace(t *testing.T, output []byte) {
 			t.Fatalf("broken trace parentage for %s: %s", name, output)
 		}
 
-		if name != "downstream" && (!child.Error || child.Events != 1 || child.Scope != "otelplan.io/business" || child.Kind != "internal") {
-			t.Fatalf("business span semantics changed: %s", output)
+		if name != "downstream" {
+			checkArchitectureBusinessSpan(t, child, output)
 		}
 
 		parent = child
+	}
+}
+
+func checkArchitectureBusinessSpan(t *testing.T, item architectureSpan, output []byte) {
+	t.Helper()
+
+	if !item.Error || item.Events != 1 || item.Scope != "otelplan.io/business" || item.Kind != "internal" {
+		t.Fatalf("business span semantics changed: %s", output)
 	}
 }
 

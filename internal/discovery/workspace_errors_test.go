@@ -32,6 +32,7 @@ func TestLoadReportsWorkspaceChecksumReadFailure(t *testing.T) {
 
 	_, err = discovery.Load(discovery.Options{
 		Root: root, Patterns: nil, BuildTags: nil, BuildFlags: nil, CallGraph: false,
+		CacheDir:     "",
 		IncludeTests: false, IncludeDependencies: false, GOOS: "", GOARCH: "", Offline: true,
 		Env: []string{"GOWORK=" + filepath.Join(root, "go.work"), "GOFLAGS="},
 	})

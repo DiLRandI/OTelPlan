@@ -1,16 +1,15 @@
-package cli
+package cli_test
 
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/DiLRandI/OTelPlan/internal/cli"
 	"github.com/DiLRandI/OTelPlan/internal/testenv"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
@@ -54,12 +53,12 @@ func runArchitectureTraces(t *testing.T, offline bool) {
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			root := architectureFixture(t, scenario.name)
-			original := snapshotArchitecture(t, root)
+			original := testenv.SnapshotFiles(t, root)
 			inspected := invokeArchitecture(t, root, offline, 0, "inspect")
 			checkArchitectureTargets(t, inspected, scenario.checkout, scenario.payment)
 
 			invokeArchitecture(t, root, offline, 0, "lock")
-			original["otelplan.lock"] = snapshotArchitecture(t, root)["otelplan.lock"]
+			original["otelplan.lock"] = testenv.SnapshotFiles(t, root)["otelplan.lock"]
 
 			invokeArchitecture(t, root, offline, 0, "validate", "--strict")
 			invokeArchitecture(t, root, offline, 0, "compile", "--output", filepath.Join(t.TempDir(), "generated"))
@@ -73,12 +72,12 @@ func runArchitectureTraces(t *testing.T, offline bool) {
 
 			checkArchitectureTrace(t, output)
 			invokeArchitecture(t, root, offline, 0, "lock", "--check")
-			checkArchitectureImmutability(t, original, snapshotArchitecture(t, root))
+			testenv.AssertFilesUnchanged(t, original, testenv.SnapshotFiles(t, root))
 		})
 	}
 }
 
-func checkArchitectureTargets(t *testing.T, inspected response, checkout, payment string) {
+func checkArchitectureTargets(t *testing.T, inspected globalArgumentReply, checkout, payment string) {
 	t.Helper()
 
 	data, err := json.Marshal(inspected.Data)
@@ -107,69 +106,6 @@ func checkArchitectureTargets(t *testing.T, inspected response, checkout, paymen
 		}
 
 		delete(want, target.SpanName)
-	}
-}
-
-func snapshotArchitecture(t *testing.T, root string) map[string][]byte {
-	t.Helper()
-
-	directory, err := os.OpenRoot(root)
-	if err != nil {
-		t.Fatalf("open architecture fixture: %v", err)
-	}
-
-	t.Cleanup(func() {
-		err := directory.Close()
-		if err != nil {
-			t.Errorf("close architecture fixture: %v", err)
-		}
-	})
-
-	files := map[string][]byte{}
-
-	err = fs.WalkDir(directory.FS(), ".", func(name string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return fmt.Errorf("walk architecture fixture: %w", walkErr)
-		}
-
-		if entry.IsDir() {
-			return nil
-		}
-
-		data, readErr := directory.ReadFile(name)
-		if readErr != nil {
-			return fmt.Errorf("read architecture fixture: %w", readErr)
-		}
-
-		files[name] = data
-
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("snapshot architecture fixture: %v", err)
-	}
-
-	return files
-}
-
-func checkArchitectureImmutability(t *testing.T, original, current map[string][]byte) {
-	t.Helper()
-
-	if len(original) != len(current) {
-		t.Errorf("architecture fixture file count changed: got %d, want %d", len(current), len(original))
-	}
-
-	for name, want := range original {
-		got, exists := current[name]
-		if !exists || !bytes.Equal(got, want) {
-			t.Errorf("changed or removed project file %s", name)
-		}
-	}
-
-	for name := range current {
-		if _, exists := original[name]; !exists {
-			t.Errorf("unexpected project file %s", name)
-		}
 	}
 }
 
@@ -312,7 +248,7 @@ func prepareOfflineArchitectureCache(t *testing.T) {
 	testenv.DenyNetwork(t)
 }
 
-func invokeArchitecture(t *testing.T, root string, offline bool, want int, args ...string) response {
+func invokeArchitecture(t *testing.T, root string, offline bool, want int, args ...string) globalArgumentReply {
 	t.Helper()
 
 	arguments := []string{"--root", root, "--format=json"}
@@ -324,12 +260,12 @@ func invokeArchitecture(t *testing.T, root string, offline bool, want int, args 
 
 	var output, stderr bytes.Buffer
 
-	code := Run(t.Context(), arguments, &output, &stderr)
+	code := cli.Run(t.Context(), arguments, &output, &stderr)
 	if code != want {
 		t.Fatalf("%v exit=%d want=%d output=%s stderr=%s", args, code, want, &output, &stderr)
 	}
 
-	var reply response
+	var reply globalArgumentReply
 
 	err := json.Unmarshal(output.Bytes(), &reply)
 	if err != nil {
@@ -341,27 +277,4 @@ func invokeArchitecture(t *testing.T, root string, offline bool, want int, args 
 	}
 
 	return reply
-}
-
-func prepareOfflineIntegration(t *testing.T) {
-	t.Helper()
-	testenv.PrepareOffline(t, "../..", filepath.Join("testdata", "architectures", "common"))
-}
-
-func openIntegrationDirectory(t *testing.T, directory string) *os.Root {
-	t.Helper()
-
-	root, err := os.OpenRoot(directory)
-	if err != nil {
-		t.Fatalf("open integration directory: %v", err)
-	}
-
-	t.Cleanup(func() {
-		err := root.Close()
-		if err != nil {
-			t.Errorf("close integration directory: %v", err)
-		}
-	})
-
-	return root
 }

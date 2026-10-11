@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sync"
+	"syscall"
 	"testing"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
@@ -99,6 +100,186 @@ func writeCacheFixture(t *testing.T, root, name, content string) {
 	err = directory.WriteFile(name, []byte(content), cacheFileMode)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func readCacheFixture(t *testing.T, path string) map[string][]byte {
+	t.Helper()
+
+	root, err := os.OpenRoot(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() { _ = root.Close() }()
+
+	entries, err := fs.ReadDir(root.FS(), ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	files := make(map[string][]byte, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			files[entry.Name()] = nil
+
+			continue
+		}
+
+		contents, err := root.ReadFile(entry.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		files[entry.Name()] = contents
+	}
+
+	return files
+}
+
+func assertCacheFixtureEqual(t *testing.T, want, got map[string][]byte) {
+	t.Helper()
+
+	if !reflect.DeepEqual(want, got) {
+		t.Fatalf("cache files changed: want %v, got %v", want, got)
+	}
+}
+
+func TestAnalysisCacheReadOnlyValidHitRestoresEnvironment(t *testing.T) {
+	t.Parallel()
+
+	opts := cacheTestOptions(t, map[string]string{"app.go": "package shop\nfunc Original() {}\n"})
+	opts.Env = append(opts.Env, "CGO_CFLAGS=read-only-value")
+	loadCacheTest(t, opts)
+	want := readCacheFixture(t, opts.CacheDir)
+
+	opts.CacheReadOnly = true
+
+	code, hit := loadCacheTest(t, opts)
+	if !hit || code.EffectiveBuild.CGOCFLAGS != "read-only-value" {
+		t.Fatal("read-only cache did not return a hit with the current effective environment")
+	}
+
+	assertCacheFixtureEqual(t, want, readCacheFixture(t, opts.CacheDir))
+}
+
+func TestAnalysisCacheReadOnlyMissingDirectoryDoesNotCreate(t *testing.T) {
+	t.Parallel()
+
+	opts := cacheTestOptions(t, map[string]string{"app.go": "package shop\nfunc Original() {}\n"})
+	opts.CacheDir = filepath.Join(opts.CacheDir, "nested", "missing")
+	opts.CacheReadOnly = true
+
+	_, hit := loadCacheTest(t, opts)
+	if hit {
+		t.Fatal("read-only cache unexpectedly hit a missing directory")
+	}
+
+	_, err := os.Stat(opts.CacheDir)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("read-only cache created missing directory: %v", err)
+	}
+
+	nested := filepath.Dir(opts.CacheDir)
+
+	_, err = os.Stat(nested)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("read-only cache created missing parent directory: %v", err)
+	}
+}
+
+func TestAnalysisCacheReadOnlySourceInvalidationPreservesEntry(t *testing.T) {
+	t.Parallel()
+
+	opts := cacheTestOptions(t, map[string]string{"app.go": "package shop\nfunc Original() {}\n"})
+	loadCacheTest(t, opts)
+	want := readCacheFixture(t, opts.CacheDir)
+
+	writeCacheFixture(t, opts.Root, "app.go", "package shop\nfunc Changed() {}\n")
+	opts.CacheReadOnly = true
+
+	code, hit := loadCacheTest(t, opts)
+	if hit || len(code.Symbols) != 1 || code.Symbols[0].Name != "Changed" {
+		t.Fatal("read-only source invalidation did not produce fresh analysis")
+	}
+
+	assertCacheFixtureEqual(t, want, readCacheFixture(t, opts.CacheDir))
+}
+
+func TestAnalysisCacheReadOnlyCorruptEntryPreservesBytes(t *testing.T) {
+	t.Parallel()
+
+	opts := cacheTestOptions(t, map[string]string{"app.go": "package shop\nfunc Original() {}\n"})
+	loadCacheTest(t, opts)
+
+	entries := readCacheFixture(t, opts.CacheDir)
+	if len(entries) != 1 {
+		t.Fatalf("cache entries=%d; want one", len(entries))
+	}
+
+	for name, contents := range entries {
+		if contents == nil {
+			continue
+		}
+
+		writeCacheFixture(t, opts.CacheDir, name, "{broken")
+	}
+
+	want := readCacheFixture(t, opts.CacheDir)
+
+	opts.CacheReadOnly = true
+
+	code, hit := loadCacheTest(t, opts)
+	if hit || len(code.Symbols) != 1 || code.Symbols[0].Name != "Original" {
+		t.Fatal("read-only corrupt cache did not produce fresh analysis")
+	}
+
+	assertCacheFixtureEqual(t, want, readCacheFixture(t, opts.CacheDir))
+}
+
+func TestAnalysisCacheReadOnlyEmptyCacheStaysEmpty(t *testing.T) {
+	t.Parallel()
+
+	opts := cacheTestOptions(t, map[string]string{"app.go": "package shop\nfunc Original() {}\n"})
+	opts.CacheReadOnly = true
+
+	_, hit := loadCacheTest(t, opts)
+	if hit {
+		t.Fatal("read-only empty cache unexpectedly hit")
+	}
+
+	if files := readCacheFixture(t, opts.CacheDir); len(files) != 0 {
+		t.Fatalf("read-only empty cache was populated: %v", files)
+	}
+}
+
+func TestAnalysisCacheStorageCause(t *testing.T) {
+	t.Parallel()
+
+	opts := cacheTestOptions(t, map[string]string{"app.go": "package shop\n"})
+	cacheFile := filepath.Join(opts.Root, "cache-file")
+	writeCacheFixture(t, opts.Root, "cache-file", "cache path is a file")
+	opts.CacheDir = cacheFile
+
+	_, _, err := loadContextResult(t.Context(), opts)
+	if !errors.Is(err, ErrCacheStorage) {
+		t.Fatalf("storage error=%v; want errors.Is(..., ErrCacheStorage)", err)
+	}
+
+	if !errors.Is(err, syscall.ENOTDIR) {
+		t.Fatalf("storage error=%v; want underlying ENOTDIR cause", err)
+	}
+
+	opts.CacheReadOnly = true
+
+	_, _, err = loadContextResult(t.Context(), opts)
+	if !errors.Is(err, ErrCacheStorage) {
+		t.Fatalf("read-only storage error=%v; want errors.Is(..., ErrCacheStorage)", err)
+	}
+
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) || pathErr.Err == nil {
+		t.Fatalf("read-only storage error=%v; want retained filesystem cause", err)
 	}
 }
 

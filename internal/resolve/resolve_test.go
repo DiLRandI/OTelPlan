@@ -342,7 +342,7 @@ func (Local) Other(ctx context.Context) error { return nil }
 			}
 
 			code, err := discovery.Load(discovery.Options{
-				Root: root, CacheDir: "", Patterns: nil, BuildTags: nil, BuildFlags: nil,
+				Root: root, CacheDir: "", CacheReadOnly: false, Patterns: nil, BuildTags: nil, BuildFlags: nil,
 				CallGraph: false, IncludeTests: false, IncludeDependencies: false, GOOS: "", GOARCH: "", Env: nil, Offline: false})
 			if err != nil {
 				t.Fatal(err)

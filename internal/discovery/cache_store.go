@@ -3,6 +3,7 @@ package discovery
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +17,9 @@ const (
 	cacheFileMode          = 0o600
 )
 
+// ErrCacheStorage identifies failures accessing explicitly requested cache storage.
+var ErrCacheStorage = errors.New("analysis cache storage failure")
+
 type cacheLookup struct {
 	code *model.CodeModel
 }
@@ -25,6 +29,25 @@ type analysisCacheEntry struct {
 	Key     string          `json:"key"`
 	Digest  string          `json:"digest"`
 	Model   json.RawMessage `json:"model"`
+}
+
+func openRequestedAnalysisCache(opts Options) (*os.Root, error) {
+	var (
+		root *os.Root
+		err  error
+	)
+
+	if opts.CacheReadOnly {
+		root, err = os.OpenRoot(opts.CacheDir)
+	} else {
+		root, err = openAnalysisCache(opts.CacheDir)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrCacheStorage, err)
+	}
+
+	return root, nil
 }
 
 func openAnalysisCache(path string) (*os.Root, error) {

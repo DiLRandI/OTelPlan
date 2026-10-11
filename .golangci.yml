@@ -34,6 +34,66 @@ linters:
         text: '^(?:G204: Subprocess launched with variable)$'
         linters:
           - gosec
+      - path: '^internal/backend/otelc/accessors_integration_test\.go$'
+        source: '^\s*build := exec\.CommandContext\(t\.Context\(\), executable, "--rules", rules, "go", "build", "-race", "-o", "probe", "\."\)$'
+        text: '^(?:G204: Subprocess launched with variable|G702: Command injection via taint analysis)$'
+        linters:
+          - gosec
+      - path: '^internal/backend/otelc/rules_integration_test\.go$'
+        source: '^\s*build := exec\.CommandContext\(t\.Context\(\), executable, "--rules", rulesPath, "go", "build", "-race", "-o", "probe", "\."\)$'
+        text: '^(?:G204: Subprocess launched with variable|G702: Command injection via taint analysis)$'
+        linters:
+          - gosec
+      - path: '^internal/backend/otelc/rules_integration_test\.go$'
+        source: '^\s*command := exec\.CommandContext\(t\.Context\(\), "\./probe", mode\)$'
+        text: '^(?:G204: Subprocess launched with variable)$'
+        linters:
+          - gosec
+      - path: '^internal/cli/architecture_test\.go$'
+        source: '^\s*output, err := exec\.CommandContext\(t\.Context\(\), binary\)\.Output\(\)$'
+        text: '^(?:G204: Subprocess launched with variable)$'
+        linters:
+          - gosec
+      - path: '^internal/cli/build_test\.go$'
+        source: '^\s*command := exec\.CommandContext\(t\.Context\(\), "go", "build", "-o", cliPath, "\.\./\.\./cmd/otelplan"\)$'
+        text: '^(?:G204: Subprocess launched with variable)$'
+        linters:
+          - gosec
+      - path: '^internal/cli/build_test\.go$'
+        source: '^\s*command := exec\.CommandContext\(t\.Context\(\), cliPath, "build", "--root", root, "--format=json", "--offline",$'
+        text: '^(?:G204: Subprocess launched with variable)$'
+        linters:
+          - gosec
+      - path: '^internal/cli/build_test\.go$'
+        source: '^\s*command := exec\.CommandContext\(t\.Context\(\), cliPath, args\.\.\.\)$'
+        text: '^(?:G204: Subprocess launched with variable)$'
+        linters:
+          - gosec
+      - path: '^internal/cli/compile_test\.go$'
+        source: '^\s*build := exec\.CommandContext\(t\.Context\(\), "go", "build", "-o", binary, "\.\./\.\./cmd/otelplan"\)$'
+        text: '^(?:G204: Subprocess launched with variable)$'
+        linters:
+          - gosec
+      - path: '^internal/cli/compile_test\.go$'
+        source: '^\s*command := exec\.CommandContext\(t\.Context\(\), "\./otelplan", args\.\.\.\)$'
+        text: '^(?:G204: Subprocess launched with variable)$'
+        linters:
+          - gosec
+      - path: '^internal/cli/executable_contract_test\.go$'
+        source: '^\s*build := exec\.CommandContext\(t\.Context\(\), "go", "build", "-o", binary,$'
+        text: '^(?:G204: Subprocess launched with variable)$'
+        linters:
+          - gosec
+      - path: '^internal/cli/executable_contract_test\.go$'
+        source: '^\s*command := exec\.CommandContext\(t\.Context\(\), binary, "inspect", "--root", root, "--config=missing\.yaml"\)$'
+        text: '^(?:G204: Subprocess launched with variable)$'
+        linters:
+          - gosec
+      - path: '^internal/cli/executable_contract_test\.go$'
+        source: '^\s*command := exec\.CommandContext\(t\.Context\(\), binary, commandName, "--root", root, "--format=json"\)$'
+        text: '^(?:G204: Subprocess launched with variable)$'
+        linters:
+          - gosec
       - path: '^internal/compiler/build\.go$'
         source: '^\s*command := exec\.CommandContext\(ctx, executable, args\.\.\.\)$'
         text: '^G204: Subprocess launched with variable$'

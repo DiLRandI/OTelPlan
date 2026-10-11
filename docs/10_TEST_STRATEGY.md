@@ -157,9 +157,10 @@ make lint GOLANGCI_LINT=/path/to/golangci-lint
 make test-gates
 ```
 
-`make check` runs all of these. The required linter version is v2.13.2. Tool
-absence, version mismatch, and real lint failures return nonzero. No broad
-suppression is an acceptable substitute for fixing a finding.
+`make check` runs all of these. The required linter version is v2.14.0, which
+supports the export data emitted by Go 1.27.2. Tool absence, version mismatch,
+and real lint failures return nonzero. No broad suppression is an acceptable
+substitute for fixing a finding.
 
 GitHub Actions runs unit, race, vet, lint, pinned OTelC integration/E2E, and
 quality-gate tests as separate Linux jobs. The aggregate check requires every

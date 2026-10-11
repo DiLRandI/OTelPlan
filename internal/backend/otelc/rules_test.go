@@ -1,4 +1,4 @@
-package otelc
+package otelc_test
 
 import (
 	"bytes"
@@ -7,71 +7,23 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DiLRandI/OTelPlan/internal/backend/otelc"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 	"gopkg.in/yaml.v3"
 )
 
-func ruleFixture() (*model.CodeModel, model.ResolvedPlan) {
-	code := new(model.CodeModel)
-	code.Symbols = make([]model.Symbol, 3)
-
-	code.Symbols[0].ID = "example.com/app.Run"
-	code.Symbols[0].Kind = model.SymbolFunction
-	code.Symbols[0].PackageImportPath = "example.com/app"
-	code.Symbols[0].PackageName = "app"
-	code.Symbols[0].Name = "Run"
-	code.Symbols[0].HasBody = true
-	code.Symbols[0].Signature = "func()"
-
-	code.Symbols[1].ID = "example.com/app.(*Worker).Run"
-	code.Symbols[1].Kind = model.SymbolMethod
-	code.Symbols[1].PackageImportPath = "example.com/app"
-	code.Symbols[1].PackageName = "app"
-	code.Symbols[1].Name = "Run"
-	code.Symbols[1].Receiver = new(model.Receiver)
-	code.Symbols[1].Receiver.Type = "Worker"
-	code.Symbols[1].Receiver.Pointer = true
-	code.Symbols[1].HasBody = true
-	code.Symbols[1].Signature = "func()"
-
-	code.Symbols[2].ID = "example.com/app.(Worker).Other"
-	code.Symbols[2].Kind = model.SymbolMethod
-	code.Symbols[2].PackageImportPath = "example.com/app"
-	code.Symbols[2].PackageName = "app"
-	code.Symbols[2].Name = "Other"
-	code.Symbols[2].Receiver = new(model.Receiver)
-	code.Symbols[2].Receiver.Type = "Worker"
-	code.Symbols[2].HasBody = true
-	code.Symbols[2].Signature = "func()"
-
-	plan := new(model.ResolvedPlan)
-
-	for _, symbol := range code.Symbols {
-		target := new(model.ResolvedTarget)
-		target.SymbolID = symbol.ID
-		target.Signature = symbol.Signature
-		target.RuleID = "chosen"
-		contextStrategy := new(model.ContextStrategy)
-		contextStrategy.Strategy = model.ContextStrategyRoot
-		target.ContextStrategy = *contextStrategy
-		plan.Targets = append(plan.Targets, *target)
-	}
-
-	return code, *plan
-}
-
 func TestExactRuleRendering(t *testing.T) {
 	t.Parallel()
 
-	code, plan := ruleFixture()
+	code, plan := bundleFixture()
 	original := append([]model.ResolvedTarget(nil), plan.Targets...)
 
-	data, bindings, err := RenderRules(SupportedVersion, code, plan, "example.com/app/hooks")
+	data, bindings, err := otelc.RenderRules(otelc.SupportedVersion, code, plan, "example.com/app/hooks")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var rules map[string]functionRule
+	var rules map[string]decodedFunctionRule
 
 	err = yaml.Unmarshal(data, &rules)
 	if err != nil {
@@ -91,7 +43,8 @@ func TestExactRuleRendering(t *testing.T) {
 	}
 }
 
-func assertExactRenderedRules(t *testing.T, data []byte, rules map[string]functionRule, bindings []HookBinding) {
+func assertExactRenderedRules(t *testing.T, data []byte,
+	rules map[string]decodedFunctionRule, bindings []otelc.HookBinding) {
 	t.Helper()
 
 	if len(rules) != 3 || len(bindings) != 3 {
@@ -119,13 +72,13 @@ func assertReorderedRenderingIsStable(
 	code *model.CodeModel,
 	plan model.ResolvedPlan,
 	data []byte,
-	bindings []HookBinding,
+	bindings []otelc.HookBinding,
 ) {
 	t.Helper()
 
 	plan.Targets[0], plan.Targets[2] = plan.Targets[2], plan.Targets[0]
 
-	reordered, rebound, err := RenderRules(SupportedVersion, code, plan, "example.com/app/hooks")
+	reordered, rebound, err := otelc.RenderRules(otelc.SupportedVersion, code, plan, "example.com/app/hooks")
 	if err != nil || !bytes.Equal(data, reordered) ||
 		!reflect.DeepEqual(bindings, rebound) {
 		t.Fatal("input ordering changed generated artifacts")
@@ -145,7 +98,7 @@ func TestRuleRenderingRejectsUnrepresentableTargets(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			code, plan := ruleFixture()
+			code, plan := bundleFixture()
 			if testCase.change != nil {
 				testCase.change(code, &plan)
 			}
@@ -155,7 +108,7 @@ func TestRuleRenderingRejectsUnrepresentableTargets(t *testing.T) {
 				path = "example.com/app/hooks"
 			}
 
-			data, bindings, err := RenderRules(SupportedVersion, code, plan, path)
+			data, bindings, err := otelc.RenderRules(otelc.SupportedVersion, code, plan, path)
 			if err == nil || data != nil || bindings != nil {
 				t.Fatal("unsupported plan produced partial artifacts")
 			}
@@ -222,7 +175,7 @@ func TestRuleRenderingPreservesValidationErrorIdentity(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			code, plan := ruleFixture()
+			code, plan := bundleFixture()
 			if testCase.change != nil {
 				testCase.change(code, &plan)
 			}
@@ -288,7 +241,7 @@ func repeatedRuleErrorCases() []repeatedRuleErrorCase {
 func assertRepeatedRuleError(t *testing.T, code *model.CodeModel, plan model.ResolvedPlan, path, wantText string) {
 	t.Helper()
 
-	firstData, firstBindings, firstErr := RenderRules(SupportedVersion, code, plan, path)
+	firstData, firstBindings, firstErr := otelc.RenderRules(otelc.SupportedVersion, code, plan, path)
 	if firstErr == nil || firstData != nil || firstBindings != nil {
 		t.Fatalf("first call returned partial artifacts or no error: data=%q bindings=%v err=%v",
 			firstData, firstBindings, firstErr)
@@ -298,7 +251,7 @@ func assertRepeatedRuleError(t *testing.T, code *model.CodeModel, plan model.Res
 		t.Fatalf("first call error = %q, want %q", firstErr, wantText)
 	}
 
-	secondData, secondBindings, secondErr := RenderRules(SupportedVersion, code, plan, path)
+	secondData, secondBindings, secondErr := otelc.RenderRules(otelc.SupportedVersion, code, plan, path)
 	if secondErr == nil || secondData != nil || secondBindings != nil {
 		t.Fatalf("second call returned partial artifacts or no error: data=%q bindings=%v err=%v",
 			secondData, secondBindings, secondErr)
@@ -308,4 +261,19 @@ func assertRepeatedRuleError(t *testing.T, code *model.CodeModel, plan model.Res
 		t.Fatalf("repeated error does not preserve identity: first=%p %v, second=%p %v",
 			firstErr, firstErr, secondErr, secondErr)
 	}
+}
+
+type decodedFunctionRule struct {
+	Target string `yaml:"target"`
+	Where  struct {
+		Function string `yaml:"func"`
+		Receiver string `yaml:"recv,omitempty"`
+	} `yaml:"where"`
+	Actions []struct {
+		Hooks struct {
+			Before string `yaml:"before"`
+			After  string `yaml:"after"`
+			Path   string `yaml:"path"`
+		} `yaml:"inject_hooks"`
+	} `yaml:"do"`
 }

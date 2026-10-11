@@ -414,3 +414,52 @@ func TestExecutableDigestPreservesSelectedSymlinkIdentity(t *testing.T) {
 		}
 	}
 }
+
+func ruleFixture() (*model.CodeModel, model.ResolvedPlan) {
+	code := new(model.CodeModel)
+	code.Symbols = make([]model.Symbol, 3)
+
+	code.Symbols[0].ID = "example.com/app.Run"
+	code.Symbols[0].Kind = model.SymbolFunction
+	code.Symbols[0].PackageImportPath = "example.com/app"
+	code.Symbols[0].PackageName = "app"
+	code.Symbols[0].Name = "Run"
+	code.Symbols[0].HasBody = true
+	code.Symbols[0].Signature = "func()"
+
+	code.Symbols[1].ID = "example.com/app.(*Worker).Run"
+	code.Symbols[1].Kind = model.SymbolMethod
+	code.Symbols[1].PackageImportPath = "example.com/app"
+	code.Symbols[1].PackageName = "app"
+	code.Symbols[1].Name = "Run"
+	code.Symbols[1].Receiver = new(model.Receiver)
+	code.Symbols[1].Receiver.Type = "Worker"
+	code.Symbols[1].Receiver.Pointer = true
+	code.Symbols[1].HasBody = true
+	code.Symbols[1].Signature = "func()"
+
+	code.Symbols[2].ID = "example.com/app.(Worker).Other"
+	code.Symbols[2].Kind = model.SymbolMethod
+	code.Symbols[2].PackageImportPath = "example.com/app"
+	code.Symbols[2].PackageName = "app"
+	code.Symbols[2].Name = "Other"
+	code.Symbols[2].Receiver = new(model.Receiver)
+	code.Symbols[2].Receiver.Type = "Worker"
+	code.Symbols[2].HasBody = true
+	code.Symbols[2].Signature = "func()"
+
+	plan := new(model.ResolvedPlan)
+
+	for _, symbol := range code.Symbols {
+		target := new(model.ResolvedTarget)
+		target.SymbolID = symbol.ID
+		target.Signature = symbol.Signature
+		target.RuleID = "chosen"
+		contextStrategy := new(model.ContextStrategy)
+		contextStrategy.Strategy = model.ContextStrategyRoot
+		target.ContextStrategy = *contextStrategy
+		plan.Targets = append(plan.Targets, *target)
+	}
+
+	return code, *plan
+}

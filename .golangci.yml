@@ -20,3 +20,7 @@ linters:
         linters:
           - funlen
           - goconst
+      - path: '^internal/cli/run\.go$'
+        source: '^var Version = "dev"$'
+        linters:
+          - gochecknoglobals

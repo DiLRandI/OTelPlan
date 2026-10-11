@@ -3,6 +3,8 @@ package otelc
 import (
 	"errors"
 	"go/ast"
+	"go/parser"
+	"go/token"
 	"reflect"
 	"sort"
 	"strings"
@@ -10,6 +12,8 @@ import (
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
+
+const hookImportPath = "example.com/app/hooks"
 
 func TestGenericAttributesUseDirectTypedInputs(t *testing.T) {
 	t.Parallel()
@@ -350,4 +354,29 @@ func containsCall(fn *ast.FuncDecl, name string) bool {
 	})
 
 	return found
+}
+
+func parseGeneratedHooks(t *testing.T, source []byte) *ast.File {
+	t.Helper()
+
+	file, parseErr := parser.ParseFile(token.NewFileSet(), "hooks.go", source, parser.AllErrors)
+	if parseErr != nil {
+		t.Fatalf("generated hooks do not parse: %v\n%s", parseErr, source)
+	}
+
+	return file
+}
+
+func findFunction(t *testing.T, file *ast.File, name string) *ast.FuncDecl {
+	t.Helper()
+
+	for _, decl := range file.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == name {
+			return fn
+		}
+	}
+
+	t.Fatalf("generated function %q missing", name)
+
+	return nil
 }

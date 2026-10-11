@@ -1,4 +1,4 @@
-package cli
+package cli_test
 
 import (
 	"bytes"
@@ -7,27 +7,29 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DiLRandI/OTelPlan/internal/cli"
 )
 
-func invoke(t *testing.T, root string, want int, args ...string) response {
+func invoke(t *testing.T, root string, want int, args ...string) globalArgumentReply {
 	t.Helper()
 
 	var out, errout bytes.Buffer
 
 	arguments := append([]string{"--root", root, "--format=json", "--offline"}, args...)
-	if code := Run(t.Context(), arguments, &out, &errout); code != want {
+	if code := cli.Run(t.Context(), arguments, &out, &errout); code != want || errout.Len() != 0 {
 		t.Fatalf("%v exit=%d want=%d output=%s stderr=%s", args, code, want, &out, &errout)
 	}
 
-	var reply response
+	var reply globalArgumentReply
 
 	err := json.Unmarshal(out.Bytes(), &reply)
 	if err != nil {
-		t.Fatalf("invalid JSON: %s", &out)
+		t.Fatalf("decode lock contract JSON: %v: %s", err, &out)
 	}
 
-	if reply.OK != (want == 0) {
-		t.Fatalf("JSON ok disagrees with exit: %+v", reply)
+	if reply.APIVersion != cli.APIVersion || reply.Command != args[0] || reply.OK != (want == 0) {
+		t.Fatalf("lock response envelope disagrees with command or exit: %+v", reply)
 	}
 
 	return reply
@@ -36,7 +38,7 @@ func invoke(t *testing.T, root string, want int, args ...string) response {
 func TestLockCommandsAndDrift(t *testing.T) {
 	t.Parallel()
 
-	root, files := cliFixture(t)
+	root, files := lockContractFixture(t)
 	fsRoot := openLockTestRoot(t, root)
 	invoke(t, root, 0, "validate", "--strict")
 	invoke(t, root, 6, "lock", "--check")
@@ -83,7 +85,7 @@ func TestLockUnreadablePathIsReportedWithoutMutation(t *testing.T) {
 		t.Run(command, func(t *testing.T) {
 			t.Parallel()
 
-			root, _ := cliFixture(t)
+			root, _ := lockContractFixture(t)
 			fsRoot := openLockTestRoot(t, root)
 			requireTestSuccess(t, fsRoot.Mkdir("otelplan.lock", 0o700), "create lockfile directory")
 
@@ -109,7 +111,7 @@ func TestLockUnreadablePathIsReportedWithoutMutation(t *testing.T) {
 func TestLockCommandsReadValidSymlinkWithoutChangingIt(t *testing.T) {
 	t.Parallel()
 
-	root, _ := cliFixture(t)
+	root, _ := lockContractFixture(t)
 	fsRoot := openLockTestRoot(t, root)
 	invoke(t, root, 0, "lock")
 
@@ -150,7 +152,7 @@ func TestLockCommandsReadValidSymlinkWithoutChangingIt(t *testing.T) {
 func TestLockReadCommandsPreserveExternalSymlinkTarget(t *testing.T) {
 	t.Parallel()
 
-	root, _ := cliFixture(t)
+	root, _ := lockContractFixture(t)
 	fsRoot := openLockTestRoot(t, root)
 	invoke(t, root, 0, "lock")
 
@@ -187,7 +189,7 @@ func assertLockSymlink(t *testing.T, root *os.Root) {
 func TestStrictWarningsAndUnsupportedBackend(t *testing.T) {
 	t.Parallel()
 
-	root, files := cliFixture(t)
+	root, files := lockContractFixture(t)
 	fsRoot := openLockTestRoot(t, root)
 	contents := files["otelplan.yaml"] + "  attributes:\n  - key: user_id\n    from: {constant: stable-test-id}\n"
 	writeLockTestFile(t, fsRoot, "otelplan.yaml", contents)
@@ -262,7 +264,7 @@ func assertEqualFile(t *testing.T, root *os.Root, name, want string) {
 	}
 }
 
-func assertDiagnostic(t *testing.T, reply response, message string) {
+func assertDiagnostic(t *testing.T, reply globalArgumentReply, message string) {
 	t.Helper()
 
 	for _, diagnostic := range reply.Diagnostics {
@@ -280,4 +282,17 @@ func requireTestSuccess(t *testing.T, err error, operation string) {
 	if err != nil {
 		t.Fatalf("%s: %v", operation, err)
 	}
+}
+
+func lockContractFixture(t *testing.T) (string, map[string]string) {
+	t.Helper()
+
+	policy := "apiVersion: otelplan.io/v1alpha1\n" +
+		"kind: InstrumentationPlan\n" +
+		"backend: {name: otelc, version: v1.1.0}\n" +
+		"rules:\n- id: operation\n  match:\n    functions: [Run]\n"
+	root, _, files := policyExecutionFixture(t,
+		"package app\nimport \"context\"\nfunc Run(ctx context.Context) error { return nil }\n", policy)
+
+	return root, files
 }

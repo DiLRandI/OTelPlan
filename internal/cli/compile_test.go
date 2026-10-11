@@ -1,4 +1,4 @@
-package cli
+package cli_test
 
 import (
 	"bytes"
@@ -9,7 +9,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DiLRandI/OTelPlan/internal/cli"
 	"github.com/DiLRandI/OTelPlan/internal/compiler"
+	"github.com/DiLRandI/OTelPlan/internal/testenv"
+	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
 func TestCompileCLI(t *testing.T) {
@@ -19,8 +22,8 @@ func TestCompileCLI(t *testing.T) {
 	}
 
 	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
-	prepareOfflineIntegration(t)
-	root, originals := cliFixture(t)
+	testenv.PrepareOffline(t, "../..", filepath.Join("testdata", "architectures", "common"))
+	root, originals := lockContractFixture(t)
 
 	project, err := os.OpenRoot(root)
 	if err != nil {
@@ -48,15 +51,15 @@ func verifyCompileOutput(t *testing.T, root, format string) {
 
 	args := []string{"compile", "--root", root, "--format", format, "--offline", "--verbose"}
 
-	code := Run(t.Context(), args, &out, &errout)
+	code := cli.Run(t.Context(), args, &out, &errout)
 	if code != 0 {
 		t.Fatalf("compile exit=%d: %s %s", code, &out, &errout)
 	}
 
 	if format == "json" {
 		var reply struct {
-			OK   bool           `json:"ok"`
-			Data compileSummary `json:"data"`
+			OK   bool                   `json:"ok"`
+			Data compileContractSummary `json:"data"`
 		}
 
 		err := json.Unmarshal(out.Bytes(), &reply)
@@ -158,7 +161,7 @@ func verifyCleanRetainsUnrelatedFile(t *testing.T, root string, project *os.Root
 
 	args := []string{"compile", "--root", root, "--clean", "--format=json", "--offline"}
 
-	code := Run(t.Context(), args, &out, &errout)
+	code := cli.Run(t.Context(), args, &out, &errout)
 	if code != 1 {
 		t.Fatalf("clean exit=%d: %s", code, &out)
 	}
@@ -185,12 +188,12 @@ func TestCompileCLIUsage(t *testing.T) {
 
 			for _, format := range []string{"text", "json"} {
 				var out, errout bytes.Buffer
-				if code := Run(t.Context(), append(args, "--format="+format), &out, &errout); code != 2 {
+				if code := cli.Run(t.Context(), append(args, "--format="+format), &out, &errout); code != 2 {
 					t.Fatalf("%v: exit=%d %s %s", args, code, &out, &errout)
 				}
 
 				if format == "json" {
-					var reply response
+					var reply globalArgumentReply
 
 					err := json.Unmarshal(out.Bytes(), &reply)
 					if err != nil || reply.OK || len(reply.Diagnostics) == 0 {
@@ -210,7 +213,7 @@ func TestCompileOfflineDisablesProxyBypass(t *testing.T) {
 		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
 	}
 
-	prepareOfflineIntegration(t)
+	testenv.PrepareOffline(t, "../..", filepath.Join("testdata", "architectures", "common"))
 
 	realGo, err := exec.LookPath("go")
 	if err != nil {
@@ -257,13 +260,13 @@ func TestCompileOfflineDisablesProxyBypass(t *testing.T) {
 	path := strings.Join([]string{wrapperDir, filepath.Dir(executable), os.Getenv("PATH")}, string(os.PathListSeparator))
 	t.Setenv("PATH", path)
 	t.Setenv("GONOPROXY", "*")
-	root, _ := cliFixture(t)
+	root, _ := lockContractFixture(t)
 
 	var out, errout bytes.Buffer
 
 	args := []string{"compile", "--root", root, "--offline", "--format=json"}
 
-	code := Run(t.Context(), args, &out, &errout)
+	code := cli.Run(t.Context(), args, &out, &errout)
 	if code != 0 {
 		t.Fatalf("offline compile exit=%d: %s %s", code, &out, &errout)
 	}
@@ -272,4 +275,10 @@ func TestCompileOfflineDisablesProxyBypass(t *testing.T) {
 	if err != nil {
 		t.Fatal("generated-source compilation did not enforce offline environment")
 	}
+}
+
+type compileContractSummary struct {
+	Path    string            `json:"path"`
+	Files   int               `json:"files"`
+	Backend model.LockBackend `json:"backend"`
 }

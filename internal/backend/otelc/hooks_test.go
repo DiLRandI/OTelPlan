@@ -1,4 +1,4 @@
-package otelc
+package otelc_test
 
 import (
 	"bytes"
@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DiLRandI/OTelPlan/internal/backend/otelc"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
@@ -25,13 +26,13 @@ const (
 func TestGenericRootHooksAvoidUnsupportedAPIs(t *testing.T) {
 	t.Parallel()
 
-	code, plan := genericRootFixture()
+	code, plan := genericHookFixture()
 	attribute := new(model.AttributePlan)
 	attribute.Key, attribute.From.Constant = "operation.kind", "generic"
 	attribute.Classification = model.ClassificationPublic
 	plan.Targets[0].Attributes = []model.AttributePlan{*attribute}
 
-	source, err := RenderHooks(SupportedVersion, "runtime", code, plan, hookImportPath)
+	source, err := otelc.RenderHooks(otelc.SupportedVersion, "runtime", code, plan, hookImportPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +56,7 @@ func TestRenderHooksDeterministicAndDoesNotMutatePlan(t *testing.T) {
 	code, plan := hookFixture()
 	original := append([]model.ResolvedTarget(nil), plan.Targets...)
 
-	want, err := RenderHooks(SupportedVersion, "runtime-1.2.3", code, plan, hookImportPath)
+	want, err := otelc.RenderHooks(otelc.SupportedVersion, "runtime-1.2.3", code, plan, hookImportPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +72,7 @@ func TestRenderHooksDeterministicAndDoesNotMutatePlan(t *testing.T) {
 
 	plan.Targets[0], plan.Targets[2] = plan.Targets[2], plan.Targets[0]
 
-	got, err := RenderHooks(SupportedVersion, "runtime-1.2.3", code, plan, hookImportPath)
+	got, err := otelc.RenderHooks(otelc.SupportedVersion, "runtime-1.2.3", code, plan, hookImportPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,14 +87,14 @@ func TestRenderHooksMatchesRuleBindingsAndSignatureIndexes(t *testing.T) {
 
 	code, plan := hookFixture()
 
-	source, err := RenderHooks(SupportedVersion, "runtime", code, plan, hookImportPath)
+	source, err := otelc.RenderHooks(otelc.SupportedVersion, "runtime", code, plan, hookImportPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	file := parseGeneratedHooks(t, source)
 
-	_, bindings, err := RenderRules(SupportedVersion, code, plan, hookImportPath)
+	_, bindings, err := otelc.RenderRules(otelc.SupportedVersion, code, plan, hookImportPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +126,7 @@ func TestRenderHooksMatchesRuleBindingsAndSignatureIndexes(t *testing.T) {
 func TestRenderHooksUsesTypedVariadicParameter(t *testing.T) {
 	t.Parallel()
 
-	code, plan := compatibilityFixture()
+	code, plan := argumentHookFixture()
 	code.Symbols[0].Variadic = true
 	code.Symbols[0].Kind = model.SymbolFunction
 	code.Symbols[0].Name = "Run"
@@ -136,14 +137,14 @@ func TestRenderHooksUsesTypedVariadicParameter(t *testing.T) {
 	plan.Targets[0].Signature = code.Symbols[0].Signature
 	plan.Targets[0].SpanName = "Run"
 
-	source, err := RenderHooks(SupportedVersion, "runtime", code, plan, hookImportPath)
+	source, err := otelc.RenderHooks(otelc.SupportedVersion, "runtime", code, plan, hookImportPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	file := parseGeneratedHooks(t, source)
 
-	_, bindings, err := RenderRules(SupportedVersion, code, plan, hookImportPath)
+	_, bindings, err := otelc.RenderRules(otelc.SupportedVersion, code, plan, hookImportPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,19 +176,19 @@ func TestRenderHooksUsesMethodContextOffsetAndStableResultIndexes(t *testing.T) 
 	plan.Targets[1].ContextStrategy = model.ContextStrategy{Strategy: model.ContextStrategyArgument, Index: 0}
 	plan.Targets[1].ErrorStrategy = model.ErrorStrategy{Record: true, Indexes: []int{0}}
 
-	source, err := RenderHooks(SupportedVersion, "runtime", code, plan, hookImportPath)
+	source, err := otelc.RenderHooks(otelc.SupportedVersion, "runtime", code, plan, hookImportPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	file := parseGeneratedHooks(t, source)
 
-	_, bindings, err := RenderRules(SupportedVersion, code, plan, hookImportPath)
+	_, bindings, err := otelc.RenderRules(otelc.SupportedVersion, code, plan, hookImportPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var methodBinding HookBinding
+	var methodBinding otelc.HookBinding
 
 	for _, binding := range bindings {
 		if binding.Symbol == method.ID {
@@ -225,7 +226,7 @@ func TestRenderHooksUsesMethodContextOffsetAndStableResultIndexes(t *testing.T) 
 func TestRenderHooksQuotesSpanAndRuntimeVersion(t *testing.T) {
 	t.Parallel()
 
-	code, plan := ruleFixture()
+	code, plan := bundleFixture()
 	span := "line\n\"quoted\\span"
 	runtime := "runtime\n\"version\\suffix"
 
@@ -233,7 +234,7 @@ func TestRenderHooksQuotesSpanAndRuntimeVersion(t *testing.T) {
 		plan.Targets[i].SpanName = span
 	}
 
-	source, err := RenderHooks(SupportedVersion, runtime, code, plan, hookImportPath)
+	source, err := otelc.RenderHooks(otelc.SupportedVersion, runtime, code, plan, hookImportPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,11 +255,11 @@ func TestRenderHooksQuotesSpanAndRuntimeVersion(t *testing.T) {
 func TestRenderHooksEmptyPlanHasNoUnusedImports(t *testing.T) {
 	t.Parallel()
 
-	code, _ := ruleFixture()
+	code, _ := bundleFixture()
 
 	plan := new(model.ResolvedPlan)
 
-	source, err := RenderHooks(SupportedVersion, "runtime", code, *plan, hookImportPath)
+	source, err := otelc.RenderHooks(otelc.SupportedVersion, "runtime", code, *plan, hookImportPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,7 +341,7 @@ func TestRenderHooksRejectsUnsupportedPlansWithoutPartialOutput(t *testing.T) {
 				runtime = ""
 			}
 
-			data, firstErr := RenderHooks(SupportedVersion, runtime, code, plan, hookImportPath)
+			data, firstErr := otelc.RenderHooks(otelc.SupportedVersion, runtime, code, plan, hookImportPath)
 			if firstErr == nil || data != nil {
 				t.Fatalf("unsupported plan produced partial output: %q, %v", data, firstErr)
 			}
@@ -353,7 +354,7 @@ func TestRenderHooksRejectsUnsupportedPlansWithoutPartialOutput(t *testing.T) {
 				t.Fatalf("error = %q, want %q", firstErr, testCase.wantExactError)
 			}
 
-			secondData, secondErr := RenderHooks(SupportedVersion, runtime, code, plan, hookImportPath)
+			secondData, secondErr := otelc.RenderHooks(otelc.SupportedVersion, runtime, code, plan, hookImportPath)
 			if secondData != nil || !errors.Is(secondErr, firstErr) {
 				t.Fatalf("repeated error %q does not match first error %q", secondErr, firstErr)
 			}
@@ -375,10 +376,10 @@ func TestRenderHooksPropagatesRenderRulesValidation(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			code, plan := ruleFixture()
+			code, plan := bundleFixture()
 			testCase.change(code)
 
-			data, renderErr := RenderHooks(SupportedVersion, "runtime", code, plan, hookImportPath)
+			data, renderErr := otelc.RenderHooks(otelc.SupportedVersion, "runtime", code, plan, hookImportPath)
 			if renderErr == nil || data != nil {
 				t.Fatalf("invalid RenderRules target produced output: %q, %v", data, renderErr)
 			}
@@ -387,7 +388,7 @@ func TestRenderHooksPropagatesRenderRulesValidation(t *testing.T) {
 }
 
 func hookFixture() (*model.CodeModel, model.ResolvedPlan) {
-	code, plan := ruleFixture()
+	code, plan := bundleFixture()
 	for i := range plan.Targets {
 		plan.Targets[i].SpanName = string(plan.Targets[i].SymbolID)
 	}
@@ -467,4 +468,62 @@ func stringLiterals(t *testing.T, source []byte) []string {
 
 func containsLiteral(literals []string, want string) bool {
 	return slices.Contains(literals, want)
+}
+
+func argumentHookFixture() (*model.CodeModel, model.ResolvedPlan) {
+	symbol := new(model.Symbol)
+	symbol.ID = "example.com/app.Run"
+	symbol.HasBody = true
+	symbol.Signature = "func(context.Context) error"
+	parameter := new(model.Parameter)
+	parameter.Type = "context.Context"
+	symbol.Parameters = []model.Parameter{*parameter}
+	result := new(model.Result)
+	result.Type = "error"
+	symbol.Results = []model.Result{*result}
+	symbol.ContextIndexes = []int{0}
+	symbol.ErrorIndexes = []int{0}
+
+	code := new(model.CodeModel)
+	code.Symbols = []model.Symbol{*symbol}
+	target := new(model.ResolvedTarget)
+	target.SymbolID = symbol.ID
+	target.Signature = symbol.Signature
+	target.RuleID = "run"
+	target.ContextStrategy.Strategy = model.ContextStrategyArgument
+	target.ErrorStrategy.Record = true
+	target.ErrorStrategy.Indexes = []int{0}
+
+	plan := new(model.ResolvedPlan)
+	plan.Targets = []model.ResolvedTarget{*target}
+
+	return code, *plan
+}
+
+func genericHookFixture() (*model.CodeModel, model.ResolvedPlan) {
+	code, plan := bundleFixture()
+	code.Symbols = code.Symbols[:1]
+	plan.Targets = plan.Targets[:1]
+	symbol := &code.Symbols[0]
+	symbol.Signature = "func[T any](T, bool) (T, error)"
+	symbol.Generics = new(model.GenericInfo)
+	symbol.Generics.TypeParams = []string{"T"}
+	valueParameter := new(model.Parameter)
+	valueParameter.Name, valueParameter.Type = "value", "T"
+	failParameter := new(model.Parameter)
+	failParameter.Name, failParameter.Type = "fail", "bool"
+	symbol.Parameters = []model.Parameter{*valueParameter, *failParameter}
+	outputResult := new(model.Result)
+	outputResult.Name, outputResult.Type = "output", "T"
+	errorResult := new(model.Result)
+	errorResult.Name, errorResult.Type = "err", "error"
+	symbol.Results = []model.Result{*outputResult, *errorResult}
+	symbol.ErrorIndexes = []int{1}
+	symbol.Ownership = model.OwnershipApplication
+	plan.Targets[0].Signature = symbol.Signature
+	plan.Targets[0].SpanName = "generic.operation"
+	plan.Targets[0].ErrorStrategy.Record = true
+	plan.Targets[0].ErrorStrategy.Indexes = []int{1}
+
+	return code, plan
 }

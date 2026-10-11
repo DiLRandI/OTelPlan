@@ -14,6 +14,7 @@ import (
 
 	"github.com/DiLRandI/OTelPlan/internal/compiler"
 	"github.com/DiLRandI/OTelPlan/internal/lockfile"
+	"github.com/DiLRandI/OTelPlan/internal/testenv"
 )
 
 func TestBuildCLIWithPinnedBackend(t *testing.T) {
@@ -402,7 +403,7 @@ func TestBuildCLILibraryWithoutOutput(t *testing.T) {
 func runLibraryBuildContract(t *testing.T) {
 	t.Helper()
 
-	root, _ := cliFixture(t)
+	root := cliFixture(t)
 	original := snapshotPinnedBuildFixture(t, root)
 
 	var stdout, stderr bytes.Buffer
@@ -749,12 +750,12 @@ func TestGenericRootSpansWithPinnedBackend(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	invokeArchitecture(t, root, true, 0, "lock")
-	original := snapshotArchitecture(t, root)
+	invokeBuildContract(t, root, 0, "lock")
+	original := testenv.SnapshotFiles(t, root)
 	generated := filepath.Join(t.TempDir(), "generated")
-	invokeArchitecture(t, root, true, 0, "compile", "--output", generated)
+	invokeBuildContract(t, root, 0, "compile", "--output", generated)
 	outputDir := t.TempDir()
-	invokeArchitecture(t, root, true, 0, "build", "--", "-race", "-buildvcs=false",
+	invokeBuildContract(t, root, 0, "build", "--", "-race", "-buildvcs=false",
 		"-o", filepath.Join(outputDir, "generic-probe"), ".")
 
 	command := exec.CommandContext(t.Context(), "./generic-probe")
@@ -766,8 +767,8 @@ func TestGenericRootSpansWithPinnedBackend(t *testing.T) {
 	}
 
 	checkGenericRootTrace(t, output)
-	invokeArchitecture(t, root, true, 0, "lock", "--check")
-	checkArchitectureImmutability(t, original, snapshotArchitecture(t, root))
+	invokeBuildContract(t, root, 0, "lock", "--check")
+	testenv.AssertFilesUnchanged(t, original, testenv.SnapshotFiles(t, root))
 	checkGenericContextRejection(t, root)
 }
 
@@ -790,12 +791,12 @@ func TestGenericTypedCapturesWithPinnedBackend(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	invokeArchitecture(t, root, true, 0, "lock", "--config", "capture.yaml")
-	original := snapshotArchitecture(t, root)
-	invokeArchitecture(t, root, true, 0, "compile", "--config", "capture.yaml",
+	invokeBuildContract(t, root, 0, "lock", "--config", "capture.yaml")
+	original := testenv.SnapshotFiles(t, root)
+	invokeBuildContract(t, root, 0, "compile", "--config", "capture.yaml",
 		"--output", filepath.Join(t.TempDir(), "generated"))
 	outputDir := t.TempDir()
-	invokeArchitecture(t, root, true, 0, "build", "--config", "capture.yaml", "--", "-race", "-buildvcs=false",
+	invokeBuildContract(t, root, 0, "build", "--config", "capture.yaml", "--", "-race", "-buildvcs=false",
 		"-o", filepath.Join(outputDir, "capture-probe"), "./cmd/captures")
 
 	command := exec.CommandContext(t.Context(), "./capture-probe")
@@ -807,8 +808,8 @@ func TestGenericTypedCapturesWithPinnedBackend(t *testing.T) {
 	}
 
 	checkGenericCaptureTrace(t, output)
-	invokeArchitecture(t, root, true, 0, "lock", "--config", "capture.yaml", "--check")
-	checkArchitectureImmutability(t, original, snapshotArchitecture(t, root))
+	invokeBuildContract(t, root, 0, "lock", "--config", "capture.yaml", "--check")
+	testenv.AssertFilesUnchanged(t, original, testenv.SnapshotFiles(t, root))
 	checkGenericCaptureRejections(t, root)
 	checkGenericReceiverInferenceFailure(t, root)
 }
@@ -832,9 +833,9 @@ rules:
 		t.Fatal(err)
 	}
 
-	original := snapshotArchitecture(t, root)
+	original := testenv.SnapshotFiles(t, root)
 	output := openIntegrationDirectory(t, t.TempDir())
-	invokeArchitecture(t, root, true, 8, "build", "--config", "inference.yaml", "--", "-buildvcs=false",
+	invokeBuildContract(t, root, 8, "build", "--config", "inference.yaml", "--", "-buildvcs=false",
 		"-o", filepath.Join(output.Name(), "blocked"), "./cmd/captures")
 
 	_, err = output.Stat("blocked")
@@ -842,7 +843,7 @@ rules:
 		t.Fatal("failed generic inference published a binary")
 	}
 
-	checkArchitectureImmutability(t, original, snapshotArchitecture(t, root))
+	testenv.AssertFilesUnchanged(t, original, testenv.SnapshotFiles(t, root))
 }
 
 type genericCapturePair struct {
@@ -935,8 +936,8 @@ func checkGenericCaptureRejections(t *testing.T, root string) {
 			t.Fatal(err)
 		}
 
-		original := snapshotArchitecture(t, root)
-		reply := invokeArchitecture(t, root, true, rejection.exit, "validate", "--config", "rejected.yaml")
+		original := testenv.SnapshotFiles(t, root)
+		reply := invokeBuildContract(t, root, rejection.exit, "validate", "--config", "rejected.yaml")
 		found := false
 
 		for _, diagnostic := range reply.Diagnostics {
@@ -949,7 +950,7 @@ func checkGenericCaptureRejections(t *testing.T, root string) {
 			t.Fatalf("missing generic capture rejection %s: %+v", rejection.code, reply.Diagnostics)
 		}
 
-		checkArchitectureImmutability(t, original, snapshotArchitecture(t, root))
+		testenv.AssertFilesUnchanged(t, original, testenv.SnapshotFiles(t, root))
 	}
 }
 
@@ -973,9 +974,9 @@ rules:
 		t.Fatal(err)
 	}
 
-	original := snapshotArchitecture(t, root)
-	invokeArchitecture(t, root, true, 7, "validate")
-	checkArchitectureImmutability(t, original, snapshotArchitecture(t, root))
+	original := testenv.SnapshotFiles(t, root)
+	invokeBuildContract(t, root, 7, "validate")
+	testenv.AssertFilesUnchanged(t, original, testenv.SnapshotFiles(t, root))
 }
 
 type genericTraceSpan struct {
@@ -1221,4 +1222,53 @@ func checkVariadicTrace(t *testing.T, output []byte) {
 			t.Fatalf("variadic spans have incorrect parent or trace: %s", output)
 		}
 	}
+}
+
+func invokeBuildContract(t *testing.T, root string, want int, args ...string) response {
+	t.Helper()
+
+	arguments := append([]string{"--root", root, "--format=json", "--offline"}, args...)
+
+	var output, stderr bytes.Buffer
+
+	code := Run(t.Context(), arguments, &output, &stderr)
+	if code != want {
+		t.Fatalf("%v exit=%d want=%d output=%s stderr=%s", args, code, want, &output, &stderr)
+	}
+
+	var reply response
+
+	err := json.Unmarshal(output.Bytes(), &reply)
+	if err != nil {
+		t.Fatalf("invalid architecture command JSON: %v: %s", err, &output)
+	}
+
+	if reply.OK != (want == 0) {
+		t.Fatalf("architecture command JSON disagrees with exit: %+v", reply)
+	}
+
+	return reply
+}
+
+func prepareOfflineIntegration(t *testing.T) {
+	t.Helper()
+	testenv.PrepareOffline(t, "../..", filepath.Join("testdata", "architectures", "common"))
+}
+
+func openIntegrationDirectory(t *testing.T, directory string) *os.Root {
+	t.Helper()
+
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		t.Fatalf("open integration directory: %v", err)
+	}
+
+	t.Cleanup(func() {
+		err := root.Close()
+		if err != nil {
+			t.Errorf("close integration directory: %v", err)
+		}
+	})
+
+	return root
 }

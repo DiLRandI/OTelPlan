@@ -70,12 +70,15 @@ func preparedBuildExecutable(t *testing.T) string {
 	source := fmt.Sprintf(`package main
 import ("fmt"; "os"; "time")
 func main() {
- if len(os.Args) > 1 && os.Args[1] == "version" { fmt.Print("otelc version v1.1.0"); return }
+ if len(os.Args) > 1 && os.Args[1] == "version" {
+  if err := os.WriteFile(%q, nil, 0600); err != nil { os.Exit(1) }
+  fmt.Print("otelc version v1.1.0"); return
+ }
  if os.Getenv("OTELPLAN_TEST_MODE") == "fail" { os.Exit(%d) }
  if err := os.WriteFile(os.Getenv("OTELPLAN_TEST_READY"), nil, 0600); err != nil { os.Exit(1) }
  time.Sleep(time.Hour)
 }
-`, preparedBuildFailureCode)
+`, filepath.Join(root.Name(), "version-ran"), preparedBuildFailureCode)
 
 	err = root.WriteFile("backend.go", []byte(source), 0o600)
 	if err != nil {
@@ -151,12 +154,35 @@ func TestPreparedBuildBackendIdentitySharesCause(t *testing.T) {
 	t.Parallel()
 
 	request := preparedBuildFixture(t)
+
+	directory, err := os.OpenRoot(filepath.Dir(request.Executable))
+	if err != nil {
+		t.Fatalf("open backend verification fixture: %v", err)
+	}
+
+	t.Cleanup(func() {
+		closeErr := directory.Close()
+		if closeErr != nil {
+			t.Errorf("close backend verification fixture: %v", closeErr)
+		}
+	})
+
+	err = directory.Remove("version-ran")
+	if err != nil {
+		t.Fatalf("reset backend version execution marker: %v", err)
+	}
+
 	request.Backend.Digest = fmt.Sprintf("sha256:%x", sha256.Sum256(nil))
 	first := compiler.BuildPrepared(t.Context(), request)
 
 	second := compiler.BuildPrepared(t.Context(), request)
 	if first == nil || !errors.Is(second, first) || first.Error() != "build backend identity changed" {
 		t.Fatal("backend mismatch lost its stable cause or meaningful message", first, second)
+	}
+
+	_, err = directory.Stat("version-ran")
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("backend with mismatched digest executed before rejection: %v", err)
 	}
 }
 

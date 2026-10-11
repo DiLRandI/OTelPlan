@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -11,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/DiLRandI/OTelPlan/internal/compiler"
+	"github.com/DiLRandI/OTelPlan/internal/lockfile"
 )
 
 func TestBuildCLIWithPinnedBackend(t *testing.T) {
@@ -21,6 +24,23 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 
 	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	prepareOfflineIntegration(t)
+	root := pinnedBuildFixture(t)
+	original := snapshotPinnedBuildFixture(t, root)
+	cliPath := buildPinnedCLI(t)
+	probe := runPinnedBuild(t, cliPath, root)
+	assertPinnedArtifact(t, probe, filepath.Join(root, "bin", "probe"))
+	assertPinnedTrace(t, probe.Path)
+
+	for _, existing := range []bool{false, true} {
+		assertPinnedDirectoryBuild(t, cliPath, root, existing)
+	}
+
+	assertPinnedSourceGuard(t, root)
+	assertPinnedBuildFixtureUnchanged(t, root, original)
+}
+
+func pinnedBuildFixture(t *testing.T) string {
+	t.Helper()
 
 	fixture, err := filepath.Abs("../backend/otelc/testdata/accessors")
 	if err != nil {
@@ -32,186 +52,338 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	policy := []byte("apiVersion: otelplan.io/v1alpha1\nkind: InstrumentationPlan\nbackend: {name: otelc, version: v1.1.0}\nproject: {packages: [./ops]}\nrules:\n- id: operation\n  match:\n    methods: [Handle]\n")
-	if err := os.WriteFile(filepath.Join(root, "otelplan.yaml"), policy, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	directory := openIntegrationDirectory(t, root)
+	policy := []byte("apiVersion: otelplan.io/v1alpha1\n" +
+		"kind: InstrumentationPlan\n" +
+		"backend: {name: otelc, version: v1.1.0}\n" +
+		"project: {packages: [./ops]}\nrules:\n- id: operation\n" +
+		"  match:\n    methods: [Handle]\n")
 
-	second := filepath.Join(root, "cmd", "second")
-	if err := os.MkdirAll(second, 0o700); err != nil {
-		t.Fatal(err)
-	}
-
-	mainSource, err := os.ReadFile(filepath.Join(root, "main.go"))
+	err = directory.WriteFile("otelplan.yaml", policy, 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(filepath.Join(second, "main.go"), mainSource, 0o600); err != nil {
+	err = directory.MkdirAll("cmd/second", 0o700)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	original := map[string][]byte{}
+	mainSource, err := directory.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	if err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	err = directory.WriteFile("cmd/second/main.go", mainSource, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return root
+}
+
+func snapshotPinnedBuildFixture(t *testing.T, root string) map[string][]byte {
+	t.Helper()
+
+	directory := openIntegrationDirectory(t, root)
+	files := make(map[string][]byte)
+
+	err := fs.WalkDir(directory.FS(), ".", func(name string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return fmt.Errorf("snapshot build fixture %s: %w", name, walkErr)
 		}
 
 		if entry.IsDir() {
 			return nil
 		}
 
-		data, err := os.ReadFile(path)
-		original[path] = data
+		data, readErr := directory.ReadFile(name)
+		if readErr != nil {
+			return fmt.Errorf("snapshot build fixture %s: %w", name, readErr)
+		}
 
-		return err
-	}); err != nil {
+		files[name] = data
+
+		return nil
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	cli := filepath.Join(t.TempDir(), "otelplan")
+	return files
+}
 
-	command := exec.Command("go", "build", "-o", cli, "../../cmd/otelplan")
-	if output, err := command.CombinedOutput(); err != nil {
+func buildPinnedCLI(t *testing.T) string {
+	t.Helper()
+
+	cliPath := filepath.Join(t.TempDir(), "otelplan")
+	command := exec.CommandContext(t.Context(), "go", "build", "-o", cliPath, "../../cmd/otelplan")
+
+	output, err := command.CombinedOutput()
+	if err != nil {
 		t.Fatalf("build CLI: %v %s", err, output)
 	}
 
-	command = exec.Command(cli, "build", "--root", root, "--format=json", "--offline", "--", "-race", "-trimpath", "-buildvcs=false", "-o", "bin/probe", ".")
+	return cliPath
+}
+
+type pinnedBuildReply struct {
+	OK   bool         `json:"ok"`
+	Data buildSummary `json:"data"`
+}
+
+func runPinnedBuild(t *testing.T, cliPath, root string) buildSummary {
+	t.Helper()
+
+	args := []string{"build", "--root", root, "--format=json", "--offline", "--",
+		"-race", "-trimpath", "-buildvcs=false", "-o", "bin/probe", "."}
+	command := exec.CommandContext(t.Context(), cliPath, args...)
 
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("build command: %v %s", err, output)
 	}
 
-	var reply struct {
-		OK   bool         `json:"ok"`
-		Data buildSummary `json:"data"`
-	}
+	var reply pinnedBuildReply
 
-	if err := json.Unmarshal(output, &reply); err != nil || !reply.OK || reply.Data.Digest == "" {
+	err = json.Unmarshal(output, &reply)
+	if err != nil || !reply.OK || reply.Data.Digest == "" {
 		t.Fatalf("bad build JSON: %s", output)
 	}
 
-	output, err = exec.Command(reply.Data.Path).Output()
+	return reply.Data
+}
+
+func assertPinnedArtifact(t *testing.T, artifact buildSummary, expectedPath string) {
+	t.Helper()
+
+	if artifact.Path != expectedPath {
+		t.Fatalf("build path=%s, want %s", artifact.Path, expectedPath)
+	}
+
+	directory := openIntegrationDirectory(t, filepath.Dir(artifact.Path))
+
+	data, err := directory.ReadFile(filepath.Base(artifact.Path))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var traces struct{ Spans []struct{ Name string } }
-	if err := json.Unmarshal(output, &traces); err != nil || len(traces.Spans) != 5 {
+	if artifact.Digest != lockfile.Digest(data) {
+		t.Fatalf("build digest=%s does not match artifact", artifact.Digest)
+	}
+}
+
+type pinnedTraceSpan struct {
+	Name string `json:"Name"`
+}
+
+type pinnedTraceReply struct {
+	Spans []pinnedTraceSpan `json:"Spans"`
+}
+
+func assertPinnedTrace(t *testing.T, path string) {
+	t.Helper()
+
+	command := exec.CommandContext(t.Context(), path)
+
+	output, err := command.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var trace pinnedTraceReply
+
+	err = json.Unmarshal(output, &trace)
+	if err != nil || len(trace.Spans) != 5 {
 		t.Fatalf("missing instrumented spans: %s", output)
 	}
+}
 
-	for _, existing := range []bool{false, true} {
-		destination := filepath.Join(t.TempDir(), "binaries")
+type pinnedDirectoryReply struct {
+	OK   bool `json:"ok"`
+	Data struct {
+		Files []buildFile `json:"files"`
+	} `json:"data"`
+}
 
-		argument := destination + string(os.PathSeparator)
+func assertPinnedDirectoryBuild(t *testing.T, cliPath, root string, existing bool) {
+	t.Helper()
 
-		if existing {
-			err := os.Mkdir(destination, 0o700)
-			if err != nil {
-				t.Fatal(err)
-			}
+	destination, argument, directory := preparePinnedDirectoryOutput(t, existing)
+	files := runPinnedDirectoryBuild(t, cliPath, root, argument)
+	assertPinnedDirectoryFiles(t, files, destination)
 
-			err = os.WriteFile(filepath.Join(destination, "keep"), []byte("keep"), 0o600)
-			if err != nil {
-				t.Fatal(err)
-			}
+	if existing {
+		assertPinnedDirectoryPreflightFailure(t, root, destination, argument, cliPath, files)
 
-			argument = destination
+		keep, err := directory.ReadFile("binaries/keep")
+		if err != nil || string(keep) != "keep" {
+			t.Fatal("changed unrelated output directory file")
+		}
+	}
+}
+
+func preparePinnedDirectoryOutput(t *testing.T, existing bool) (string, string, *os.Root) {
+	t.Helper()
+
+	parentPath := t.TempDir()
+	directory := openIntegrationDirectory(t, parentPath)
+	destination := filepath.Join(parentPath, "binaries")
+
+	argument := destination + string(os.PathSeparator)
+	if !existing {
+		return destination, argument, directory
+	}
+
+	err := directory.MkdirAll("binaries", 0o700)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = directory.WriteFile("binaries/keep", []byte("keep"), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return destination, destination, directory
+}
+
+func runPinnedDirectoryBuild(t *testing.T, cliPath, root, argument string) []buildFile {
+	t.Helper()
+
+	args := []string{"build", "--root", root, "--format=json", "--offline", "--verbose", "--",
+		"-buildvcs=false", "-o", argument, ".", "./cmd/second"}
+	command := exec.CommandContext(t.Context(), cliPath, args...)
+
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("directory build: %v %s", err, output)
+	}
+
+	var reply pinnedDirectoryReply
+
+	err = json.Unmarshal(output, &reply)
+	if err != nil || !reply.OK || len(reply.Data.Files) != 2 {
+		t.Fatalf("invalid directory response: %s", output)
+	}
+
+	return reply.Data.Files
+}
+
+func assertPinnedDirectoryFiles(t *testing.T, files []buildFile, destination string) {
+	t.Helper()
+
+	for _, file := range files {
+		if filepath.Dir(file.Path) != destination || file.Digest == "" {
+			t.Fatalf("invalid published file: %+v", file)
 		}
 
-		var out, errout bytes.Buffer
+		var artifact buildSummary
 
-		buildArgs := []string{"build", "--root", root, "--format=json", "--offline", "--verbose", "--",
-			"-buildvcs=false", "-o", argument, ".", "./cmd/second"}
-		if exit := Run(t.Context(), buildArgs, &out, &errout); exit != 0 {
-			t.Fatalf("directory build exit=%d: %s %s", exit, &out, &errout)
-		}
+		artifact.Path, artifact.Digest = file.Path, file.Digest
+		assertPinnedArtifact(t, artifact, file.Path)
+		assertPinnedTrace(t, file.Path)
+	}
+}
 
-		var directoryReply struct {
-			OK   bool `json:"ok"`
-			Data struct {
-				Files []struct{ Path, Digest string } `json:"files"`
-			} `json:"data"`
-		}
+func assertPinnedDirectoryPreflightFailure(t *testing.T, root, destination, argument, cliPath string,
+	files []buildFile) {
+	t.Helper()
 
-		err := json.Unmarshal(out.Bytes(), &directoryReply)
+	directory := openIntegrationDirectory(t, destination)
+	first := preparePinnedPreflight(t, directory, files)
+	command := exec.CommandContext(t.Context(), cliPath, "build", "--root", root, "--format=json", "--offline",
+		"--", "-buildvcs=false", "-o", argument, ".", "./cmd/second")
+	output, err := command.CombinedOutput()
 
-		if err != nil || !directoryReply.OK || len(directoryReply.Data.Files) != 2 {
-			t.Fatalf("invalid directory response: %s", &out)
-		}
+	var exitErr *exec.ExitError
+	if err == nil || !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+		t.Fatalf("invalid destination unexpectedly succeeded: %s", output)
+	}
 
-		for _, file := range directoryReply.Data.Files {
-			if filepath.Dir(file.Path) != destination || file.Digest == "" {
-				t.Fatalf("invalid published file: %+v", file)
-			}
+	var reply response
 
-			output, err := exec.Command(file.Path).Output()
-			if err != nil {
-				t.Fatal(err)
-			}
+	decodeErr := json.Unmarshal(output, &reply)
+	if decodeErr != nil || reply.OK {
+		t.Fatalf("invalid destination response: %s", output)
+	}
 
-			if err := json.Unmarshal(output, &traces); err != nil || len(traces.Spans) != 5 {
-				t.Fatalf("missing instrumented spans: %s", output)
-			}
-		}
+	data, readErr := directory.ReadFile(first)
+	if readErr != nil || string(data) != "previous" {
+		t.Fatal("invalid destination partially replaced output")
+	}
+}
 
-		if existing {
-			first, last := directoryReply.Data.Files[0].Path, directoryReply.Data.Files[1].Path
+func preparePinnedPreflight(t *testing.T, directory *os.Root, files []buildFile) string {
+	t.Helper()
 
-			previous := filepath.Join(destination, "previous")
+	first, last := filepath.Base(files[0].Path), filepath.Base(files[1].Path)
 
-			err := os.WriteFile(previous, []byte("previous"), 0o600)
-			if err != nil {
-				t.Fatal(err)
-			}
+	err := directory.WriteFile("previous", []byte("previous"), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-			err = os.Rename(previous, first)
-			if err != nil {
-				t.Fatal(err)
-			}
+	err = directory.Rename("previous", first)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-			err = os.Remove(last)
-			if err != nil {
-				t.Fatal(err)
-			}
+	err = directory.Remove(last)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-			err = os.Mkdir(last, 0o700)
-			if err != nil {
-				t.Fatal(err)
-			}
+	err = directory.Mkdir(last, 0o700)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-			out.Reset()
-			errout.Reset()
+	return first
+}
 
-			if exit := Run(t.Context(), []string{"build", "--root", root, "--format=json", "--offline", "--", "-buildvcs=false", "-o", argument, ".", "./cmd/second"}, &out, &errout); exit != 1 {
-				t.Fatalf("invalid destination exit=%d: %s", exit, &out)
-			}
+func assertPinnedSourceGuard(t *testing.T, root string) {
+	t.Helper()
 
-			if data, err := os.ReadFile(first); err != nil || string(data) != "previous" {
-				t.Fatal("invalid destination partially replaced output")
-			}
-		}
+	directory := openIntegrationDirectory(t, root)
 
-		if existing {
-			data, err := os.ReadFile(filepath.Join(destination, "keep"))
-			if err != nil || string(data) != "keep" {
-				t.Fatal("changed unrelated output directory file")
-			}
+	before, err := directory.ReadFile("go.mod")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+
+	exit := Run(t.Context(), []string{"build", "--root", root, "--format=json", "--", "-o", "go.mod", "."},
+		&stdout, &stderr)
+	if exit != 2 {
+		t.Fatalf("source output exit=%d: %s", exit, &stdout)
+	}
+
+	after, err := directory.ReadFile("go.mod")
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("source guard changed go.mod")
+	}
+}
+
+func assertPinnedBuildFixtureUnchanged(t *testing.T, root string, original map[string][]byte) {
+	t.Helper()
+
+	current := snapshotPinnedBuildFixture(t, root)
+	if len(current) != len(original)+1 {
+		t.Fatalf("build changed source file set: got %d files, want %d plus bin/probe", len(current), len(original))
+	}
+
+	for name, want := range original {
+		got, exists := current[name]
+		if !exists || !bytes.Equal(got, want) {
+			t.Fatalf("changed source file %s", name)
 		}
 	}
 
-	var guarded, guardErr bytes.Buffer
-	if exit := Run(t.Context(), []string{"build", "--root", root, "--format=json", "--", "-o", "go.mod", "."}, &guarded, &guardErr); exit != 2 {
-		t.Fatalf("source output exit=%d: %s", exit, &guarded)
-	}
-
-	for path, want := range original {
-		got, err := os.ReadFile(path)
-		if err != nil || !bytes.Equal(got, want) {
-			t.Fatalf("changed source file %s", path)
+	for name := range current {
+		if _, exists := original[name]; !exists && name != "bin/probe" {
+			t.Fatalf("build added unexpected source file %s", name)
 		}
 	}
 }
@@ -242,26 +414,82 @@ func TestBuildCLILibraryWithoutOutput(t *testing.T) {
 
 	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	prepareOfflineIntegration(t)
-	root, original := cliFixture(t)
+	runLibraryBuildContract(t)
+}
 
-	var out, errout bytes.Buffer
+func runLibraryBuildContract(t *testing.T) {
+	t.Helper()
 
-	if exit := Run(t.Context(), []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "."}, &out, &errout); exit != 0 {
-		t.Fatalf("library build exit=%d: %s %s", exit, &out, &errout)
+	root, _ := cliFixture(t)
+	original := snapshotPinnedBuildFixture(t, root)
+
+	var stdout, stderr bytes.Buffer
+
+	args := []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "."}
+
+	exit := Run(t.Context(), args, &stdout, &stderr)
+	if exit != 0 || stderr.Len() != 0 {
+		t.Fatalf("library build exit=%d: stdout=%s stderr=%s", exit, &stdout, &stderr)
 	}
 
-	var reply struct {
-		OK   bool         `json:"ok"`
-		Data buildSummary `json:"data"`
+	assertLibraryBuildReply(t, stdout.Bytes())
+
+	assertLibraryFixtureUnchanged(t, root, original)
+}
+
+func assertLibraryBuildReply(t *testing.T, output []byte) {
+	t.Helper()
+
+	var reply libraryBuildReply
+
+	err := json.Unmarshal(output, &reply)
+	if err != nil {
+		t.Fatalf("invalid library response: %v, %s", err, output)
 	}
 
-	if err := json.Unmarshal(out.Bytes(), &reply); err != nil || !reply.OK || reply.Data.Path != "" {
-		t.Fatalf("unexpected library output: %s", &out)
+	assertLibraryBuildEnvelope(t, reply, output)
+
+	if string(reply.Diagnostics) != "[]" || len(reply.Data) == 0 || string(reply.Data) == "null" {
+		t.Fatalf("library build response omitted data: %s", output)
 	}
 
-	entries, err := os.ReadDir(root)
-	if err != nil || len(entries) != len(original) {
-		t.Fatal("library build wrote project files")
+	var summary buildSummary
+
+	err = json.Unmarshal(reply.Data, &summary)
+	if err != nil || len(summary.Path) != 0 || len(summary.Digest) != 0 || len(summary.Files) != 0 {
+		t.Fatalf("library build unexpectedly published output: %s", output)
+	}
+}
+
+func assertLibraryBuildEnvelope(t *testing.T, reply libraryBuildReply, output []byte) {
+	t.Helper()
+
+	if reply.APIVersion != APIVersion || reply.Command != "build" || !reply.OK {
+		t.Fatalf("unexpected library output: %s", output)
+	}
+}
+
+type libraryBuildReply struct {
+	APIVersion  string          `json:"apiVersion"`
+	Command     string          `json:"command"`
+	OK          bool            `json:"ok"`
+	Diagnostics json.RawMessage `json:"diagnostics"`
+	Data        json.RawMessage `json:"data"`
+}
+
+func assertLibraryFixtureUnchanged(t *testing.T, root string, original map[string][]byte) {
+	t.Helper()
+
+	current := snapshotPinnedBuildFixture(t, root)
+	if len(current) != len(original) {
+		t.Fatalf("library build changed file set: got %d files, want %d", len(current), len(original))
+	}
+
+	for name, want := range original {
+		got, exists := current[name]
+		if !exists || !bytes.Equal(got, want) {
+			t.Fatalf("library build changed %s", name)
+		}
 	}
 }
 
@@ -275,109 +503,197 @@ func TestBuildCLIFromWorkspaceRoot(t *testing.T) {
 	prepareOfflineIntegration(t)
 	t.Setenv("GOWORK", "")
 
+	root := workspaceBuildFixture(t)
+
+	original := snapshotPinnedBuildFixture(t, root)
+
+	published := runWorkspaceBuild(t, root)
+	if filepath.Dir(published.Path) != root {
+		t.Fatalf("output not published in original working directory: %s", published.Path)
+	}
+
+	assertPinnedArtifact(t, published, published.Path)
+	assertPinnedTrace(t, published.Path)
+	assertWorkspaceFixtureUnchanged(t, root, original, published.Path)
+	publishedBytes := readWorkspaceArtifact(t, published.Path)
+
+	var stdout, stderr bytes.Buffer
+
+	exit := Run(t.Context(), []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false"},
+		&stdout, &stderr)
+	if exit == 0 {
+		t.Fatal("workspace build without target silently selected a module")
+	}
+
+	assertWorkspaceFailure(t, stdout.Bytes(), stderr.Bytes(), published.Path, publishedBytes)
+	assertWorkspaceFixtureUnchanged(t, root, original, published.Path)
+}
+
+func workspaceBuildFixture(t *testing.T) string {
+	t.Helper()
+
 	fixture, err := filepath.Abs("../backend/otelc/testdata/accessors")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	root := t.TempDir()
+	workspace := t.TempDir()
 
-	copied, err := compiler.CopySourceTree(t.Context(), fixture, root)
+	copied, err := compiler.CopySourceTree(t.Context(), fixture, workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := os.Rename(copied, filepath.Join(root, "app")); err != nil {
-		t.Fatal(err)
-	}
+	directory := openIntegrationDirectory(t, workspace)
 
-	for name, data := range map[string]string{
-		"go.work":       "go 1.27.0\nuse ./app\n",
-		"otelplan.yaml": "apiVersion: otelplan.io/v1alpha1\nkind: InstrumentationPlan\nbackend: {name: otelc, version: v1.1.0}\nproject: {packages: [./app/ops]}\nrules:\n- id: operation\n  match:\n    methods: [Handle]\n",
-	} {
-		err := os.WriteFile(filepath.Join(root, name), []byte(data), 0o600)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	original := map[string][]byte{}
-
-	if err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if entry.IsDir() {
-			return nil
-		}
-
-		data, err := os.ReadFile(path)
-		original[path] = data
-
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	var out, errout bytes.Buffer
-	if exit := Run(t.Context(), []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "./app"}, &out, &errout); exit != 0 {
-		t.Fatalf("workspace build exit=%d: %s %s", exit, &out, &errout)
-	}
-
-	var reply struct {
-		OK   bool         `json:"ok"`
-		Data buildSummary `json:"data"`
-	}
-
-	if err := json.Unmarshal(out.Bytes(), &reply); err != nil || !reply.OK || reply.Data.Path == "" || reply.Data.Digest == "" {
-		t.Fatalf("invalid build response: %s", &out)
-	}
-
-	if filepath.Dir(reply.Data.Path) != root {
-		t.Fatal("output not published in original working directory")
-	}
-
-	output, err := exec.Command(reply.Data.Path).Output()
+	err = directory.Rename(filepath.Base(copied), "app")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var traces struct{ Spans []struct{ Name string } }
-	if err := json.Unmarshal(output, &traces); err != nil || len(traces.Spans) != 5 {
-		t.Fatalf("missing instrumented spans: %s", output)
+	writeWorkspaceFile(t, directory, "go.work", "go 1.27.0\nuse ./app\n")
+	writeWorkspaceFile(t, directory, "otelplan.yaml",
+		"apiVersion: otelplan.io/v1alpha1\nkind: InstrumentationPlan\n"+
+			"backend: {name: otelc, version: v1.1.0}\nproject: {packages: [./app/ops]}\n"+
+			"rules:\n- id: operation\n  match:\n    methods: [Handle]\n")
+
+	return workspace
+}
+
+func writeWorkspaceFile(t *testing.T, directory *os.Root, name, contents string) {
+	t.Helper()
+
+	err := directory.WriteFile(name, []byte(contents), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func runWorkspaceBuild(t *testing.T, root string) buildSummary {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+
+	args := []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false", "./app"}
+	exit := Run(t.Context(), args,
+		&stdout, &stderr)
+
+	if exit != 0 || stderr.Len() != 0 {
+		t.Fatalf("workspace build exit=%d: stdout=%s stderr=%s", exit, &stdout, &stderr)
 	}
 
-	out.Reset()
-	errout.Reset()
+	var reply pinnedBuildReply
 
-	if exit := Run(t.Context(), []string{"build", "--root", root, "--offline", "--format=json", "--", "-buildvcs=false"}, &out, &errout); exit == 0 {
-		t.Fatal("workspace build without target silently selected a module")
+	err := json.Unmarshal(stdout.Bytes(), &reply)
+	if err != nil || !reply.OK || reply.Data.Path == "" || reply.Data.Digest == "" {
+		t.Fatalf("invalid build response: %s", &stdout)
 	}
 
-	for path, want := range original {
-		got, err := os.ReadFile(path)
-		if err != nil || !bytes.Equal(got, want) {
-			t.Fatalf("changed source file %s", path)
+	return reply.Data
+}
+
+func assertWorkspaceFixtureUnchanged(t *testing.T, root string, original map[string][]byte, publishedPath string) {
+	t.Helper()
+
+	current := snapshotPinnedBuildFixture(t, root)
+
+	publishedName, err := filepath.Rel(root, publishedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	publishedName = filepath.ToSlash(publishedName)
+	if len(current) != len(original)+1 {
+		t.Fatalf("workspace changed file set: got %d files, want %d plus %s", len(current), len(original), publishedName)
+	}
+
+	for name, want := range original {
+		got, exists := current[name]
+		if !exists || !bytes.Equal(got, want) {
+			t.Fatalf("changed workspace source file %s", name)
+		}
+	}
+
+	if _, exists := current[publishedName]; !exists {
+		t.Fatalf("published artifact missing from workspace snapshot: %s", publishedName)
+	}
+
+	for name := range current {
+		if _, exists := original[name]; !exists && name != publishedName {
+			t.Fatalf("unexpected workspace output %s", name)
 		}
 	}
 }
 
-func TestBuildSummaryText(t *testing.T) {
-	for _, tc := range []struct {
-		data buildSummary
-		want string
-	}{
-		{buildSummary{}, "build succeeded; no executable output\n"},
-		{buildSummary{Path: "app", Digest: "one"}, "built app one\n"},
-		{buildSummary{Files: []buildFile{{Path: "bin/first", Digest: "one"}, {Path: "bin/second", Digest: "two"}}}, "built bin/first one\nbuilt bin/second two\n"},
-	} {
-		var out bytes.Buffer
+func assertWorkspaceFailure(t *testing.T, output, stderr []byte, publishedPath string, before []byte) {
+	t.Helper()
 
-		err := emit(&out, options{format: "text"}, response{OK: true, Data: tc.data})
-		if err != nil || out.String() != tc.want {
-			t.Fatalf("output=%q, %v; want %q", out.String(), err, tc.want)
-		}
+	var reply response
+
+	err := json.Unmarshal(output, &reply)
+	if err != nil || reply.OK || len(reply.Diagnostics) == 0 || len(stderr) != 0 {
+		t.Fatalf("invalid no-target workspace response: stdout=%s stderr=%s", output, stderr)
+	}
+
+	after := readWorkspaceArtifact(t, publishedPath)
+	if !bytes.Equal(before, after) {
+		t.Fatal("failed workspace build changed published binary")
+	}
+}
+
+func readWorkspaceArtifact(t *testing.T, publishedPath string) []byte {
+	t.Helper()
+
+	directory := openIntegrationDirectory(t, filepath.Dir(publishedPath))
+
+	data, err := directory.ReadFile(filepath.Base(publishedPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return data
+}
+
+func TestBuildSummaryText(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		path   string
+		digest string
+		files  []buildFile
+		want   string
+	}{
+		{name: "empty", path: "", digest: "", files: nil, want: "build succeeded; no executable output\n"},
+		{name: "executable", path: "app", digest: "one", files: nil, want: "built app one\n"},
+		{name: "directory", files: []buildFile{
+			{Path: "bin/first", Digest: "one"}, {Path: "bin/second", Digest: "two"},
+		}, path: "", digest: "", want: "built bin/first one\nbuilt bin/second two\n"},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var summary buildSummary
+
+			summary.Path, summary.Digest = testCase.path, testCase.digest
+			summary.Files = append(summary.Files, testCase.files...)
+
+			var options options
+
+			options.format = "text"
+
+			var reply response
+
+			reply.OK, reply.Data = true, summary
+
+			var output bytes.Buffer
+
+			err := emit(&output, options, reply)
+			if err != nil || output.String() != testCase.want {
+				t.Fatalf("output=%q, %v; want %q", output.String(), err, testCase.want)
+			}
+		})
 	}
 }
 

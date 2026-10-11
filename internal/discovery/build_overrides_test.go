@@ -1,79 +1,115 @@
-package discovery
+package discovery_test
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
+
+	"github.com/DiLRandI/OTelPlan/internal/discovery"
 )
 
-func TestDiscoveryBuildFlagOverrides(t *testing.T) {
-	root := t.TempDir()
+func TestBuildOverrideTokens(t *testing.T) {
+	t.Parallel()
 
-	files := map[string]string{
-		"go.mod": "module example.com/flags\n\ngo 1.27.0\n", "chosen.go": "//go:build chosen\n\npackage flags\nfunc Chosen() {}\n", "fallback.go": "//go:build !chosen\n\npackage flags\nfunc Fallback() {}\n",
-	}
+	root, directory, files := buildOverrideFixture(t)
 
-	for name, data := range files {
-		err := os.WriteFile(filepath.Join(root, name), []byte(data), 0o600)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+	var options discovery.Options
 
-	opts := Options{Root: root, BuildTags: []string{"policy"}, Env: []string{"GOWORK=off", "GOFLAGS=-tags=ambient -trimpath=false -mod=mod"}, BuildFlags: []string{"-tags=chosen", "-trimpath=true", "-mod=readonly"}}
+	options.Root, options.Offline = root, true
+	options.Env = []string{"GOWORK=off", "GOFLAGS=-mod=mod -tags=ambient"}
+	options.BuildFlags = []string{"-mod=readonly", "-tags=two tags", "-modfile=path with spaces.mod"}
+	beforeEnv := slices.Clone(options.Env)
+	beforeBuildFlags := slices.Clone(options.BuildFlags)
+	beforeBuildTags := slices.Clone(options.BuildTags)
 
-	code, err := LoadContext(t.Context(), opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, ok := code.Symbol("example.com/flags.Chosen"); !ok {
-		t.Fatal("explicit build tags did not control selected source")
-	}
-
-	if !slices.Equal(code.EffectiveBuild.BuildTags, []string{"chosen"}) || code.EffectiveBuild.ModuleMode != "readonly" || !slices.Contains(code.EffectiveBuild.SemanticFlags, "-trimpath=true") {
+	code := loadBuildContext(t, options)
+	if !slices.Equal(code.EffectiveBuild.BuildTags, []string{"tags", "two"}) ||
+		code.EffectiveBuild.ModuleMode != "readonly" ||
+		code.EffectiveBuild.ModFile != filepath.Join(root, "path with spaces.mod") {
 		t.Fatalf("wrong effective build: %+v", code.EffectiveBuild)
 	}
 
-	if !slices.Equal(opts.BuildTags, []string{"policy"}) {
-		t.Fatal("caller tags changed")
+	if _, exists := code.Symbol("example.com/alternate.Chosen"); !exists {
+		t.Fatal("explicit build tags did not select the alternate module source")
 	}
 
-	opts.BuildFlags = []string{"-tags="}
+	if _, exists := code.Symbol("example.com/alternate.Fallback"); exists {
+		t.Fatal("explicit build tags selected the fallback source")
+	}
 
-	code, err = LoadContext(t.Context(), opts)
+	if !slices.Equal(options.Env, beforeEnv) || !slices.Equal(options.BuildFlags, beforeBuildFlags) ||
+		!slices.Equal(options.BuildTags, beforeBuildTags) {
+		t.Fatal("discovery changed caller build inputs")
+	}
+
+	checkBuildOverrideFiles(t, directory, files)
+}
+
+func TestUnsupportedBuildOverride(t *testing.T) {
+	t.Parallel()
+
+	root, directory, files := buildContextFixture(t)
+
+	var options discovery.Options
+
+	options.Root, options.Offline = root, true
+	options.Env = []string{"GOWORK=off", "GOFLAGS="}
+	options.BuildFlags = []string{"-overlay=private-location"}
+
+	_, err := discovery.LoadContext(t.Context(), options)
+	if err == nil || strings.Contains(err.Error(), "private-location") ||
+		!strings.Contains(err.Error(), "unsupported GOFLAGS option -overlay") {
+		t.Fatalf("unsupported overlay was not safely rejected: %v", err)
+	}
+
+	checkBuildOverrideFiles(t, directory, files)
+}
+
+func buildOverrideFixture(t *testing.T) (string, *os.Root, map[string]string) {
+	t.Helper()
+
+	root, directory, files := buildContextFixture(t)
+	alternate := "module example.com/alternate\n\ngo 1.27.0\n"
+	files["path with spaces.mod"] = alternate
+	files["chosen.go"] = "//go:build tags && two\n\npackage buildcontext\nfunc Chosen() {}\n"
+	files["fallback.go"] = "//go:build !(tags && two)\n\npackage buildcontext\nfunc Fallback() {}\n"
+
+	writeOverrideFile(t, directory, "path with spaces.mod", files["path with spaces.mod"])
+	writeOverrideFile(t, directory, "chosen.go", files["chosen.go"])
+	writeOverrideFile(t, directory, "fallback.go", files["fallback.go"])
+
+	return root, directory, files
+}
+
+func writeOverrideFile(t *testing.T, directory *os.Root, name, contents string) {
+	t.Helper()
+
+	err := directory.WriteFile(name, []byte(contents), 0o600)
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	if len(code.EffectiveBuild.BuildTags) != 0 {
-		t.Fatal("empty explicit tags did not clear defaults")
-	}
-
-	if _, ok := code.Symbol("example.com/flags.Fallback"); !ok {
-		t.Fatal("empty explicit tags selected wrong source")
-	}
-
-	for name, want := range files {
-		data, err := os.ReadFile(filepath.Join(root, name))
-		if err != nil || string(data) != want {
-			t.Fatal("analysis changed source")
-		}
 	}
 }
 
-func TestBuildOverrideTokens(t *testing.T) {
-	flags, err := parseGOFLAGS("-mod=mod -tags=ambient", "-mod=readonly", "-tags=two tags", "-modfile=path with spaces.mod")
+func checkBuildOverrideFiles(t *testing.T, directory *os.Root, files map[string]string) {
+	t.Helper()
+
+	entries, err := fs.ReadDir(directory.FS(), ".")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if flags.moduleMode != "readonly" || flags.modFile != "path with spaces.mod" || !slices.Equal(flags.tags, []string{"tags", "two"}) {
-		t.Fatalf("token boundaries lost: %+v", flags)
+	if len(entries) != len(files) {
+		t.Fatalf("discovery changed project file set: got %d entries, want %d", len(entries), len(files))
 	}
 
-	if _, err := parseGOFLAGS("", "-overlay=private-location"); err == nil {
-		t.Fatal("accepted unsupported override")
+	for _, entry := range entries {
+		if _, exists := files[entry.Name()]; !exists {
+			t.Fatalf("discovery added project file %s", entry.Name())
+		}
 	}
+
+	checkBuildContextFiles(t, directory, files)
 }

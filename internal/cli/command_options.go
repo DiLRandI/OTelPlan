@@ -9,6 +9,8 @@ var (
 	errCheckDryRunConflict = errors.New("cannot combine --check and --dry-run")
 	errScanOnlyOptions     = errors.New("--dependencies, --interfaces, and --calls are supported by scan")
 	errPolicyOnlyOptions   = errors.New("--config, --strict, and --allow-large-plan require a policy command")
+	errEmptyCachePath      = errors.New("--cache-dir must not be empty")
+	errCacheApplicability  = errors.New("--cache-dir requires a project analysis command")
 	errEmptyCompileOutput  = errors.New("--output must not be empty")
 	errOutputApplicability = errors.New("--output is supported by init and compile")
 	errCleanApplicability  = errors.New("--clean is supported by compile")
@@ -44,12 +46,24 @@ func validateCommandOptions(command string, opts options, stdin io.Reader) error
 }
 
 func validateAnalysisOptions(command string, opts options) error {
-	if (opts.dependencies || opts.interfaces || opts.callGraph) && command != "scan" {
+	if (opts.dependencies || opts.interfaces || opts.callGraph) && command != scanCommandName {
 		return errScanOnlyOptions
 	}
 
 	if (opts.strict || opts.allowLargePlan || opts.configSet) && !isPolicyCommand(command) {
 		return errPolicyOnlyOptions
+	}
+
+	return validateCacheOptions(command, opts)
+}
+
+func validateCacheOptions(command string, opts options) error {
+	if opts.cacheSet && opts.cacheDir == "" {
+		return errEmptyCachePath
+	}
+
+	if opts.cacheSet && command != scanCommandName && command != initCommandName && !isPolicyCommand(command) {
+		return errCacheApplicability
 	}
 
 	return nil

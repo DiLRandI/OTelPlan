@@ -53,17 +53,18 @@ func runArchitectureTraces(t *testing.T, offline bool) {
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			root := architectureFixture(t, scenario.name)
+			cacheDir := t.TempDir()
 			original := testenv.SnapshotFiles(t, root)
-			inspected := invokeArchitecture(t, root, offline, 0, "inspect")
+			inspected := invokeArchitecture(t, root, cacheDir, offline, 0, "inspect")
 			checkArchitectureTargets(t, inspected, scenario.checkout, scenario.payment)
 
-			invokeArchitecture(t, root, offline, 0, "lock")
+			invokeArchitecture(t, root, cacheDir, offline, 0, "lock")
 			original["otelplan.lock"] = testenv.SnapshotFiles(t, root)["otelplan.lock"]
 
-			invokeArchitecture(t, root, offline, 0, "validate", "--strict")
-			invokeArchitecture(t, root, offline, 0, "compile", "--output", filepath.Join(t.TempDir(), "generated"))
+			invokeArchitecture(t, root, cacheDir, offline, 0, "validate", "--strict")
+			invokeArchitecture(t, root, cacheDir, offline, 0, "compile", "--output", filepath.Join(t.TempDir(), "generated"))
 			binary := filepath.Join(t.TempDir(), "app")
-			invokeArchitecture(t, root, offline, 0, "build", "--", "-race", "-buildvcs=false", "-o", binary, ".")
+			invokeArchitecture(t, root, cacheDir, offline, 0, "build", "--", "-race", "-buildvcs=false", "-o", binary, ".")
 
 			output, err := exec.CommandContext(t.Context(), binary).Output()
 			if err != nil {
@@ -71,7 +72,7 @@ func runArchitectureTraces(t *testing.T, offline bool) {
 			}
 
 			checkArchitectureTrace(t, output)
-			invokeArchitecture(t, root, offline, 0, "lock", "--check")
+			invokeArchitecture(t, root, cacheDir, offline, 0, "lock", "--check")
 			testenv.AssertFilesUnchanged(t, original, testenv.SnapshotFiles(t, root))
 		})
 	}
@@ -231,7 +232,7 @@ func prepareOfflineArchitectureCache(t *testing.T) {
 
 	seed := architectureFixture(t, "package")
 
-	rejected := invokeArchitecture(t, seed, true, discoveryFailureExit, "inspect")
+	rejected := invokeArchitecture(t, seed, t.TempDir(), true, discoveryFailureExit, "inspect")
 	if len(rejected.Diagnostics) != 1 || rejected.Diagnostics[0].Code != model.CodeUnresolvedSymbol ||
 		!strings.Contains(rejected.Diagnostics[0].Message, "module lookup disabled by GOPROXY=off") {
 		t.Fatalf("cold offline discovery failed for an unexpected reason: %+v", rejected.Diagnostics)
@@ -248,10 +249,11 @@ func prepareOfflineArchitectureCache(t *testing.T) {
 	testenv.DenyNetwork(t)
 }
 
-func invokeArchitecture(t *testing.T, root string, offline bool, want int, args ...string) globalArgumentReply {
+func invokeArchitecture(t *testing.T, root, cacheDir string, offline bool, want int,
+	args ...string) globalArgumentReply {
 	t.Helper()
 
-	arguments := []string{"--root", root, "--format=json"}
+	arguments := []string{"--root", root, "--format=json", "--cache-dir", cacheDir}
 	if offline {
 		arguments = append(arguments, "--offline")
 	}

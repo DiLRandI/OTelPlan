@@ -68,7 +68,7 @@ func initCommand(ctx context.Context, opts options, patterns []string, stdin io.
 	if err != nil {
 		recordFailure(opts, model.CodeUnresolvedSymbol, "analyze starter candidates", err)
 
-		return initFailure(exitAnalysis, model.CodeUnresolvedSymbol, err.Error())
+		return initFailure(exitAnalysis, model.CodeUnresolvedSymbol, analysisFailureMessage(err))
 	}
 
 	recordBuildContext(opts, code.EffectiveBuild)
@@ -129,6 +129,7 @@ func loadStarterCode(ctx context.Context, opts options, patterns []string) (*mod
 	analysis := new(discovery.Options)
 	analysis.Root, analysis.Patterns = opts.root, patterns
 	analysis.CallGraph, analysis.Offline = true, opts.offline
+	configureAnalysisCache(analysis, opts, initCommandName)
 
 	code, err := discovery.LoadContext(ctx, *analysis)
 	if err != nil {

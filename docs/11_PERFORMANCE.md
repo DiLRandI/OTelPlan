@@ -63,7 +63,7 @@ go test ./internal/resolve -run '^$' -bench . -benchmem
 
 `BenchmarkAnalysisCache` compares equivalent uncached and cached engine metadata
 for 100 functions importing context. Record the revision, Go version, platform,
-CPU, commands, and samples with any published result. The CLI does not yet opt
-into this cache; cache benchmark timings do not describe repeated CLI scan
-performance. Generated-hook runtime benchmarks and a representative performance
-report remain pending.
+CPU, commands, and samples with any published result. The CLI opts into
+this cache only with `--cache-dir`; these engine benchmark timings are not a
+representative CLI performance report. Generated-hook runtime benchmarks and
+a representative performance report remain pending.

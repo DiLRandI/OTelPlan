@@ -40,7 +40,7 @@ func runPolicyCommand(ctx context.Context, command string, opts options,
 		return nil, exitInvalidPolicy, diagnostics
 	}
 
-	inventory, analysisDiagnostics := loadPolicyInventory(ctx, opts, loaded, buildArgs)
+	inventory, analysisDiagnostics := loadPolicyInventory(ctx, command, opts, loaded, buildArgs)
 	if analysisDiagnostics.HasErrors() {
 		diagnostics = append(diagnostics, analysisDiagnostics...)
 
@@ -103,7 +103,7 @@ func loadCommandPolicy(opts options) (*model.Policy, model.DiagnosticErrorList) 
 	return loaded, policy.Validate(loaded)
 }
 
-func loadPolicyInventory(ctx context.Context, opts options, loaded *model.Policy,
+func loadPolicyInventory(ctx context.Context, command string, opts options, loaded *model.Policy,
 	buildArgs buildArguments) (*model.CodeModel, model.DiagnosticErrorList) {
 	var analysis discovery.Options
 
@@ -111,12 +111,13 @@ func loadPolicyInventory(ctx context.Context, opts options, loaded *model.Policy
 	analysis.BuildFlags, analysis.BuildTags = buildArgs.AnalysisFlags, loaded.Project.BuildTags
 	analysis.IncludeTests, analysis.IncludeDependencies = loaded.Project.IncludeTests, loaded.Project.IncludeDependencies
 	analysis.Offline = opts.offline
+	configureAnalysisCache(&analysis, opts, command)
 
 	inventory, err := discovery.LoadContext(ctx, analysis)
 	if err != nil {
 		recordFailure(opts, model.CodeUnresolvedSymbol, "analyze policy packages", err)
 
-		return nil, compileDiagnostic(model.CodeUnresolvedSymbol, err.Error())
+		return nil, compileDiagnostic(model.CodeUnresolvedSymbol, analysisFailureMessage(err))
 	}
 
 	recordBuildContext(opts, inventory.EffectiveBuild)

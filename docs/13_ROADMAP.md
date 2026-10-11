@@ -14,12 +14,12 @@ This is a pre-stable implementation, not a completed release.
 | Foundation | Semantic discovery, policy matching, exact resolution, exclusions, inspect/explain implemented. |
 | Safety/reproducibility | Static context/error/capture checks, canonical policy/build fingerprints, resolution locks and drift implemented. Dedicated recursion/manual-span warnings and some configuration controls remain goals. |
 | OTelC backend | Real rules/hooks/attributes and isolated compile/build implemented. Some generic, variadic, main-package, and panic capabilities are limited by the documented pin/scoping constraints. |
-| Hardening | Workspaces, local replacements, tags, isolated vendor builds, advisory call graphs, safe verbose diagnostics, and opt-in engine cache implemented. CLI cache controls, runtime benchmark/report, clean lint, security verification, and multi-platform confidence remain. |
+| Hardening | Workspaces, local replacements, tags, isolated vendor builds, advisory call graphs, safe verbose diagnostics, and opt-in engine cache implemented. Opt-in CLI cache controls and read-only cache reuse are implemented. Cache eviction, runtime benchmark/report, security verification, and multi-platform confidence remain; the authoritative lint gate is clean. |
 | Initialization | Deterministic scoring/evidence, exact starter policy, interactive review, and no default capture implemented. Representative open-source application usefulness gate still needs evidence. |
 | Stable v1 | Contract stability/migration commitments, release candidate cycle, security review, complete performance report, and release automation remain. |
 
-Immediate priorities are documentation consolidation and the full lint backlog,
-then remaining feature/performance/safety acceptance work. Cross-platform CI and
+Documentation consolidation and lint cleanup are complete. Immediate priorities
+are remaining feature/performance/safety acceptance work. Cross-platform CI and
 lightweight OSS/release hygiene follow. Original phase requirements below remain
 the intended scope; an implemented feature still needs its release evidence.
 

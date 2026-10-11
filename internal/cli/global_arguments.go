@@ -48,6 +48,8 @@ func parse(args []string) (options, []string, error) {
 			opts.outputSet = true
 		case "config":
 			opts.configSet = true
+		case "cache-dir":
+			opts.cacheSet = true
 		}
 	})
 
@@ -64,6 +66,7 @@ func globalFlags(opts *options) *flag.FlagSet {
 	flags.BoolVar(&opts.nonInteractive, "non-interactive", false, "generate a starter policy without prompts")
 	flags.StringVar(&opts.root, "root", ".", "project root")
 	flags.StringVar(&opts.config, "config", "otelplan.yaml", "policy path relative to root")
+	flags.StringVar(&opts.cacheDir, "cache-dir", "", "private semantic cache path relative to root")
 	flags.StringVar(&opts.format, "format", "text", "text or json")
 	flags.BoolVar(&opts.strict, "strict", false, "fail on warnings")
 	flags.BoolVar(&opts.offline, "offline", false, "disable Go network resolution")

@@ -24,3 +24,19 @@ linters:
         source: '^var Version = "dev"$'
         linters:
           - gochecknoglobals
+      - path: '^internal/discovery/(benchmark|context|load)_test\.go$'
+        source: '^package discovery$'
+        linters:
+          - testpackage
+      - path: '^internal/compiler/(application_selection|build_directory|build_output|default_output|vendor)_test\.go$'
+        source: '^package compiler$'
+        linters:
+          - testpackage
+      - path: '^internal/backend/otelc/(attribute_hooks|compatibility|typed_accessors)_test\.go$'
+        source: '^package otelc$'
+        linters:
+          - testpackage
+      - path: '^internal/cli/(build_arguments|build_destination|build|run)_test\.go$'
+        source: '^package cli$'
+        linters:
+          - testpackage

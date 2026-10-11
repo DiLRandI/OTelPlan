@@ -24,6 +24,16 @@ linters:
         source: '^var Version = "dev"$'
         linters:
           - gochecknoglobals
+      - path: '^internal/backend/otelc/compatibility\.go$'
+        source: '^\s*command := exec\.CommandContext\(ctx, path, "version"\)$'
+        text: '^(?:G204: Subprocess launched with variable|G702: Command injection via taint analysis)$'
+        linters:
+          - gosec
+      - path: '^internal/compiler/build\.go$'
+        source: '^\s*command := exec\.CommandContext\(ctx, executable, args\.\.\.\)$'
+        text: '^G204: Subprocess launched with variable$'
+        linters:
+          - gosec
       - path: '^internal/discovery/(benchmark|context|load)_test\.go$'
         source: '^package discovery$'
         linters:

@@ -113,6 +113,15 @@ itself. Compile stages and compiles the generated module, verifies its artifacts
 and publishes the bundle. It reuses identical output and validates existing file
 ownership before `--clean` replacement.
 
+Plans of up to 64 targets retain `hooks/hooks.go` and `rules/hooks.otelc.yaml`.
+Larger plans sort exact targets into hook packages containing at most 64 targets,
+with corresponding rule files. The pin reparses a complete hook file for each
+hook lookup, so bounded packages avoid repeatedly parsing the entire plan.
+Hook names, selection, context/error behavior, and attribute capture stay the
+same. Cross-package duplicate identities are validated before rendering, and
+the manifest inventories every generated file. Existing large-plan output must
+be regenerated through normal ownership checks when adopting this layout.
+
 Build generates the bundle, copies modules/workspaces/local replacements, adds
 the runtime, verifies analyzed application and runtime module selection, invokes
 the verified backend, checks artifact integrity again, hashes outputs, and

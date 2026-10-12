@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -33,7 +34,13 @@ func loadCachedModel(ctx context.Context, opts Options, cfg *packages.Config) (*
 		return nil, false, err
 	}
 
-	cache, err := openAnalysisCache(opts.CacheDir)
+	cache, err := openRequestedAnalysisCache(opts)
+	if opts.CacheReadOnly && errors.Is(err, os.ErrNotExist) {
+		result, err := loadPreparedModel(ctx, opts, cfg)
+
+		return result.code, false, err
+	}
+
 	if err != nil {
 		return nil, false, err
 	}
@@ -42,7 +49,7 @@ func loadCachedModel(ctx context.Context, opts Options, cfg *packages.Config) (*
 
 	lookup, err := readAnalysisCache(cache, key, opts)
 	if err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("%w: %w", ErrCacheStorage, err)
 	}
 
 	err = ctx.Err()
@@ -52,6 +59,12 @@ func loadCachedModel(ctx context.Context, opts Options, cfg *packages.Config) (*
 
 	if lookup.code != nil {
 		return lookup.code, true, nil
+	}
+
+	if opts.CacheReadOnly {
+		result, err := loadPreparedModel(ctx, opts, cfg)
+
+		return result.code, false, err
 	}
 
 	code, err := refreshAnalysisCache(ctx, cache, key, opts, cfg)
@@ -75,9 +88,9 @@ func refreshAnalysisCache(ctx context.Context, cache *os.Root, key string, opts 
 	}
 
 	if key == after {
-		err = writeAnalysisCache(cache, key, result.code)
+		err = writeAnalysisCache(ctx, cache, key, result.code)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", ErrCacheStorage, err)
 		}
 	}
 

@@ -1,8 +1,10 @@
 package discovery
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +18,9 @@ const (
 	cacheFileMode          = 0o600
 )
 
+// ErrCacheStorage identifies failures accessing explicitly requested cache storage.
+var ErrCacheStorage = errors.New("analysis cache storage failure")
+
 type cacheLookup struct {
 	code *model.CodeModel
 }
@@ -25,6 +30,25 @@ type analysisCacheEntry struct {
 	Key     string          `json:"key"`
 	Digest  string          `json:"digest"`
 	Model   json.RawMessage `json:"model"`
+}
+
+func openRequestedAnalysisCache(opts Options) (*os.Root, error) {
+	var (
+		root *os.Root
+		err  error
+	)
+
+	if opts.CacheReadOnly {
+		root, err = os.OpenRoot(opts.CacheDir)
+	} else {
+		root, err = openAnalysisCache(opts.CacheDir)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrCacheStorage, err)
+	}
+
+	return root, nil
 }
 
 func openAnalysisCache(path string) (*os.Root, error) {
@@ -86,7 +110,12 @@ func decodeAnalysisCache(contents []byte, key string, opts Options) cacheLookup 
 	return cacheLookup{code: code}
 }
 
-func writeAnalysisCache(root *os.Root, key string, code *model.CodeModel) error {
+func writeAnalysisCache(ctx context.Context, root *os.Root, key string, code *model.CodeModel) error {
+	err := ctx.Err()
+	if err != nil {
+		return fmt.Errorf("publish analysis cache canceled: %w", err)
+	}
+
 	snapshot := *code
 
 	var emptyBuild model.BuildEnvironment
@@ -129,10 +158,15 @@ func writeAnalysisCache(root *os.Root, key string, code *model.CodeModel) error 
 		return fmt.Errorf("close analysis cache entry: %w", err)
 	}
 
+	err = ctx.Err()
+	if err != nil {
+		return fmt.Errorf("publish analysis cache canceled: %w", err)
+	}
+
 	err = root.Rename(name, key+".json")
 	if err != nil {
 		return fmt.Errorf("publish analysis cache entry: %w", err)
 	}
 
-	return nil
+	return pruneAnalysisCache(ctx, root, key, maximumAnalysisCacheEntries, maximumAnalysisCacheBytes)
 }

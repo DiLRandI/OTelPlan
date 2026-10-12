@@ -2,7 +2,7 @@
 
 BIN_DIR := bin
 GOLANGCI_LINT ?= ./bin/golangci-lint
-GOLANGCI_LINT_VERSION := 2.13.2
+GOLANGCI_LINT_VERSION := 2.14.0
 
 build:
 	go build -o $(BIN_DIR)/otelplan ./cmd/otelplan
@@ -20,7 +20,7 @@ fmt:
 	gofmt -w $$(find . -name '*.go' -type f)
 
 init-lint:
-	curl -sSfL https://golangci-lint.run/install.sh | sh -s v2.13.2
+	curl -sSfL https://golangci-lint.run/install.sh | sh -s v2.14.0
 
 lint:
 	@command -v "$(GOLANGCI_LINT)" >/dev/null 2>&1 || { echo "golangci-lint $(GOLANGCI_LINT_VERSION) is required" >&2; exit 1; }

@@ -22,6 +22,7 @@ const (
 	explainCommandName = "explain"
 	compileCommandName = "compile"
 	buildCommandName   = "build"
+	scanCommandName    = "scan"
 	initCommandName    = "init"
 	jsonFormat         = "json"
 	exitUsage          = 2
@@ -48,8 +49,10 @@ type options struct {
 	strict, offline, check, dryRun, allowLargePlan, force   bool
 	interactive, nonInteractive                             bool
 	configSet                                               bool
+	cacheSet                                                bool
 	callGraph                                               bool
 	root, config, format                                    string
+	cacheDir                                                string
 	quiet, verbose, noColor, dependencies, interfaces, help bool
 }
 
@@ -115,7 +118,7 @@ func dispatchCommand(ctx context.Context, command string, opts options, args []s
 	switch command {
 	case helpCommandName, versionCommandName:
 		return describeCommand(command, args)
-	case "scan":
+	case scanCommandName:
 		return scanCommand(ctx, opts, args)
 	case initCommandName:
 		return initCommand(ctx, opts, args, stdin, stderr)
@@ -159,12 +162,13 @@ func scanCommand(ctx context.Context, opts options, patterns []string) (any, int
 
 	analysis.Root, analysis.Patterns = opts.root, patterns
 	analysis.IncludeDependencies, analysis.CallGraph, analysis.Offline = opts.dependencies, opts.callGraph, opts.offline
+	configureAnalysisCache(&analysis, opts, scanCommandName)
 
 	inventory, err := discovery.LoadContext(ctx, analysis)
 	if err != nil {
 		recordFailure(opts, model.CodeUnresolvedSymbol, "analyze Go project", err)
 
-		return nil, exitAnalysis, compileDiagnostic(model.CodeUnresolvedSymbol, err.Error())
+		return nil, exitAnalysis, compileDiagnostic(model.CodeUnresolvedSymbol, analysisFailureMessage(err))
 	}
 
 	recordBuildContext(opts, inventory.EffectiveBuild)

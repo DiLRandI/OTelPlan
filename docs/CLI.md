@@ -34,6 +34,7 @@ Explain requires exactly one canonical symbol. Build arguments should follow `--
 | `--verbose` | Add safe cause categories, operation stage, subprocess exit status, and relevant analyzed build target details. |
 | `--no-color` | Accepted for monochrome output. Current output contains no ANSI color. |
 | `--offline` | Disable Go module/checksum lookups and automatic toolchain downloads for analysis, compile, and build. |
+| `--cache-dir PATH` | Project analysis commands only. Opt into private semantic metadata caching; relative paths resolve against `--root`. |
 | `--config PATH` | Policy commands only: inspect, explain, validate, lock, diff, compile, build. Default `otelplan.yaml`. |
 | `--strict` | Policy commands only. Treat warnings as failures. |
 | `--allow-large-plan` | Policy commands only. Acknowledge the target-count limit; warnings still apply. |
@@ -50,7 +51,23 @@ Explain requires exactly one canonical symbol. Build arguments should follow `--
 
 `--check --dry-run` and `--interactive --non-interactive` are contradictory and
 return usage exit code 2. Interactive JSON initialization is rejected.
-There is no CLI analysis-cache flag yet; caching is an opt-in discovery engine API.
+Caching is disabled unless `--cache-dir` is supplied. Use a private caller-owned
+cache directory; cached metadata is trusted local state and must not be shared
+with untrusted users. An explicit empty path is a usage error. Version/help do
+not accept this flag.
+
+Lock check, lock dry-run, and all diff operations reuse valid existing metadata
+without creating or refreshing cache files. Cache misses still analyze current
+source. Other analysis commands may publish refreshed cache entries. This does
+not alter resolution fingerprints or skip validation/backend verification.
+Cache storage failures return analysis exit code 4 with a diagnostic that omits
+the cache path. Go module/build caches remain separate. After writable
+publication, verified OTelPlan cache entries are bounded to 64 files and 256 MiB.
+Oldest published entries are removed first, with filenames breaking timestamp
+ties; the current entry is protected. Unknown, malformed, mismatched, or
+non-regular files are preserved and do not count toward these managed-entry
+limits. Read-only commands perform no retention writes. Cache data is disposable;
+concurrent writers may cause additional misses without changing resolution.
 
 ## Main workflow
 

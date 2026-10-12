@@ -36,7 +36,7 @@ func Run(request *Request) (result bool) { return true }
 	}
 
 	code, err := discovery.Load(discovery.Options{
-		Root: root, CacheDir: "", Patterns: nil, BuildTags: nil, BuildFlags: nil, CallGraph: false,
+		Root: root, CacheDir: "", CacheReadOnly: false, Patterns: nil, BuildTags: nil, BuildFlags: nil, CallGraph: false,
 		IncludeTests: false, IncludeDependencies: false, GOOS: "", GOARCH: "", Env: nil, Offline: false,
 	})
 	if err != nil {

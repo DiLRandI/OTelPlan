@@ -16,9 +16,11 @@ import (
 type Options struct {
 	Root string
 	// CacheDir enables private persistent semantic metadata caching when nonempty.
-	CacheDir  string
-	Patterns  []string
-	BuildTags []string
+	CacheDir string
+	// CacheReadOnly reuses existing metadata without creating or refreshing cache files.
+	CacheReadOnly bool
+	Patterns      []string
+	BuildTags     []string
 	// BuildFlags override ambient GOFLAGS; value flags use -name=value.
 	BuildFlags          []string
 	CallGraph           bool

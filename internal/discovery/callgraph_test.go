@@ -187,6 +187,7 @@ func callGraphOptions(root string) discovery.Options {
 	return discovery.Options{
 		Root:                root,
 		CacheDir:            "",
+		CacheReadOnly:       false,
 		Patterns:            nil,
 		BuildTags:           nil,
 		BuildFlags:          nil,

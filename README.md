@@ -113,7 +113,7 @@ make build
 make check GOLANGCI_LINT=/path/to/golangci-lint
 ```
 
-The required linter is v2.13.2. `make check` runs tests, race tests, vet, lint, and
+The required linter is v2.14.0. `make check` runs tests, race tests, vet, lint, and
 quality-gate regressions. Missing tools and failing checks return nonzero.
 Set `OTELPLAN_OTELC=/absolute/path/to/otelc` to run real backend integration tests;
 otherwise those tests skip locally. See [testing instructions](docs/10_TEST_STRATEGY.md).

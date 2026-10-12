@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -109,7 +110,12 @@ func decodeAnalysisCache(contents []byte, key string, opts Options) cacheLookup 
 	return cacheLookup{code: code}
 }
 
-func writeAnalysisCache(root *os.Root, key string, code *model.CodeModel) error {
+func writeAnalysisCache(ctx context.Context, root *os.Root, key string, code *model.CodeModel) error {
+	err := ctx.Err()
+	if err != nil {
+		return fmt.Errorf("publish analysis cache canceled: %w", err)
+	}
+
 	snapshot := *code
 
 	var emptyBuild model.BuildEnvironment
@@ -152,10 +158,15 @@ func writeAnalysisCache(root *os.Root, key string, code *model.CodeModel) error 
 		return fmt.Errorf("close analysis cache entry: %w", err)
 	}
 
+	err = ctx.Err()
+	if err != nil {
+		return fmt.Errorf("publish analysis cache canceled: %w", err)
+	}
+
 	err = root.Rename(name, key+".json")
 	if err != nil {
 		return fmt.Errorf("publish analysis cache entry: %w", err)
 	}
 
-	return nil
+	return pruneAnalysisCache(ctx, root, key, maximumAnalysisCacheEntries, maximumAnalysisCacheBytes)
 }

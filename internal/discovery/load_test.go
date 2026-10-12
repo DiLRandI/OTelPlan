@@ -5,13 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 	"golang.org/x/tools/go/packages"
@@ -45,6 +48,7 @@ func TestPackageAnalysisErrorsRemainSorted(t *testing.T) {
 
 	dependency := new(packages.Package)
 	dependency.ID = "example.com/dependency"
+
 	dependency.Errors = []packages.Error{
 		{Pos: "z.go:2:1", Msg: "last failure", Kind: packages.TypeError},
 		{Pos: "a.go:1:1", Msg: "first failure", Kind: packages.ParseError},
@@ -682,5 +686,411 @@ func TestAnalysisCacheModuleLanguageVersionInvalidates(t *testing.T) {
 	_, hit := loadCacheTest(t, opts)
 	if hit {
 		t.Fatal("changed module language version reused previous semantic metadata")
+	}
+}
+
+func TestAnalysisCacheRetentionCountBound(t *testing.T) {
+	t.Parallel()
+
+	rootPath := t.TempDir()
+	root := openRetentionRoot(t, rootPath)
+	keys := []string{retentionKey('a'), retentionKey('b'), retentionKey('c'), retentionKey('d')}
+
+	for index, key := range keys {
+		writeRetentionEntry(t, root, key, newRetentionModel())
+		setRetentionTime(t, root, key, time.Unix(int64(index), 0))
+	}
+
+	want := map[string][]byte{keys[2] + ".json": nil, keys[3] + ".json": nil}
+
+	err := pruneAnalysisCache(t.Context(), root, keys[3], 2, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertRetentionNames(t, root, want)
+}
+
+func TestAnalysisCacheRetentionByteBound(t *testing.T) {
+	t.Parallel()
+
+	root := openRetentionRoot(t, t.TempDir())
+	keys := []string{retentionKey('a'), retentionKey('b'), retentionKey('c')}
+
+	for index, key := range keys {
+		code := newRetentionModel()
+		code.Symbols = make([]model.Symbol, index*4)
+		writeRetentionEntry(t, root, key, code)
+		setRetentionTime(t, root, key, time.Unix(int64(index), 0))
+	}
+
+	keepSize := retentionFileSize(t, root, keys[2])
+	middleSize := retentionFileSize(t, root, keys[1])
+	requireRetentionPrune(t, root, keys[2], 10, keepSize+middleSize)
+
+	assertRetentionNames(t, root, map[string][]byte{keys[1] + ".json": nil, keys[2] + ".json": nil})
+}
+
+func TestAnalysisCacheRetentionKeepAndTieBreak(t *testing.T) {
+	t.Parallel()
+
+	root := openRetentionRoot(t, t.TempDir())
+	keys := []string{retentionKey('a'), retentionKey('b'), retentionKey('c'), retentionKey('f')}
+
+	for _, key := range keys {
+		writeRetentionEntry(t, root, key, newRetentionModel())
+
+		stamp := time.Unix(42, 0)
+		if key == keys[3] {
+			stamp = time.Unix(1, 0)
+		}
+
+		setRetentionTime(t, root, key, stamp)
+	}
+
+	err := pruneAnalysisCache(t.Context(), root, keys[3], 2, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertRetentionNames(t, root, map[string][]byte{keys[2] + ".json": nil, keys[3] + ".json": nil})
+}
+
+func TestAnalysisCacheRetentionPreservesUnrecognizedEntries(t *testing.T) {
+	t.Parallel()
+
+	root := openRetentionRoot(t, t.TempDir())
+	valid := retentionKey('a')
+	keep := retentionKey('b')
+
+	writeRetentionEntry(t, root, valid, newRetentionModel())
+	writeRetentionEntry(t, root, keep, newRetentionModel())
+	setRetentionTime(t, root, valid, time.Unix(1, 0))
+	setRetentionTime(t, root, keep, time.Unix(2, 0))
+
+	preserved := map[string][]byte{
+		"not-hex.json": []byte("ordinary"),
+		strings.ToUpper(retentionKey('c')) + ".json": []byte("uppercase"),
+		retentionKey('d') + ".json":                  []byte("{broken"),
+		retentionKey('e') + ".json":                  retentionEntryVariant(t, 1, "wrong"),
+		retentionKey('f') + ".json":                  retentionEntryBadDigest(t, retentionKey('f')),
+		retentionKey('1') + ".json":                  retentionEntryVariant(t, 2, retentionKey('1')),
+		"ordinary":                                   []byte("file"),
+	}
+	badModel := new(model.CodeModel)
+	badModel.GoVersion = "go1.27.2"
+	badModelName := retentionKey('3') + ".json"
+
+	preserved[badModelName] = retentionEntryBytes(t, retentionKey('3'), badModel)
+	for name, contents := range preserved {
+		writeRetentionFile(t, root, name, contents)
+	}
+
+	directory := retentionKey('2') + ".json"
+
+	err := root.Mkdir(directory, 0o700)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	preserved[directory] = nil
+	want := retentionSnapshot(t, root)
+
+	err = pruneAnalysisCache(t.Context(), root, keep, 1, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := retentionSnapshot(t, root)
+
+	for name, contents := range want {
+		if name == valid+".json" {
+			continue
+		}
+
+		gotContents, ok := got[name]
+		if !ok || !bytes.Equal(contents, gotContents) {
+			t.Fatalf("unrecognized entry %s changed", name)
+		}
+	}
+
+	if _, ok := got[valid+".json"]; ok {
+		t.Fatalf("oldest recognized entry %s was retained", valid)
+	}
+}
+
+func TestAnalysisCacheRetentionCancellation(t *testing.T) {
+	t.Parallel()
+
+	root := openRetentionRoot(t, t.TempDir())
+	key := retentionKey('a')
+	writeRetentionEntry(t, root, key, newRetentionModel())
+	before := retentionSnapshot(t, root)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	err := pruneAnalysisCache(ctx, root, "", 1, 1)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("retention error=%v; want context.Canceled", err)
+	}
+
+	if !reflect.DeepEqual(before, retentionSnapshot(t, root)) {
+		t.Fatal("canceled retention mutated cache files")
+	}
+}
+
+func TestAnalysisCacheRetentionWritablePublication(t *testing.T) {
+	t.Parallel()
+
+	root := openRetentionRoot(t, t.TempDir())
+
+	const publications = 65
+
+	lastKey := ""
+	for index := range publications {
+		lastKey = fmt.Sprintf("%064x", index)
+
+		err := writeAnalysisCache(t.Context(), root, lastKey, newRetentionModel())
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	entries, err := fs.ReadDir(root.FS(), ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) > maximumAnalysisCacheEntries {
+		t.Fatalf("cache entries=%d; want at most %d", len(entries), maximumAnalysisCacheEntries)
+	}
+
+	var opts Options
+
+	opts.Root, opts.goVersion = "module", "go1.27.2"
+
+	lookup, err := readAnalysisCache(root, lastKey, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if lookup.code == nil || lookup.code.ModuleRoot != "module" {
+		t.Fatal("current publication was pruned or invalid")
+	}
+}
+
+func TestAnalysisCacheRetentionConcurrentPublication(t *testing.T) {
+	t.Parallel()
+
+	root := openRetentionRoot(t, t.TempDir())
+
+	const publications = 66
+
+	var workers sync.WaitGroup
+
+	errorsCh := make(chan error, publications)
+	workers.Add(publications)
+
+	for index := range publications {
+		go func(index int) {
+			defer workers.Done()
+
+			key := fmt.Sprintf("%064x", index+publications)
+
+			err := writeAnalysisCache(t.Context(), root, key, newRetentionModel())
+			if err != nil {
+				errorsCh <- err
+			}
+		}(index)
+	}
+
+	workers.Wait()
+
+	close(errorsCh)
+
+	for err := range errorsCh {
+		t.Fatal(err)
+	}
+
+	entries, err := fs.ReadDir(root.FS(), ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) > maximumAnalysisCacheEntries {
+		t.Fatalf("concurrent cache entries=%d; want at most %d", len(entries), maximumAnalysisCacheEntries)
+	}
+}
+
+func TestAnalysisCacheRetentionCanceledPublication(t *testing.T) {
+	t.Parallel()
+
+	root := openRetentionRoot(t, t.TempDir())
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	err := writeAnalysisCache(ctx, root, fmt.Sprintf("%064x", 1), newRetentionModel())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("write error=%v; want context.Canceled", err)
+	}
+
+	entries, readErr := fs.ReadDir(root.FS(), ".")
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+
+	if len(entries) != 0 {
+		t.Fatalf("canceled publication created %d entries", len(entries))
+	}
+}
+
+func openRetentionRoot(t *testing.T, path string) *os.Root {
+	t.Helper()
+
+	root, err := os.OpenRoot(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = root.Close() })
+
+	return root
+}
+
+func retentionKey(letter byte) string {
+	return strings.Repeat(string(letter), 64)
+}
+
+func newRetentionModel() *model.CodeModel {
+	code := new(model.CodeModel)
+	code.ModuleRoot, code.GoVersion = "module", "go1.27.2"
+
+	return code
+}
+
+func writeRetentionEntry(t *testing.T, root *os.Root, key string, code *model.CodeModel) {
+	t.Helper()
+
+	contents := retentionEntryBytes(t, key, code)
+	writeRetentionFile(t, root, key+".json", contents)
+}
+
+func retentionEntryBytes(t *testing.T, key string, code *model.CodeModel) []byte {
+	t.Helper()
+
+	payload := marshalRetentionJSON(t, code)
+
+	entry := analysisCacheEntry{Version: analysisCacheVersion, Key: key, Digest: cacheDigest(payload), Model: payload}
+	contents := marshalRetentionJSON(t, entry)
+
+	return contents
+}
+
+func retentionEntryVariant(t *testing.T, version int, entryKey string) []byte {
+	t.Helper()
+
+	payload := marshalRetentionJSON(t, newRetentionModel())
+	entry := analysisCacheEntry{Version: version, Key: entryKey, Digest: cacheDigest(payload), Model: payload}
+
+	return marshalRetentionJSON(t, entry)
+}
+
+func retentionEntryBadDigest(t *testing.T, key string) []byte {
+	t.Helper()
+
+	payload := marshalRetentionJSON(t, newRetentionModel())
+	entry := analysisCacheEntry{Version: analysisCacheVersion, Key: key, Digest: "bad", Model: payload}
+
+	return marshalRetentionJSON(t, entry)
+}
+
+func marshalRetentionJSON(t *testing.T, value any) []byte {
+	t.Helper()
+
+	contents, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return contents
+}
+
+func requireRetentionPrune(t *testing.T, root *os.Root, keep string, maximumEntries int, maximumBytes int64) {
+	t.Helper()
+
+	err := pruneAnalysisCache(t.Context(), root, keep, maximumEntries, maximumBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeRetentionFile(t *testing.T, root *os.Root, name string, contents []byte) {
+	t.Helper()
+
+	err := root.WriteFile(name, contents, cacheFileMode)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func setRetentionTime(t *testing.T, root *os.Root, key string, stamp time.Time) {
+	t.Helper()
+
+	err := root.Chtimes(key+".json", stamp, stamp)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func retentionFileSize(t *testing.T, root *os.Root, key string) int64 {
+	t.Helper()
+
+	info, err := root.Stat(key + ".json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return info.Size()
+}
+
+func retentionSnapshot(t *testing.T, root *os.Root) map[string][]byte {
+	t.Helper()
+
+	entries, err := fs.ReadDir(root.FS(), ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot := make(map[string][]byte, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			snapshot[entry.Name()] = nil
+
+			continue
+		}
+
+		contents, err := root.ReadFile(entry.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		snapshot[entry.Name()] = contents
+	}
+
+	return snapshot
+}
+
+func assertRetentionNames(t *testing.T, root *os.Root, want map[string][]byte) {
+	t.Helper()
+
+	got := retentionSnapshot(t, root)
+	if len(got) != len(want) {
+		t.Fatalf("retained entry count=%d; want %d", len(got), len(want))
+	}
+
+	for name := range want {
+		if _, ok := got[name]; !ok {
+			t.Fatalf("retained entries=%v; want %v", got, want)
+		}
 	}
 }

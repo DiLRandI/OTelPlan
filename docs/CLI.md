@@ -61,8 +61,13 @@ without creating or refreshing cache files. Cache misses still analyze current
 source. Other analysis commands may publish refreshed cache entries. This does
 not alter resolution fingerprints or skip validation/backend verification.
 Cache storage failures return analysis exit code 4 with a diagnostic that omits
-the cache path. Go module/build caches remain separate. Eviction is not automatic;
-private cache data is disposable.
+the cache path. Go module/build caches remain separate. After writable
+publication, verified OTelPlan cache entries are bounded to 64 files and 256 MiB.
+Oldest published entries are removed first, with filenames breaking timestamp
+ties; the current entry is protected. Unknown, malformed, mismatched, or
+non-regular files are preserved and do not count toward these managed-entry
+limits. Read-only commands perform no retention writes. Cache data is disposable;
+concurrent writers may cause additional misses without changing resolution.
 
 ## Main workflow
 

@@ -88,7 +88,7 @@ func refreshAnalysisCache(ctx context.Context, cache *os.Root, key string, opts 
 	}
 
 	if key == after {
-		err = writeAnalysisCache(cache, key, result.code)
+		err = writeAnalysisCache(ctx, cache, key, result.code)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrCacheStorage, err)
 		}

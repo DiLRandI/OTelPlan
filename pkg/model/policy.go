@@ -154,11 +154,12 @@ type Exclusion struct {
 // Policy is the complete backend-independent instrumentation policy supplied by
 // the user.
 type Policy struct {
-	APIVersion string        `json:"apiVersion"           yaml:"apiVersion"`
-	Kind       string        `json:"kind"                 yaml:"kind"`
-	Project    ProjectConfig `json:"project"              yaml:"project,omitempty"`
-	Backend    BackendConfig `json:"backend"              yaml:"backend"`
-	Defaults   Defaults      `json:"defaults"             yaml:"defaults,omitempty"`
-	Rules      []Rule        `json:"rules"                yaml:"rules"`
-	Exclusions []Exclusion   `json:"exclusions,omitempty" yaml:"exclusions,omitempty"`
+	APIVersion   string        `json:"apiVersion"             yaml:"apiVersion"`
+	Kind         string        `json:"kind"                   yaml:"kind"`
+	Project      ProjectConfig `json:"project"                yaml:"project,omitempty"`
+	Backend      BackendConfig `json:"backend"                yaml:"backend"`
+	Defaults     Defaults      `json:"defaults"               yaml:"defaults,omitempty"`
+	DenyPatterns []string      `json:"denyPatterns,omitempty" yaml:"denyPatterns,omitempty"`
+	Rules        []Rule        `json:"rules"                  yaml:"rules"`
+	Exclusions   []Exclusion   `json:"exclusions,omitempty"   yaml:"exclusions,omitempty"`
 }

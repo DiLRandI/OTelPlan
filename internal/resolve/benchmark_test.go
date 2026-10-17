@@ -35,7 +35,7 @@ func BenchmarkResolveExactApplicationFunctions(b *testing.B) {
 			Errors:     model.ErrorDefaults{Record: true},
 		},
 		Rules:      make([]model.Rule, 0, ruleCount),
-		Exclusions: nil,
+		Exclusions: nil, DenyPatterns: nil,
 	}
 
 	for ruleIndex := range ruleCount {

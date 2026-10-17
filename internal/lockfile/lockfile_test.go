@@ -20,7 +20,8 @@ func fixtureLock(t *testing.T) model.Lockfile {
 	)
 
 	policy := &model.Policy{
-		APIVersion: "", Kind: "", Project: model.ProjectConfig{
+		DenyPatterns: nil,
+		APIVersion:   "", Kind: "", Project: model.ProjectConfig{
 			Packages: nil, BuildTags: nil, IncludeTests: false, IncludeDependencies: false,
 		},
 		Backend:  model.BackendConfig{Name: "otelc", Version: "v1.1.0"},

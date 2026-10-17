@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
@@ -109,6 +110,7 @@ func validatePolicySettings(plan *model.Policy) model.DiagnosticErrorList {
 	var diags model.DiagnosticErrorList
 
 	diags = append(diags, validateDefaults(plan.Defaults)...)
+	diags = append(diags, validateDenyPatterns(plan.DenyPatterns)...)
 
 	if plan.Backend.Name != "" && plan.Backend.Name != model.BackendNameOTelC {
 		diags = append(diags, policyDiagnostic(
@@ -325,6 +327,17 @@ func validateAttributeSource(loc string, src model.AttributeSource) model.Diagno
 	}
 
 	return diags
+}
+
+func validateDenyPatterns(patterns []string) model.DiagnosticErrorList {
+	for _, pattern := range patterns {
+		if strings.Trim(pattern, "._-") == "" || strings.ContainsFunc(pattern, unicode.IsSpace) {
+			return model.DiagnosticErrorList{policyDiagnostic(model.CodeInvalidPolicy,
+				"denyPatterns entries must contain a non-separator character and must not contain whitespace", "")}
+		}
+	}
+
+	return nil
 }
 
 func hasReservedPrefix(key string) bool {

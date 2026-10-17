@@ -23,7 +23,7 @@ func validPolicyModel() *model.Policy {
 			ID: "operations", Description: "", Match: testFunctionMatch("Run"),
 			Exclude: nil, Span: nil, Errors: nil, Attributes: nil,
 		}},
-		Exclusions: nil,
+		Exclusions: nil, DenyPatterns: nil,
 	}
 }
 

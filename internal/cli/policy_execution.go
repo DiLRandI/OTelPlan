@@ -129,6 +129,7 @@ func validatePolicyExecution(opts options, execution policyExecution) (model.Dia
 	var safetyOptions validate.Options
 
 	safetyOptions.AllowLargePlan = opts.allowLargePlan
+	safetyOptions.DenyPatterns = execution.policy.DenyPatterns
 	diagnostics := execution.resolution.Diagnostics
 	diagnostics = append(diagnostics, validate.Safety(execution.inventory, execution.resolution.Plan, safetyOptions)...)
 

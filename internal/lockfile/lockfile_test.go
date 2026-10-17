@@ -36,7 +36,8 @@ func fixtureLock(t *testing.T) model.Lockfile {
 			Location: model.SourceLocation{File: "app.go", Line: 1, Column: 0},
 			Kind:     "", PackageImportPath: "", PackageName: "", Name: "", Receiver: nil, Visibility: "",
 			Parameters: nil, Results: nil, ContextIndexes: nil, ErrorIndexes: nil, Generics: nil,
-			Generated: false, TestFile: false, Ownership: "", HasBody: false, Variadic: false, Recursive: false,
+			Generated: false, TestFile: false, Ownership: "", HasBody: false, Variadic: false,
+			Recursive: false, ManualSpan: false,
 		}},
 	}
 	plan := model.ResolvedPlan{

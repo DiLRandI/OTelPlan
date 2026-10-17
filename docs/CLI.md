@@ -247,6 +247,7 @@ artifacts may contain explicitly configured constants; protect those files.
 | OTP3001 through OTP3002 | Missing or multiple usable contexts. |
 | OTP4001 through OTP4005 | Secret, PII, cardinality, broad plan, unsupported capture. |
 | OTP4006 | Selected target participates in a static recursive call cycle. |
+| OTP4007 | Selected target contains a recognizable OpenTelemetry span-start call. |
 | OTP5001 through OTP5004 | Backend unsupported/version mismatch, compilation, artifact output. |
 | OTP6001 | Resolution lock failure. |
 

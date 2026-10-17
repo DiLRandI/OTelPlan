@@ -10,6 +10,7 @@ import (
 // canonicalPolicy copies only collections whose order is irrelevant to discovery
 // and resolution. IDs, attribute sources, and behavior settings remain intact.
 func canonicalPolicy(policy model.Policy) model.Policy {
+	policy.DenyPatterns = canonicalSet(policy.DenyPatterns)
 	policy.Project.Packages = canonicalSet(policy.Project.Packages)
 	policy.Project.BuildTags = canonicalSet(policy.Project.BuildTags)
 

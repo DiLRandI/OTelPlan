@@ -13,7 +13,8 @@ func policyDigestFixture() *model.Policy {
 	var defaults model.Defaults
 
 	return &model.Policy{
-		APIVersion: "", Kind: "", Defaults: defaults,
+		DenyPatterns: nil,
+		APIVersion:   "", Kind: "", Defaults: defaults,
 		Backend: model.BackendConfig{Name: "otelc", Version: "v1.1.0"},
 		Project: model.ProjectConfig{
 			Packages: []string{"./b/...", "./a/..."}, BuildTags: []string{"two", "one"},

@@ -61,10 +61,25 @@ Search both:
 - telemetry key;
 - source field/path.
 
-The internal validator accepts supplemental deny patterns. The current policy
-schema and CLI do not expose a configurable denylist. Built-in checks cannot be
-disabled wholesale; sensitive captures require explicit per-attribute safety
-acknowledgment.
+Policies can add sensitive-name fragments:
+
+```yaml
+denyPatterns:
+  - bank_reference
+  - account_number
+```
+
+These literal fragments supplement built-in patterns. Matching ignores case and
+dot, underscore, and hyphen separators, using the attribute key and argument/result
+path. Entries must contain a non-separator character and no whitespace. An omitted
+or empty list leaves every built-in check enabled. Sensitive captures still
+require `safety: {classification: secret, allow: true}` on that attribute; public
+classification cannot bypass the check. Captured constants and deny-pattern
+contents are not echoed in these diagnostics.
+
+Order and duplicate entries do not affect the policy digest. A changed set of
+configured fragments changes policy identity and can make a lock stale. Analysis
+cache reuse does not bypass current policy safety validation.
 
 ## 3. PII
 

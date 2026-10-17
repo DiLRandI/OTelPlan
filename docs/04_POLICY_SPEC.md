@@ -22,6 +22,7 @@ kind: InstrumentationPlan
 project: {}
 backend: {}
 defaults: {}
+denyPatterns: []
 rules: []
 exclusions: []
 ```
@@ -221,6 +222,21 @@ sources currently support `argument`, `result`, and `constant`, with one source
 per mapping. Capture cannot be enabled wholesale through defaults.
 
 No automatic JSON encoding.
+
+## Additional sensitive-name patterns
+
+The optional root `denyPatterns` list adds literal name fragments to the built-in
+secret checks. It cannot remove built-in protections:
+
+```yaml
+denyPatterns: [bank_reference, account_number]
+```
+
+Matching ignores case and `.`, `_`, and `-` separators. Entries cannot be empty,
+contain whitespace, or consist only of separators. Matching applies to telemetry
+keys and selected argument/result paths. Order and duplicates are irrelevant to
+lock identity; changing the configured set is a policy change. See
+[safety validation](08_VALIDATION_SAFETY.md#2-secret-detection).
 
 ## Sensitive attribute override
 

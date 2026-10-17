@@ -29,10 +29,12 @@ type PreparedBuildRequest struct {
 	RuntimeOriginalDir string
 	Env                []string
 	GoArgs             []string
+	DryRun             bool
 }
 
-// BuildPrepared executes an already planned build. Env and GoArgs must match
-// the analyzed build configuration; output paths must be resolved by the caller.
+// BuildPrepared verifies and executes an already planned build. DryRun performs
+// the same verification without invoking the backend build. Env and GoArgs must
+// match analysis; output paths must be resolved by the caller.
 func BuildPrepared(ctx context.Context, request PreparedBuildRequest) error {
 	err := validatePreparedBuildIdentities(request)
 	if err != nil {
@@ -70,14 +72,19 @@ func BuildPrepared(ctx context.Context, request PreparedBuildRequest) error {
 		return err
 	}
 
-	err = runPreparedBuildBackend(ctx, executable, request, env, buildFlags, rules)
-	if err != nil {
-		return err
+	operation := "build preflight"
+	if !request.DryRun {
+		operation = "backend"
+
+		err = runPreparedBuildBackend(ctx, executable, request, env, buildFlags, rules)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = VerifyArtifacts(request.Workspace.Runtime)
 	if err != nil {
-		return fmt.Errorf("backend changed runtime artifacts: %w", err)
+		return fmt.Errorf("%s changed runtime artifacts: %w", operation, err)
 	}
 
 	return nil

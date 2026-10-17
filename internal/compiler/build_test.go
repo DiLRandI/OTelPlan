@@ -147,6 +147,7 @@ func preparedBuildFixture(t *testing.T) compiler.PreparedBuildRequest {
 		BuildEnvironment: code.EffectiveBuild, Workspace: prepared,
 		ModuleDir: prepared.Relocations[fixture.request.OriginalWorkspaceDir], Executable: executable, Backend: backend,
 		ApplicationModules: code.Modules, RuntimeModules: selection, RuntimeOriginalDir: runtime.Dir, Env: env, GoArgs: nil,
+		DryRun: false,
 	}
 }
 

@@ -259,7 +259,7 @@ func resolvedPreparedBuildRequest(ctx context.Context, request ResolvedBuildRequ
 	return PreparedBuildRequest{
 		BuildEnvironment: request.Code.EffectiveBuild, Workspace: prepared, ModuleDir: copiedDir,
 		Executable: request.Executable, Backend: request.Backend, ApplicationModules: applicationModules,
-		RuntimeModules: runtimeSelection, RuntimeOriginalDir: runtime.Dir, Env: env, GoArgs: nil,
+		RuntimeModules: runtimeSelection, RuntimeOriginalDir: runtime.Dir, Env: env, GoArgs: nil, DryRun: false,
 	}, nil
 }
 

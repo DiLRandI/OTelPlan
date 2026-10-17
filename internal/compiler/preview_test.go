@@ -47,6 +47,16 @@ func TestPreviewArtifactsMatchesPublicationWithoutWrites(t *testing.T) {
 	if !reflect.DeepEqual(preview, published) {
 		t.Fatalf("preview differs from subsequent publication: preview=%+v published=%+v", preview, published)
 	}
+
+	repeated, err := compiler.PreviewArtifacts(destination, staged, false)
+	if err != nil || !reflect.DeepEqual(repeated, published) {
+		t.Fatalf("identical existing output required clean or changed inventory: preview=%+v err=%v", repeated, err)
+	}
+
+	err = compiler.VerifyArtifacts(published)
+	if err != nil {
+		t.Fatalf("repeated preview changed existing output: %v", err)
+	}
 }
 
 func TestPreviewArtifactsHonorsCleanAndOwnedOutput(t *testing.T) {

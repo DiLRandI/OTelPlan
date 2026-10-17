@@ -184,7 +184,7 @@ func renderCommandSummary(text *strings.Builder, data any) {
 	case initSummary:
 		renderInitSummary(text, contents)
 	case compileSummary:
-		fmt.Fprintf(text, "%s artifacts=%d\n", contents.Path, contents.Files)
+		renderCompileSummary(text, contents)
 	case lockSummary:
 		fmt.Fprintf(text, "%s targets=%d changed=%t dry-run=%t\n",
 			contents.Path, contents.Targets, contents.Changed, contents.DryRun)
@@ -194,6 +194,20 @@ func renderCommandSummary(text *strings.Builder, data any) {
 		}
 	case map[string]string:
 		fmt.Fprintf(text, "otelplan %s\nGo %s\n", contents["otelplan"], contents["go"])
+	}
+}
+
+func renderCompileSummary(text *strings.Builder, summary compileSummary) {
+	if !summary.DryRun {
+		fmt.Fprintf(text, "%s artifacts=%d\n", summary.Path, summary.Files)
+
+		return
+	}
+
+	fmt.Fprintf(text, "would write %s artifacts=%d\n", summary.Path, summary.Files)
+
+	for _, file := range summary.Artifacts {
+		fmt.Fprintf(text, "ARTIFACT %s %s\n", file.Path, file.Digest)
 	}
 }
 

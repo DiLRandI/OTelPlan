@@ -325,8 +325,8 @@ OTelPlan's public policy schema must not expose raw `otelc` pointcut/advice synt
 ### FR-018 Dry-run
 
 All mutating/generating commands must support `--dry-run` where meaningful.
-The CLI supports this flag for starter-policy generation and lock refresh.
-Compile/build previews remain to be implemented before stability.
+The CLI supports this flag for starter-policy generation, lock refresh, and
+compilation previews. Build previews remain to be implemented before stability.
 
 ### FR-019 JSON output
 

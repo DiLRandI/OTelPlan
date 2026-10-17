@@ -42,7 +42,7 @@ Explain requires exactly one canonical symbol. Build arguments should follow `--
 | `--interfaces` | Scan only. Show interface method bindings in text output; JSON contains model metadata. |
 | `--calls` | Scan only. Include advisory SSA/CHA call relationships and precision limits. |
 | `--check` | Lock/diff only. Fail for missing or stale resolution without writing files. |
-| `--dry-run` | Init/lock only. Preview a starter policy or lock refresh without writing. |
+| `--dry-run` | Init/lock/compile only. Preview a starter policy, lock refresh, or generated artifact inventory without publishing. |
 | `--output PATH` | Init/compile only. Init defaults to `otelplan.yaml`; compile defaults to `.otelplan/build`. |
 | `--force` | Init only. Permit replacement of an existing regular starter-policy file. |
 | `--interactive` | Init only, text output. Review suggestions individually before writing. |
@@ -56,7 +56,7 @@ cache directory; cached metadata is trusted local state and must not be shared
 with untrusted users. An explicit empty path is a usage error. Version/help do
 not accept this flag.
 
-Init dry-run, lock check, lock dry-run, and all diff operations reuse valid existing metadata
+Init/compile dry-run, lock check, lock dry-run, and all diff operations reuse valid existing metadata
 without creating or refreshing cache files. Cache misses still analyze current
 source. Other analysis commands may publish refreshed cache entries. This does
 not alter resolution fingerprints or skip validation/backend verification.
@@ -115,6 +115,20 @@ in temporary module state, and publishes rules, hooks, and `manifest.json` with
 file hashes. Identical output is reused. `--clean` replaces changed generated
 output only after validating the previous manifest; edited generated files and
 unrelated files prevent replacement.
+
+`compile --dry-run` performs the same backend verification, rendering, and
+generated-source compilation in disposable state, then previews publication.
+JSON adds `data.dryRun=true` and `data.artifacts`, a sorted inventory of relative
+file paths and SHA-256 digests including the manifest. Text reports `would write`
+and lists the inventory. Normal compile JSON retains its existing shape.
+
+The preview creates no output directories and preserves existing output and
+requested analysis caches. `--clean --dry-run` previews replacement of a verified
+bundle; changed output still requires `--clean`, and modified or unrelated files
+remain errors. Missing output parents are allowed without creating them. The
+preview cannot guarantee that a later write will succeed. Go dependency/build
+caches may still be used or populated; use `--offline` with prepared dependencies
+to disable module lookup.
 
 Build copies application modules, local replacements, and workspace state into
 a disposable workspace. It verifies that adding the generated runtime preserves

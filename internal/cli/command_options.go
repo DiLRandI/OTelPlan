@@ -19,7 +19,7 @@ var (
 	errInteractiveJSON     = errors.New("--interactive requires text output")
 	errInteractiveInput    = errors.New("--interactive requires an input stream")
 	errCheckApplicability  = errors.New("--check is supported by lock and diff")
-	errDryRunApplicability = errors.New("--dry-run is supported by init and lock")
+	errDryRunApplicability = errors.New("--dry-run is supported by init, lock, and compile")
 )
 
 func validateCommandOptions(command string, opts options, stdin io.Reader) error {
@@ -124,7 +124,7 @@ func validateLockOptions(command string, opts options) error {
 		return errCheckApplicability
 	}
 
-	if opts.dryRun && command != lockCommandName && command != initCommandName {
+	if opts.dryRun && command != lockCommandName && command != initCommandName && command != compileCommandName {
 		return errDryRunApplicability
 	}
 

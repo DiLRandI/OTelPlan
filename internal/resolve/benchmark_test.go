@@ -67,7 +67,7 @@ func BenchmarkResolveExactApplicationFunctions(b *testing.B) {
 				ErrorIndexes:      []int{0},
 				Receiver:          nil,
 				Location:          model.SourceLocation{File: "", Line: 0, Column: 0},
-				Generics:          nil, Generated: false, TestFile: false, HasBody: false, Variadic: false,
+				Generics:          nil, Generated: false, TestFile: false, HasBody: false, Variadic: false, Recursive: false,
 			})
 		}
 

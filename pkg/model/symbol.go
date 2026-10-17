@@ -110,6 +110,8 @@ type Symbol struct {
 	Signature         string         `json:"signature"`
 	HasBody           bool           `json:"hasBody"`
 	Variadic          bool           `json:"variadic"`
+	// Recursive identifies a cycle of statically resolved calls in analyzed bodies.
+	Recursive bool `json:"recursive,omitempty"`
 }
 
 // FunctionID constructs the canonical ID for a package-level function.

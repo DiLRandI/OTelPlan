@@ -163,8 +163,19 @@ threshold configuration is not currently a policy/CLI feature.
 ## 9. Recursion
 
 Instrumenting recursive functions is allowed but can create deep traces.
-Dedicated recursion warnings remain planned. Advisory call edges can help a
-human review recursion but are not an automatic safety diagnostic.
+Discovery marks declarations that belong to statically resolved call cycles,
+including mutual recursion through other analyzed declarations. Selecting one
+produces warning `OTP4006` with its policy rule and exact symbol; `--strict`
+treats the warning as a validation failure. A caller that only reaches a cycle
+is not itself marked recursive. No target is automatically excluded.
+
+This check uses typed calls in analyzed bodies without requiring the optional
+SSA call graph. Immediately invoked closures are included; stored or returned
+closure bodies are not attributed to the enclosing declaration. Arbitrary
+function-value calls, interface dispatch, reflection, and cycles through bodies
+outside the analyzed package set are not resolved. A static cycle does not
+prove that the recursive path executes for a particular input. Absence of a
+warning is not proof that recursion is impossible.
 
 ## 10. Double instrumentation
 

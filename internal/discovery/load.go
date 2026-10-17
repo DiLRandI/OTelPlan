@@ -110,6 +110,11 @@ func loadPreparedModel(ctx context.Context, opts Options, cfg *packages.Config) 
 		return preparedAnalysis{}, err
 	}
 
+	err = addManualSpanMetadata(ctx, code, selected)
+	if err != nil {
+		return preparedAnalysis{}, err
+	}
+
 	if opts.CallGraph {
 		err = addCallGraph(ctx, code, selected)
 		if err != nil {

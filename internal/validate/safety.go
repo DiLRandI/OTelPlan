@@ -120,6 +120,13 @@ func targetSafety(code *model.CodeModel, target model.ResolvedTarget, secrets []
 		))
 	}
 
+	if symbol.ManualSpan {
+		diags = append(diags, safetyDiagnostic(
+			model.SeverityWarning, model.CodeManualSpan,
+			"selected target contains an OpenTelemetry span-start call; review overlapping instrumentation",
+		))
+	}
+
 	if target.ContextStrategy.Strategy == model.ContextStrategyRoot {
 		diags = append(diags, safetyDiagnostic(
 			model.SeverityWarning, model.CodeMissingContext,

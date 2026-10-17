@@ -187,6 +187,12 @@ static call cycles. This uses existing typed AST data independently of SSA and
 does not populate optional call edges. Direct and mutual cycles preserve exact
 function/method identity. See [recursion safety and analysis limits](08_VALIDATION_SAFETY.md#9-recursion).
 
+Symbols with recognizable calls to the OpenTelemetry `trace.Tracer.Start` API
+also record `manualSpan=true`. Receiver types must implement the actual imported
+Tracer interface; matching the method name alone is insufficient. This metadata
+uses typed AST calls independently of SSA and contains no span-name or captured
+values. See [overlap warnings and limitations](08_VALIDATION_SAFETY.md#10-double-instrumentation).
+
 `Options.CacheDir` opts into persistent normalized CodeModel caching. Leave it empty to avoid cache storage. Use a private caller-owned directory, never an untrusted shared cache. Newly created directories and files use permissions 0700 and 0600. Entries contain symbol/type/source metadata, but omit raw effective build environment values and restore those from the current request.
 
 Each lookup reruns Go package selection and hashes selected source, embedded files, dependency sources, manifests, workspace/vendor metadata, analysis options, the effective build environment, and the analyzer executable. Cache identity includes absolute input paths; moving a checkout causes a cache miss without changing the relocatable lock fingerprint. Compiler-generated temporary paths can also prevent hits. A hit avoids rebuilding syntax/type/SSA metadata. Invalid, damaged, obsolete, or oversized entries trigger fresh analysis; errors accessing explicitly requested cache storage are reported. Atomic publication permits concurrent callers. Changed inputs during analysis are not cached. Cache entries are disposable and may be removed by the caller; successful writable publication bounds recognized entries to 64 files and 256 MiB by removing the oldest published entries, with filename ordering for equal timestamps. The current publication is protected. Ownership checks require a regular SHA-keyed file with the expected version, matching key/payload digest, and valid model identity. Unrecognized or damaged files are preserved and excluded from these managed-entry budgets. Retention observes caller cancellation; concurrent removal is harmless because metadata is disposable.

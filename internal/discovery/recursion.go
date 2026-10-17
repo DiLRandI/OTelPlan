@@ -94,31 +94,10 @@ func collectStaticCalls(ctx context.Context, pkg *packages.Package, indexes map[
 func staticFunctionCalls(ctx context.Context, info *types.Info, body *ast.BlockStmt) []*types.Func {
 	var callees []*types.Func
 
-	ast.Inspect(body, func(node ast.Node) bool {
-		if ctx.Err() != nil {
-			return false
-		}
-
-		if _, literal := node.(*ast.FuncLit); literal {
-			return false
-		}
-
-		call, ok := node.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-
+	inspectFunctionCalls(ctx, body, func(call *ast.CallExpr) {
 		if callee := typeutil.StaticCallee(info, call); callee != nil {
 			callees = append(callees, callee)
 		}
-
-		// A returned or stored closure does not execute inside its declaration.
-		// Immediately invoked closures do and can complete a recursive cycle.
-		if literal, immediate := ast.Unparen(call.Fun).(*ast.FuncLit); immediate {
-			callees = append(callees, staticFunctionCalls(ctx, info, literal.Body)...)
-		}
-
-		return true
 	})
 
 	return callees

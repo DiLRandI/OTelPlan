@@ -179,9 +179,23 @@ warning is not proof that recursion is impossible.
 
 ## 10. Double instrumentation
 
-Dedicated manual-span/double-instrumentation detection remains planned.
-The current validator does not claim to detect existing `tracer.Start` calls or
-automatically suppress them. Review overlap with existing application tracing.
+Selecting a declaration with a recognizable OpenTelemetry span-start call
+produces warning `OTP4007`. The check uses Go types: a `Start` method must have
+a receiver implementing `go.opentelemetry.io/otel/trace.Tracer`. It recognizes
+interface calls, aliases, concrete wrappers, promoted methods, and method
+expressions. Unrelated methods named `Start` do not match by name alone.
+
+Immediately invoked closure bodies are included. Stored/returned closures,
+indirect function-value calls, helper-function bodies, and reflection are not
+attributed to the enclosing declaration. The warning does not prove that a
+particular path executes or that spans are duplicates. Absence of a warning is
+not proof that manual instrumentation is absent.
+
+The diagnostic retains the selected symbol and rule without exposing span names
+or attribute values. No target is automatically excluded and no application span
+is suppressed. Review the overlap and use ordinary policy exclusions when
+appropriate. Existing `--strict` semantics treat this warning as a validation
+failure.
 
 ## Returned-error messages
 

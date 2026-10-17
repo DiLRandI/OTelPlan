@@ -3,6 +3,7 @@ package compiler
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -137,6 +138,82 @@ func TestDecodeDefaultOutputMetadata(t *testing.T) {
 			name, err := decodeDefaultBuildOutput([]byte(testCase.data), "linux")
 			if (err != nil) != testCase.invalid || name != testCase.want {
 				t.Fatalf("name=%s error=%v; want name=%s invalid=%v", name, err, testCase.want, testCase.invalid)
+			}
+		})
+	}
+}
+
+func TestDecodePreviewBuildOutputs(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name      string
+		data      string
+		goos      string
+		directory bool
+		want      []string
+		invalid   bool
+	}{
+		{
+			name: "mixed libraries sorted and deduplicated", goos: "linux", directory: true, invalid: false,
+			data: `{"Name":"library","ImportPath":"example.com/lib"}
+{"Name":"main","ImportPath":"example.com/z"}
+{"Name":"main","ImportPath":"example.com/a"}
+{"Name":"main","ImportPath":"example.com/a"}`,
+			want: []string{"a", "z"},
+		},
+		{
+			name: "versioned module", goos: "linux", directory: true, invalid: false,
+			data: `{"Name":"main","ImportPath":"example.com/tool/v2"}`,
+			want: []string{"tool"},
+		},
+		{
+			name: "command line Go file", goos: "linux", directory: true, invalid: false,
+			data: `{"Name":"main","ImportPath":"command-line-arguments","GoFiles":["first.go"],"CgoFiles":["native.go"]}`,
+			want: []string{"first"},
+		},
+		{
+			name: "command line Cgo file", goos: "linux", directory: true, invalid: false,
+			data: `{"Name":"main","ImportPath":"command-line-arguments","CgoFiles":["native.go"]}`,
+			want: []string{"native"},
+		},
+		{
+			name: "windows", goos: "windows", directory: true, invalid: false,
+			data: `{"Name":"main","ImportPath":"example.com/tool"}`,
+			want: []string{"tool.exe"},
+		},
+		{
+			name: "empty", goos: "linux", directory: true, invalid: true, data: "", want: nil,
+		},
+		{
+			name: "no main", goos: "linux", directory: true, invalid: true,
+			data: `{"Name":"library","ImportPath":"example.com/lib"}`, want: nil,
+		},
+		{
+			name: "malformed", goos: "linux", directory: true, data: `{broken`, invalid: true, want: nil,
+		},
+		{
+			name: "explicit main", goos: "linux", directory: false, invalid: false,
+			data: `{"Name":"main","ImportPath":"example.com/tool"}`, want: []string{""},
+		},
+		{
+			name: "explicit library", goos: "linux", directory: false, invalid: false,
+			data: `{"Name":"library","ImportPath":"example.com/lib"}`, want: []string{""},
+		},
+		{
+			name: "explicit multiple", goos: "linux", directory: false, invalid: true,
+			data: `{"Name":"main","ImportPath":"example.com/one"}
+	{"Name":"main","ImportPath":"example.com/two"}`, want: nil,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := decodePreviewBuildOutputs([]byte(testCase.data), testCase.goos, testCase.directory)
+			if (err != nil) != testCase.invalid || !slices.Equal(got, testCase.want) {
+				t.Fatalf("outputs=%v error=%v; want outputs=%v invalid=%t", got, err, testCase.want, testCase.invalid)
 			}
 		})
 	}

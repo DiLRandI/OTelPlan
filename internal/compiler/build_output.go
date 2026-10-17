@@ -116,6 +116,36 @@ func openRegularBuildArtifact(root *os.Root, relative string) (*os.File, os.File
 }
 
 func prepareBuildDestination(destination string) (string, error) {
+	absolute, err := inspectBuildDestination(destination)
+	if err != nil {
+		return "", err
+	}
+
+	err = os.MkdirAll(filepath.Dir(absolute), privateBuildOutputDirectoryMode)
+	if err != nil {
+		return "", fmt.Errorf("create build output directory: %w", err)
+	}
+
+	return absolute, nil
+}
+
+// PreviewBuildDestination checks the output and existing parents without
+// creating directories or replacing files. Source ownership is caller-validated.
+func PreviewBuildDestination(destination string) (string, error) {
+	absolute, err := inspectBuildDestination(destination)
+	if err != nil {
+		return "", err
+	}
+
+	err = checkArtifactOutputParent(absolute)
+	if err != nil {
+		return "", fmt.Errorf("inspect build output parent: %w", err)
+	}
+
+	return absolute, nil
+}
+
+func inspectBuildDestination(destination string) (string, error) {
 	if destination == "" {
 		return "", errEmptyBuildOutputPath
 	}
@@ -132,11 +162,6 @@ func prepareBuildDestination(destination string) (string, error) {
 
 	if err == nil && !existing.Mode().IsRegular() {
 		return "", errNonregularBuildDestination
-	}
-
-	err = os.MkdirAll(filepath.Dir(absolute), privateBuildOutputDirectoryMode)
-	if err != nil {
-		return "", fmt.Errorf("create build output directory: %w", err)
 	}
 
 	return absolute, nil

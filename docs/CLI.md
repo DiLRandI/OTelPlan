@@ -42,7 +42,7 @@ Explain requires exactly one canonical symbol. Build arguments should follow `--
 | `--interfaces` | Scan only. Show interface method bindings in text output; JSON contains model metadata. |
 | `--calls` | Scan only. Include advisory SSA/CHA call relationships and precision limits. |
 | `--check` | Lock/diff only. Fail for missing or stale resolution without writing files. |
-| `--dry-run` | Init/lock/compile only. Preview a starter policy, lock refresh, or generated artifact inventory without publishing. |
+| `--dry-run` | Init/lock/compile/build only. Preview a starter policy, lock refresh, generated artifacts, or planned build outputs without publishing. |
 | `--output PATH` | Init/compile only. Init defaults to `otelplan.yaml`; compile defaults to `.otelplan/build`. |
 | `--force` | Init only. Permit replacement of an existing regular starter-policy file. |
 | `--interactive` | Init only, text output. Review suggestions individually before writing. |
@@ -56,7 +56,7 @@ cache directory; cached metadata is trusted local state and must not be shared
 with untrusted users. An explicit empty path is a usage error. Version/help do
 not accept this flag.
 
-Init/compile dry-run, lock check, lock dry-run, and all diff operations reuse valid existing metadata
+Init/compile/build dry-run, lock check, lock dry-run, and all diff operations reuse valid existing metadata
 without creating or refreshing cache files. Cache misses still analyze current
 source. Other analysis commands may publish refreshed cache entries. This does
 not alter resolution fingerprints or skip validation/backend verification.
@@ -161,6 +161,21 @@ project metadata, directories, or symlinks.
 Build from an application module or pass explicit targets from a workspace root,
 for example `otelplan build -- ./app`. Workspace-root builds require a package
 target. Backend subprocess logs are suppressed.
+
+`build --dry-run` verifies the policy, pinned backend, isolated workspace,
+recorded build environment, generated runtime artifacts, and module selection.
+It queries package metadata to plan output names, but does not invoke backend
+compilation or publish binaries. JSON returns `data.dryRun=true`, `data.outputs`
+as an array of absolute destination paths, and the verified `data.backend`.
+Text reports `would build` for each output. Library and multi-package builds
+without `-o` return an empty output array. Normal build JSON is unchanged.
+
+Preview retains source and destination safety checks without creating output
+directories or changing existing outputs, locks, or requested analysis caches.
+It uses disposable workspace copies and may populate Go dependency/build caches;
+use `--offline` after preparing dependencies to disable module lookup. A
+successful preflight does not prove that eventual compilation or publication
+will succeed. No binary digests are reported for unbuilt outputs.
 
 ## Offline execution and cancellation
 

@@ -72,7 +72,7 @@ jobs:
 
   otelc-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -92,7 +92,7 @@ jobs:
         run: go build -mod=readonly -trimpath -ldflags '-X go.opentelemetry.io/otelc/tool/util.Version=v1.1.0' -o "$RUNNER_TEMP/otelc" ./tool/cmd/otelc
       - name: Test real backend
         run: |
-          go test ./...
+          go test -timeout=20m ./...
           go test -race -timeout=20m ./...
         env:
           OTELPLAN_OTELC: ${{ runner.temp }}/otelc

@@ -172,9 +172,13 @@ Build the exact backend using [these instructions](OTELC_BACKEND.md#build-the-pi
 From OTelPlan:
 
 ```sh
-OTELPLAN_OTELC=/absolute/path/to/otelc go test ./...
+OTELPLAN_OTELC=/absolute/path/to/otelc go test -timeout=20m ./...
 OTELPLAN_OTELC=/absolute/path/to/otelc go test -race -timeout=20m ./...
 ```
+
+Both runs use an explicit per-package timeout because cold-cache instrumented
+builds can exceed Go's default 10-minute package budget on CI runners. The E2E
+job allows 45 minutes for both bounded runs and pinned-backend setup.
 
 Without `OTELPLAN_OTELC`, backend integration tests skip locally. A configured
 missing or incompatible executable fails. Do not treat skipped tests as trace

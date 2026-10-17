@@ -2,8 +2,10 @@ package cli_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -24,6 +26,50 @@ type compileDryRunResponse struct {
 		DryRun    bool                 `json:"dryRun"`
 		Artifacts []model.ArtifactFile `json:"artifacts"`
 	} `json:"data"`
+}
+
+func TestCompileDryRunCancellationPreservesProject(t *testing.T) {
+	t.Parallel()
+
+	root, _ := lockContractFixture(t)
+	original := testenv.SnapshotFiles(t, root)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	args := []string{"compile", "--dry-run", "--output", "nested/generated", "--cache-dir", "nested/cache"}
+	reply := policyExecutionReply(ctx, t, root, args, 4)
+	checkPolicyDiagnosticCodes(t, reply, []model.Code{model.CodeUnresolvedSymbol})
+	testenv.AssertFilesUnchanged(t, original, testenv.SnapshotFiles(t, root))
+
+	_, err := os.Stat(filepath.Join(root, "nested"))
+	if !os.IsNotExist(err) {
+		t.Fatalf("canceled preview created output/cache parent: %v", err)
+	}
+}
+
+func TestCompileDryRunRequiresBackend(t *testing.T) {
+	goExecutable, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	goExecutable, err = filepath.EvalSymlinks(goExecutable)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("PATH", filepath.Dir(goExecutable))
+	root, _ := lockContractFixture(t)
+	original := testenv.SnapshotFiles(t, root)
+	args := []string{"compile", "--dry-run", "--output", "nested/generated", "--cache-dir", "nested/cache"}
+	reply := policyExecutionReply(t.Context(), t, root, args, 7)
+	checkPolicyDiagnosticCodes(t, reply, []model.Code{model.CodeBackendUnsupported})
+	testenv.AssertFilesUnchanged(t, original, testenv.SnapshotFiles(t, root))
+
+	_, err = os.Stat(filepath.Join(root, "nested"))
+	if !os.IsNotExist(err) {
+		t.Fatalf("failed backend verification created output/cache parent: %v", err)
+	}
 }
 
 func TestCompileDryRunPreviewsArtifactsWithoutPublishing(t *testing.T) {

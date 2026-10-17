@@ -179,7 +179,7 @@ func verifyStagedArtifactFile(root *os.Root, expected map[string]string, path st
 		return errUnexpectedStagedArtifact
 	}
 
-	data, err := root.ReadFile(path)
+	data, err := readRegularArtifact(root, path)
 	if err != nil {
 		return fmt.Errorf("read staged artifact contents: %w", err)
 	}

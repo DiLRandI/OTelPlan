@@ -113,6 +113,13 @@ func targetSafety(code *model.CodeModel, target model.ResolvedTarget, secrets []
 		))
 	}
 
+	if symbol.Recursive {
+		diags = append(diags, safetyDiagnostic(
+			model.SeverityWarning, model.CodeRecursiveTarget,
+			"selected target participates in a static recursive call cycle; review trace depth and volume",
+		))
+	}
+
 	if target.ContextStrategy.Strategy == model.ContextStrategyRoot {
 		diags = append(diags, safetyDiagnostic(
 			model.SeverityWarning, model.CodeMissingContext,

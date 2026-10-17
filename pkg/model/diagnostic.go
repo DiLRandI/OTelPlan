@@ -31,6 +31,7 @@ const (
 	CodeCardinalityWarning     Code = "OTP4003"
 	CodeBroadPlan              Code = "OTP4004"
 	CodeCaptureNotAllowed      Code = "OTP4005"
+	CodeRecursiveTarget        Code = "OTP4006"
 	CodeBackendUnsupported     Code = "OTP5001"
 	CodeBackendVersionMismatch Code = "OTP5002"
 	CodeCompilationFailed      Code = "OTP5003"

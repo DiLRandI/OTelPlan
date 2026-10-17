@@ -181,6 +181,8 @@ func renderCommandSummary(text *strings.Builder, data any) {
 	switch contents := data.(type) {
 	case buildSummary:
 		renderBuildSummary(text, contents)
+	case buildPreviewSummary:
+		renderBuildPreview(text, contents)
 	case initSummary:
 		renderInitSummary(text, contents)
 	case compileSummary:
@@ -194,6 +196,18 @@ func renderCommandSummary(text *strings.Builder, data any) {
 		}
 	case map[string]string:
 		fmt.Fprintf(text, "otelplan %s\nGo %s\n", contents["otelplan"], contents["go"])
+	}
+}
+
+func renderBuildPreview(text *strings.Builder, summary buildPreviewSummary) {
+	if len(summary.Outputs) == 0 {
+		fmt.Fprintln(text, "build preflight succeeded; no output planned")
+
+		return
+	}
+
+	for _, output := range summary.Outputs {
+		fmt.Fprintf(text, "would build %s\n", output)
 	}
 }
 

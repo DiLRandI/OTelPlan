@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"golang.org/x/mod/module"
@@ -22,6 +23,8 @@ var (
 	errUnsupportedTargetQueryFlag   = errors.New("unsupported target query flag")
 	errTargetQueryFlagValueRequired = errors.New("target query flag requires a value")
 	errInvalidTargetQueryModuleMode = errors.New("unsupported target query module mode")
+	errSingleFileBuildTargets       = errors.New("single-file build output requires exactly one package")
+	errDirectoryBuildWithoutMain    = errors.New("directory build output requires a main package")
 )
 
 type buildTargetInfo struct {
@@ -33,9 +36,19 @@ type buildTargetInfo struct {
 
 func defaultBuildOutput(ctx context.Context, dir string, env, flags, targets []string,
 	goos, moduleMode string) (string, error) {
-	err := validateTargetQueryFlags(flags, moduleMode)
+	data, err := queryBuildTargets(ctx, dir, env, flags, targets, moduleMode)
 	if err != nil {
 		return "", err
+	}
+
+	return decodeDefaultBuildOutput(data, goos)
+}
+
+func queryBuildTargets(ctx context.Context, dir string, env, flags, targets []string,
+	moduleMode string) ([]byte, error) {
+	err := validateTargetQueryFlags(flags, moduleMode)
+	if err != nil {
+		return nil, err
 	}
 
 	command := exec.CommandContext(ctx, "go", "list", "-json")
@@ -47,10 +60,10 @@ func defaultBuildOutput(ctx context.Context, dir string, env, flags, targets []s
 
 	data, err := command.Output()
 	if err != nil {
-		return "", fmt.Errorf("read build targets: %w", err)
+		return nil, fmt.Errorf("read build targets: %w", err)
 	}
 
-	return decodeDefaultBuildOutput(data, goos)
+	return data, nil
 }
 
 func validateTargetQueryFlags(flags []string, moduleMode string) error {
@@ -109,23 +122,14 @@ func validateTargetQueryFlag(name, value string, hasValue bool) error {
 }
 
 func decodeDefaultBuildOutput(data []byte, goos string) (string, error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	count, name := 0, ""
+	packages, err := decodeBuildTargets(data)
+	if err != nil {
+		return "", err
+	}
 
-	for {
-		var pkg buildTargetInfo
+	name := ""
 
-		err := decoder.Decode(&pkg)
-		if errors.Is(err, io.EOF) {
-			break
-		}
-
-		if err != nil {
-			return "", fmt.Errorf("decode build targets: %w", err)
-		}
-
-		count++
-
+	for _, pkg := range packages {
 		if pkg.Name != "main" {
 			continue
 		}
@@ -136,7 +140,7 @@ func decodeDefaultBuildOutput(data []byte, goos string) (string, error) {
 		}
 	}
 
-	if count != 1 || name == "" {
+	if len(packages) != 1 || name == "" {
 		return "", nil
 	}
 
@@ -145,6 +149,68 @@ func decodeDefaultBuildOutput(data []byte, goos string) (string, error) {
 	}
 
 	return name, nil
+}
+
+func decodeBuildTargets(data []byte) ([]buildTargetInfo, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+
+	var packages []buildTargetInfo
+
+	for {
+		var pkg buildTargetInfo
+
+		err := decoder.Decode(&pkg)
+		if errors.Is(err, io.EOF) {
+			return packages, nil
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("decode build targets: %w", err)
+		}
+
+		packages = append(packages, pkg)
+	}
+}
+
+func decodePreviewBuildOutputs(data []byte, goos string, directory bool) ([]string, error) {
+	packages, err := decodeBuildTargets(data)
+	if err != nil {
+		return nil, err
+	}
+
+	if !directory {
+		if len(packages) != 1 {
+			return nil, errSingleFileBuildTargets
+		}
+
+		return []string{""}, nil
+	}
+
+	names := make([]string, 0, len(packages))
+	for _, pkg := range packages {
+		if pkg.Name != "main" {
+			continue
+		}
+
+		name, nameErr := executableTargetName(pkg)
+		if nameErr != nil {
+			return nil, nameErr
+		}
+
+		if goos == "windows" {
+			name += ".exe"
+		}
+
+		names = append(names, name)
+	}
+
+	if len(names) == 0 {
+		return nil, errDirectoryBuildWithoutMain
+	}
+
+	slices.Sort(names)
+
+	return slices.Compact(names), nil
 }
 
 func executableTargetName(pkg buildTargetInfo) (string, error) {

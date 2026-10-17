@@ -29,6 +29,12 @@ type buildDestination struct {
 	directory bool
 }
 
+type buildPreviewSummary struct {
+	DryRun  bool              `json:"dryRun"`
+	Outputs []string          `json:"outputs"`
+	Backend model.LockBackend `json:"backend"`
+}
+
 func buildCommand(ctx context.Context, opts options, args buildArguments, policy *model.Policy,
 	code *model.CodeModel, plan model.ResolvedPlan) (any, int, model.DiagnosticErrorList) {
 	executable, err := exec.LookPath("otelc")
@@ -54,14 +60,25 @@ func buildCommand(ctx context.Context, opts options, args buildArguments, policy
 		Code: code, Plan: plan, Backend: backend, Executable: executable, RuntimeVersion: Version,
 		WorkingDir: "", Parent: "", Env: os.Environ(), GoArgs: args.GoArgs, Offline: opts.offline,
 		DefaultOutput: destination.path == "", DirectoryOutput: destination.directory, Packages: args.Packages,
+		DryRun: opts.dryRun,
 	})
 	if err != nil {
+		if opts.dryRun {
+			recordFailure(opts, model.CodeCompilationFailed, "preflight isolated workspace", err)
+
+			return buildFailure(exitCompilation, model.CodeCompilationFailed, "isolated build preflight failed")
+		}
+
 		recordFailure(opts, model.CodeCompilationFailed, "build isolated workspace", err)
 
 		return buildFailure(exitCompilation, model.CodeCompilationFailed, "isolated backend build failed")
 	}
 
 	defer func() { _ = os.RemoveAll(built.Dir) }()
+
+	if opts.dryRun {
+		return destination.previewAll(opts, code, backend, built.PreviewNames)
+	}
 
 	destinations, exit, diagnostics := destination.resolveAll(opts, code, built.Files)
 	if diagnostics != nil {
@@ -96,14 +113,24 @@ func selectBuildDestination(opts options, output string, code *model.CodeModel) 
 
 func (choice buildDestination) resolveAll(opts options, code *model.CodeModel,
 	files []compiler.BuildArtifact) ([]string, int, model.DiagnosticErrorList) {
-	destinations := make([]string, len(files))
+	names := make([]string, len(files))
+	for index, file := range files {
+		names[index] = file.DefaultName
+	}
 
-	for artifactIndex, artifact := range files {
+	return choice.resolveNames(opts, code, names)
+}
+
+func (choice buildDestination) resolveNames(opts options, code *model.CodeModel,
+	names []string) ([]string, int, model.DiagnosticErrorList) {
+	destinations := make([]string, len(names))
+
+	for artifactIndex, name := range names {
 		target := choice.path
 		if target == "" {
-			target = filepath.Join(opts.root, artifact.DefaultName)
+			target = filepath.Join(opts.root, name)
 		} else if choice.directory {
-			target = filepath.Join(target, artifact.DefaultName)
+			target = filepath.Join(target, name)
 		}
 
 		absolute, err := filepath.Abs(target)
@@ -133,6 +160,25 @@ func (choice buildDestination) resolveAll(opts options, code *model.CodeModel,
 	}
 
 	return destinations, 0, nil
+}
+
+func (choice buildDestination) previewAll(opts options, code *model.CodeModel, backend model.LockBackend,
+	names []string) (any, int, model.DiagnosticErrorList) {
+	destinations, exit, diagnostics := choice.resolveNames(opts, code, names)
+	if diagnostics != nil {
+		return nil, exit, diagnostics
+	}
+
+	for _, destination := range destinations {
+		_, err := compiler.PreviewBuildDestination(destination)
+		if err != nil {
+			recordFailure(opts, model.CodeArtifactOutput, "inspect preview build output", err)
+
+			return buildFailure(1, model.CodeArtifactOutput, "cannot prepare preview build output")
+		}
+	}
+
+	return buildPreviewSummary{DryRun: true, Outputs: destinations, Backend: backend}, 0, nil
 }
 
 func (choice buildDestination) publishAll(opts options, backend model.LockBackend, files []compiler.BuildArtifact,

@@ -212,10 +212,18 @@ func renderBuildSummary(text *strings.Builder, summary buildSummary) {
 }
 
 func renderInitSummary(text *strings.Builder, summary initSummary) {
-	fmt.Fprintf(text, "wrote %s with %d suggested rule(s)\n", summary.Path, len(summary.Suggestions))
+	if summary.DryRun {
+		fmt.Fprintf(text, "would write %s with %d suggested rule(s)\n", summary.Path, len(summary.Suggestions))
+	} else {
+		fmt.Fprintf(text, "wrote %s with %d suggested rule(s)\n", summary.Path, len(summary.Suggestions))
+	}
 
 	for _, candidate := range summary.Suggestions {
 		fmt.Fprintf(text, "SUGGESTED %s confidence=%s score=%d\n",
 			candidate.SymbolID, candidate.Confidence, candidate.Score)
+	}
+
+	if summary.DryRun {
+		text.WriteString(summary.Policy)
 	}
 }

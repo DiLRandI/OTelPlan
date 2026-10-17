@@ -42,7 +42,7 @@ Explain requires exactly one canonical symbol. Build arguments should follow `--
 | `--interfaces` | Scan only. Show interface method bindings in text output; JSON contains model metadata. |
 | `--calls` | Scan only. Include advisory SSA/CHA call relationships and precision limits. |
 | `--check` | Lock/diff only. Fail for missing or stale resolution without writing files. |
-| `--dry-run` | Lock only. Preview refresh without writing. |
+| `--dry-run` | Init/lock only. Preview a starter policy or lock refresh without writing. |
 | `--output PATH` | Init/compile only. Init defaults to `otelplan.yaml`; compile defaults to `.otelplan/build`. |
 | `--force` | Init only. Permit replacement of an existing regular starter-policy file. |
 | `--interactive` | Init only, text output. Review suggestions individually before writing. |
@@ -56,7 +56,7 @@ cache directory; cached metadata is trusted local state and must not be shared
 with untrusted users. An explicit empty path is a usage error. Version/help do
 not accept this flag.
 
-Lock check, lock dry-run, and all diff operations reuse valid existing metadata
+Init dry-run, lock check, lock dry-run, and all diff operations reuse valid existing metadata
 without creating or refreshing cache files. Cache misses still analyze current
 source. Other analysis commands may publish refreshed cache entries. This does
 not alter resolution fingerprints or skip validation/backend verification.
@@ -92,6 +92,14 @@ Capture remains disabled by default. Use `--output
 starter.yml` to write another policy path. Interactive initialization writes only
 after accepting suggestions; declining all or losing input/cancellation leaves
 no new policy.
+
+`init --dry-run` validates and previews the exact starter policy without writing
+it. Text output includes the YAML and a `would write` summary; JSON adds
+`data.dryRun=true` and the complete YAML string in `data.policy`, alongside
+`data.path` and `data.suggestions`. Normal init responses retain their existing
+shape. Destination checks still apply: use `--force --dry-run` to preview replacing
+an existing regular policy file, and provide an existing parent directory.
+Interactive text mode can review candidates before previewing the result.
 
 `scan --calls` distinguishes known static callees from conservative candidates.
 A candidate is not proof of runtime execution. Call graphs do not select targets

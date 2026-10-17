@@ -12,9 +12,11 @@ import (
 )
 
 type compileSummary struct {
-	Path    string            `json:"path"`
-	Files   int               `json:"files"`
-	Backend model.LockBackend `json:"backend"`
+	Path      string               `json:"path"`
+	Files     int                  `json:"files"`
+	Backend   model.LockBackend    `json:"backend"`
+	DryRun    bool                 `json:"dryRun,omitempty"`
+	Artifacts []model.ArtifactFile `json:"artifacts,omitempty"`
 }
 
 const exitCompilation = 8
@@ -56,19 +58,43 @@ func compileCommand(ctx context.Context, opts options, policy *model.Policy, cod
 		return nil, exitCompilation, diagnostics
 	}
 
+	return finishCompilation(opts, backend, files, staged)
+}
+
+func finishCompilation(opts options, backend model.LockBackend, files []otelc.GeneratedFile,
+	staged model.Artifacts,
+) (any, int, model.DiagnosticErrorList) {
 	destination := opts.output
 	if !filepath.IsAbs(destination) {
 		destination = filepath.Join(opts.root, destination)
 	}
 
-	published, err := compiler.PublishArtifacts(destination, files, opts.clean)
+	var published model.Artifacts
+
+	var err error
+
+	operation := "publish generated artifacts"
+	if opts.dryRun {
+		operation = "preview generated artifacts"
+		published, err = compiler.PreviewArtifacts(destination, staged, opts.clean)
+	} else {
+		published, err = compiler.PublishArtifacts(destination, files, opts.clean)
+	}
+
 	if err != nil {
-		recordFailure(opts, model.CodeArtifactOutput, "publish generated artifacts", err)
+		recordFailure(opts, model.CodeArtifactOutput, operation, err)
 
 		return compileFailure(1, err.Error())
 	}
 
-	return compileSummary{Path: published.Dir, Files: len(published.Files), Backend: backend}, 0, nil
+	var inventory []model.ArtifactFile
+	if opts.dryRun {
+		inventory = published.Files
+	}
+
+	return compileSummary{
+		Path: published.Dir, Files: len(published.Files), Backend: backend, DryRun: opts.dryRun, Artifacts: inventory,
+	}, 0, nil
 }
 
 func validateCompiledRuntime(ctx context.Context, opts options, build model.BuildEnvironment,

@@ -218,10 +218,39 @@ Supported capture value types:
 - named primitive aliases whose underlying type is supported.
 
 Stringer conversion and object serialization are not implemented. Attribute
-sources currently support `argument`, `result`, and `constant`, with one source
+sources support `argument`, `result`, `constant`, and `symbol`, with one source
 per mapping. Capture cannot be enabled wholesale through defaults.
 
 No automatic JSON encoding.
+
+### Symbol metadata attributes
+
+Static declaration facts require explicit keys and source fields:
+
+```yaml
+attributes:
+  - key: code.operation
+    from: {symbol: id}
+  - key: code.package
+    from: {symbol: packageName}
+```
+
+| Field | String value |
+| --- | --- |
+| `id` | Full canonical symbol ID. |
+| `package` | Go import path. |
+| `packageName` | Declared Go package name. |
+| `name` | Function or method name. |
+| `receiver` | Receiver type, with `*` for pointer receivers; empty for functions. |
+| `signature` | Analyzed Go signature. |
+| `kind` | `function` or `method`. |
+
+These sources use no application arguments, results, object serialization, or
+method calls. Source positions are not supported metadata fields. Inspection
+retains `from.symbol`; the lock additionally freezes its resolved `symbolValue`.
+Changing a captured fact creates attribute drift, including a package-name
+change when the span name is fixed. Ordinary source line movement does not.
+Existing key, classification, acknowledgment, and reserved-namespace checks apply.
 
 ## Additional sensitive-name patterns
 

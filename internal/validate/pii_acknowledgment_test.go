@@ -36,7 +36,7 @@ func TestPIIAcknowledgment(t *testing.T) {
 			target.SymbolID = symbol.ID
 			target.Attributes = []model.AttributePlan{{
 				Key:            testCase.key,
-				From:           model.AttributeSource{Argument: "", Result: "", Constant: "private"},
+				From:           model.AttributeSource{Argument: "", Result: "", Constant: "private", Symbol: ""},
 				Classification: testCase.classification,
 				Allow:          testCase.allow,
 			}}

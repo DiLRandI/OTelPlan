@@ -12,7 +12,7 @@ func TestAttributeFieldTraversalWithRecursiveEmbedding(t *testing.T) {
 	t.Parallel()
 
 	code, symbol := attributeFixture(t)
-	source := model.AttributeSource{Argument: "request.Value", Result: "", Constant: nil}
+	source := model.AttributeSource{Argument: "request.Value", Result: "", Constant: nil, Symbol: ""}
 
 	access, err := validate.AttributeAccessor(code, symbol, source)
 	if err != nil {

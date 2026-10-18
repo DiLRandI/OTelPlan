@@ -174,6 +174,10 @@ func attributeSourceText(attribute model.AttributePlan) string {
 		return "argument " + attribute.From.Argument
 	}
 
+	if attribute.From.Symbol != "" {
+		return "symbol " + attribute.From.Symbol
+	}
+
 	return "constant"
 }
 

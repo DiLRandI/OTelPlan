@@ -218,6 +218,9 @@ JSON responses use `otelplan.io/cli/v1alpha1`:
 ```
 
 `data` is command-specific. `--verbose` adds an optional `details` object.
+Inspect output retains explicit `from.symbol` metadata selectors; text renders
+them as `attribute KEY from symbol FIELD`. Frozen metadata values are recorded
+in the lock, without changing inspect's source provenance or constant redaction.
 Machine-readable usage errors also produce an envelope on stdout with `ok=false`;
 invalid flag values are not echoed. Text usage errors go to stderr. Failures to
 write output return 1 and may prevent emitting an envelope. A stale `diff --check`

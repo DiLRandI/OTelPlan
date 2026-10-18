@@ -118,18 +118,40 @@ func createTarget(code *model.CodeModel, target model.ResolvedTarget) (model.Loc
 	}
 
 	for _, attribute := range target.Attributes {
-		access, err := validate.AttributeAccessor(code, *symbol, attribute.From)
+		lockedAttribute, err := createAttribute(code, *symbol, attribute)
 		if err != nil {
-			return model.LockTarget{}, fmt.Errorf("resolve locked attribute: %w", err)
+			return model.LockTarget{}, err
 		}
 
-		locked.Attributes = append(locked.Attributes, model.LockAttribute{
-			Key: attribute.Key, From: attribute.From, Kind: access.Kind,
-			Classification: attribute.Classification, Allow: attribute.Allow,
-		})
+		locked.Attributes = append(locked.Attributes, lockedAttribute)
 	}
 
 	sort.Slice(locked.Attributes, func(i, j int) bool { return locked.Attributes[i].Key < locked.Attributes[j].Key })
+
+	return locked, nil
+}
+
+func createAttribute(code *model.CodeModel, symbol model.Symbol,
+	attribute model.AttributePlan) (model.LockAttribute, error) {
+	var locked model.LockAttribute
+
+	access, err := validate.AttributeAccessor(code, symbol, attribute.From)
+	if err != nil {
+		return locked, fmt.Errorf("resolve locked attribute: %w", err)
+	}
+
+	locked = model.LockAttribute{
+		Key: attribute.Key, From: attribute.From, Kind: access.Kind,
+		Classification: attribute.Classification, Allow: attribute.Allow, SymbolValue: nil,
+	}
+	if attribute.From.Symbol != "" {
+		value, valueErr := validate.SymbolMetadataValue(symbol, attribute.From.Symbol)
+		if valueErr != nil {
+			return model.LockAttribute{}, fmt.Errorf("resolve locked symbol metadata: %w", valueErr)
+		}
+
+		locked.SymbolValue = &value
+	}
 
 	return locked, nil
 }
@@ -299,11 +321,39 @@ func checkAttributes(attributes []model.LockAttribute) error {
 
 		keys[attribute.Key] = true
 
+		err := checkSymbolAttribute(attribute)
+		if err != nil {
+			return err
+		}
+
 		switch attribute.Kind {
 		case "bool", "integer", "float", "string":
 		default:
 			return errInvalidAttributeKind
 		}
+	}
+
+	return nil
+}
+
+func checkSymbolAttribute(attribute model.LockAttribute) error {
+	if attribute.From.Symbol == "" {
+		if attribute.SymbolValue != nil {
+			return errInvalidSymbolAttribute
+		}
+
+		return nil
+	}
+
+	if attribute.SymbolValue == nil || attribute.Kind != "string" {
+		return errInvalidSymbolAttribute
+	}
+
+	var symbol model.Symbol
+
+	_, err := validate.AttributeAccessor(nil, symbol, attribute.From)
+	if err != nil {
+		return errInvalidSymbolAttribute
 	}
 
 	return nil

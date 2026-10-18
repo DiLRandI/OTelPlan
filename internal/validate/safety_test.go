@@ -56,7 +56,7 @@ func TestAttributeAccessors(t *testing.T) {
 
 	code, symbol := attributeFixture(t)
 
-	source := model.AttributeSource{Argument: "request.Kind", Result: "", Constant: nil}
+	source := model.AttributeSource{Argument: "request.Kind", Result: "", Constant: nil, Symbol: ""}
 
 	access, err := validate.AttributeAccessor(code, symbol, source)
 	if err != nil || access.Kind != "string" || !reflect.DeepEqual(access.Fields, []string{"Details", "Kind"}) {
@@ -64,13 +64,13 @@ func TestAttributeAccessors(t *testing.T) {
 	}
 
 	for _, source := range []model.AttributeSource{
-		{Argument: "request.Count", Result: "", Constant: nil},
-		{Argument: "0.Count", Result: "", Constant: nil},
-		{Argument: "", Result: "result", Constant: nil},
-		{Argument: "", Result: "0", Constant: nil},
-		{Argument: "", Result: "", Constant: false},
-		{Argument: "", Result: "", Constant: 0},
-		{Argument: "", Result: "", Constant: ""},
+		{Argument: "request.Count", Result: "", Constant: nil, Symbol: ""},
+		{Argument: "0.Count", Result: "", Constant: nil, Symbol: ""},
+		{Argument: "", Result: "result", Constant: nil, Symbol: ""},
+		{Argument: "", Result: "0", Constant: nil, Symbol: ""},
+		{Argument: "", Result: "", Constant: false, Symbol: ""},
+		{Argument: "", Result: "", Constant: 0, Symbol: ""},
+		{Argument: "", Result: "", Constant: "", Symbol: ""},
 	} {
 		_, err := validate.AttributeAccessor(code, symbol, source)
 		if err != nil {
@@ -79,17 +79,17 @@ func TestAttributeAccessors(t *testing.T) {
 	}
 
 	for _, source := range []model.AttributeSource{
-		{Argument: "request", Result: "", Constant: nil},
-		{Argument: "request.Payload", Result: "", Constant: nil},
-		{Argument: "request.password", Result: "", Constant: nil},
-		{Argument: "request.ID", Result: "", Constant: nil},
-		{Argument: "missing.Kind", Result: "", Constant: nil},
-		{Argument: "", Result: "3", Constant: nil},
-		{Argument: "", Result: "", Constant: map[string]string{"key": "value"}},
-		{Argument: "", Result: "", Constant: math.NaN()},
-		{Argument: "", Result: "", Constant: uint64(math.MaxUint64)},
-		{Argument: "request.Count", Result: "", Constant: 1},
-		{Argument: "", Result: "", Constant: nil},
+		{Argument: "request", Result: "", Constant: nil, Symbol: ""},
+		{Argument: "request.Payload", Result: "", Constant: nil, Symbol: ""},
+		{Argument: "request.password", Result: "", Constant: nil, Symbol: ""},
+		{Argument: "request.ID", Result: "", Constant: nil, Symbol: ""},
+		{Argument: "missing.Kind", Result: "", Constant: nil, Symbol: ""},
+		{Argument: "", Result: "3", Constant: nil, Symbol: ""},
+		{Argument: "", Result: "", Constant: map[string]string{"key": "value"}, Symbol: ""},
+		{Argument: "", Result: "", Constant: math.NaN(), Symbol: ""},
+		{Argument: "", Result: "", Constant: uint64(math.MaxUint64), Symbol: ""},
+		{Argument: "request.Count", Result: "", Constant: 1, Symbol: ""},
+		{Argument: "", Result: "", Constant: nil, Symbol: ""},
 	} {
 		_, err := validate.AttributeAccessor(code, symbol, source)
 		if err == nil {
@@ -166,7 +166,7 @@ func TestSafetyWarningsAndLimits(t *testing.T) {
 
 func constantAttribute(key string, value any) model.AttributePlan {
 	return model.AttributePlan{
-		Key: key, From: model.AttributeSource{Argument: "", Result: "", Constant: value},
+		Key: key, From: model.AttributeSource{Argument: "", Result: "", Constant: value, Symbol: ""},
 		Classification: "", Allow: false,
 	}
 }

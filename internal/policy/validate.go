@@ -304,7 +304,7 @@ func validateAttributeSource(loc string, src model.AttributeSource) model.Diagno
 
 	set := 0
 
-	for _, v := range []bool{src.Argument != "", src.Result != "", src.Constant != nil} {
+	for _, v := range []bool{src.Argument != "", src.Result != "", src.Constant != nil, src.Symbol != ""} {
 		if v {
 			set++
 		}
@@ -313,7 +313,7 @@ func validateAttributeSource(loc string, src model.AttributeSource) model.Diagno
 	if set == 0 {
 		diags = append(diags, policyDiagnostic(
 			model.CodeInvalidPolicy,
-			loc+": from must set exactly one of argument, result, constant",
+			loc+": from must set exactly one of argument, result, constant, symbol",
 			"",
 		))
 	}
@@ -326,7 +326,22 @@ func validateAttributeSource(loc string, src model.AttributeSource) model.Diagno
 		))
 	}
 
+	if src.Symbol != "" && !validSymbolAttributeField(src.Symbol) {
+		diags = append(diags, policyDiagnostic(model.CodeInvalidPolicy,
+			loc+": unsupported symbol metadata field", ""))
+	}
+
 	return diags
+}
+
+func validSymbolAttributeField(field string) bool {
+	switch field {
+	case model.SymbolFieldID, model.SymbolFieldPackage, model.SymbolFieldPackageName,
+		model.SymbolFieldName, model.SymbolFieldReceiver, model.SymbolFieldSignature, model.SymbolFieldKind:
+		return true
+	default:
+		return false
+	}
 }
 
 func validateDenyPatterns(patterns []string) model.DiagnosticErrorList {

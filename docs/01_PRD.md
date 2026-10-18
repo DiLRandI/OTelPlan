@@ -227,8 +227,8 @@ Allowed attribute sources:
 - error classification.
 
 Every attribute rule requires an explicit key. Current attribute sources are
-constants and typed scalar argument/result paths; dedicated symbol-metadata and
-error-classification sources remain product goals.
+constants, typed scalar argument/result paths, and explicit static symbol
+metadata. Dedicated error-classification sources remain a product goal.
 
 Never serialize whole objects by default.
 

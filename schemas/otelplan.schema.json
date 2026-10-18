@@ -214,7 +214,10 @@
             "result": {
               "type": "string"
             },
-            "constant": {}
+            "constant": {},
+            "symbol": {
+              "enum": ["id", "package", "packageName", "name", "receiver", "signature", "kind"]
+            }
           }
         },
         "safety": {

@@ -106,12 +106,24 @@ type Safety struct {
 	Allow          bool                 `json:"allow,omitempty"          yaml:"allow,omitempty"`
 }
 
-// AttributeSource identifies one argument, result, or constant value from
+// Symbol metadata fields identify stable, explicitly selected declaration facts.
+const (
+	SymbolFieldID          = "id"
+	SymbolFieldPackage     = "package"
+	SymbolFieldPackageName = "packageName"
+	SymbolFieldName        = "name"
+	SymbolFieldReceiver    = "receiver"
+	SymbolFieldSignature   = "signature"
+	SymbolFieldKind        = "kind"
+)
+
+// AttributeSource identifies one argument, result, constant, or symbol value from
 // which a policy attribute is obtained.
 type AttributeSource struct {
 	Argument string `json:"argument,omitempty" yaml:"argument,omitempty"`
 	Result   string `json:"result,omitempty"   yaml:"result,omitempty"`
 	Constant any    `json:"constant,omitempty" yaml:"constant,omitempty"`
+	Symbol   string `json:"symbol,omitempty"   yaml:"symbol,omitempty"`
 }
 
 // AttributeRule maps an explicit telemetry key to a source and optional safety

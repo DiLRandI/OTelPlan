@@ -14,11 +14,11 @@ func TestResolveTargetAttributeOrderingAndErrorOwnership(t *testing.T) {
 	policy, code := resolverInputs()
 	policy.Rules[0].Attributes = []model.AttributeRule{
 		{
-			Key: "z.kind", From: model.AttributeSource{Argument: "", Result: "", Constant: "operation"},
+			Key: "z.kind", From: model.AttributeSource{Argument: "", Result: "", Constant: "operation", Symbol: ""},
 			Safety: &model.Safety{Classification: model.ClassificationInternal, Allow: true},
 		},
 		{
-			Key: "a.version", From: model.AttributeSource{Argument: "", Result: "", Constant: "v1"},
+			Key: "a.version", From: model.AttributeSource{Argument: "", Result: "", Constant: "v1", Symbol: ""},
 			Safety: nil,
 		},
 	}

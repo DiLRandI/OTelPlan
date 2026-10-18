@@ -60,6 +60,12 @@ Each target:
 
 ## Canonicalization
 
+Attributes with `from.symbol` retain the metadata selector and freeze the
+resolved string in `symbolValue`, including an empty receiver for functions.
+Both selector and value participate in attribute drift. Existing sources omit
+this field. Missing, mixed, unknown, or non-string metadata states are rejected;
+ordinary line/column movement remains diagnostic-only.
+
 Before hashing:
 
 - sort maps by key;

@@ -22,6 +22,8 @@ type LockAttribute struct {
 	Kind           string               `json:"kind"`
 	Classification SafetyClassification `json:"classification,omitempty"`
 	Allow          bool                 `json:"allow,omitempty"`
+	// SymbolValue freezes the static value while From retains its metadata selector.
+	SymbolValue *string `json:"symbolValue,omitempty"`
 }
 
 // LockTarget freezes one exact symbol selection together with its signature,

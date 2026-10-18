@@ -66,6 +66,10 @@ Both selector and value participate in attribute drift. Existing sources omit
 this field. Missing, mixed, unknown, or non-string metadata states are rejected;
 ordinary line/column movement remains diagnostic-only.
 
+Explicit error-type classification stores `from.errorType` and its string kind.
+It records no runtime error class or message. Changing the selected error result
+creates attribute drift; malformed mixed sources and non-string kinds are rejected.
+
 Before hashing:
 
 - sort maps by key;

@@ -15,7 +15,7 @@ func TestAttributeSourceIndexBounds(t *testing.T) {
 		t.Run(selector, func(t *testing.T) {
 			t.Parallel()
 
-			source := model.AttributeSource{Argument: selector, Result: "", Constant: nil, Symbol: ""}
+			source := model.AttributeSource{Argument: selector, Result: "", Constant: nil, Symbol: "", ErrorType: ""}
 
 			_, err := validate.AttributeAccessor(code, symbol, source)
 			if err == nil || err.Error() != "attribute source parameter or result does not exist" {
@@ -29,7 +29,7 @@ func TestAttributeSourceRequiresTypeInformation(t *testing.T) {
 	t.Parallel()
 
 	_, symbol := attributeFixture(t)
-	source := model.AttributeSource{Argument: "request.Count", Result: "", Constant: nil, Symbol: ""}
+	source := model.AttributeSource{Argument: "request.Count", Result: "", Constant: nil, Symbol: "", ErrorType: ""}
 
 	_, err := validate.AttributeAccessor(nil, symbol, source)
 	if err == nil || err.Error() != "attribute source type is unavailable" {

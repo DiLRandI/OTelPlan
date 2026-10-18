@@ -304,7 +304,9 @@ func validateAttributeSource(loc string, src model.AttributeSource) model.Diagno
 
 	set := 0
 
-	for _, v := range []bool{src.Argument != "", src.Result != "", src.Constant != nil, src.Symbol != ""} {
+	for _, v := range []bool{
+		src.Argument != "", src.Result != "", src.Constant != nil, src.Symbol != "", src.ErrorType != "",
+	} {
 		if v {
 			set++
 		}
@@ -313,7 +315,7 @@ func validateAttributeSource(loc string, src model.AttributeSource) model.Diagno
 	if set == 0 {
 		diags = append(diags, policyDiagnostic(
 			model.CodeInvalidPolicy,
-			loc+": from must set exactly one of argument, result, constant, symbol",
+			loc+": from must set exactly one of argument, result, constant, symbol, errorType",
 			"",
 		))
 	}

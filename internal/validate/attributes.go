@@ -9,6 +9,8 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
+const attributeStringKind = "string"
+
 var (
 	errAttributeSourceCount     = errors.New("attribute must have exactly one source")
 	errConstantScalar           = errors.New("constant must be a scalar")
@@ -35,7 +37,7 @@ type Accessor struct {
 	Kind   string   `json:"kind"`
 }
 
-// AttributeAccessor resolves exactly one constant, symbol, argument, or result source.
+// AttributeAccessor resolves exactly one constant, symbol, argument, result, or error-type source.
 // Constants must be finite scalars within the telemetry integer range. Field
 // access requires an unambiguous exported path ending in a scalar value.
 // Argument and result sources require type information in code; static sources do not.
@@ -43,7 +45,7 @@ func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.
 	sources := 0
 
 	for _, present := range []bool{
-		source.Argument != "", source.Result != "", source.Constant != nil, source.Symbol != "",
+		source.Argument != "", source.Result != "", source.Constant != nil, source.Symbol != "", source.ErrorType != "",
 	} {
 		if present {
 			sources++
@@ -65,6 +67,10 @@ func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.
 		}
 
 		return constantAccessor(value)
+	}
+
+	if source.ErrorType != "" {
+		return errorTypeAccessor(code, symbol, source.ErrorType)
 	}
 
 	access, fields, err := sourceAccessor(symbol, source)
@@ -155,7 +161,7 @@ func resolveAccessorFields(code *model.CodeModel, access Accessor, parts []strin
 	}
 
 	switch typ.Kind {
-	case "bool", "integer", "float", "string":
+	case "bool", "integer", "float", attributeStringKind:
 		access.Kind = typ.Kind
 	default:
 		return Accessor{}, errAttributeScalar
@@ -183,7 +189,7 @@ func constantKind(constant any) string {
 	case bool:
 		return "bool"
 	case string:
-		return "string"
+		return attributeStringKind
 	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
 		return "integer"
 	case float32, float64:

@@ -141,16 +141,17 @@ func privateAccessorPlan(t *testing.T, code *model.CodeModel) model.ResolvedPlan
 }
 
 func privateAccessorAttributes() []model.AttributePlan {
-	var requestID, size, component, cacheHit, weight model.AttributePlan
+	var requestID, size, component, cacheHit, weight, failure model.AttributePlan
 
 	requestID.Key, requestID.From.Argument = "request.id", "request.ID"
 	size.Key, size.From.Result = "result.size", "size"
 	component.Key, component.From.Constant = "component", "probe"
 	cacheHit.Key, cacheHit.From.Constant = "cache.hit", false
 	weight.Key, weight.From.Constant = "weight", 1.5
+	failure.Key, failure.From.ErrorType = "failure.class", "err"
 
-	attributes := make([]model.AttributePlan, 0, 12)
-	attributes = append(attributes, requestID, size, component, cacheHit, weight)
+	attributes := make([]model.AttributePlan, 0, 13)
+	attributes = append(attributes, requestID, size, component, cacheHit, weight, failure)
 
 	for _, field := range []string{"id", "package", "packageName", "name", "receiver", "signature", "kind"} {
 		var metadata model.AttributePlan
@@ -317,6 +318,7 @@ func checkPrivateCapturedAttributes(t *testing.T, handles []privateAccessorSpan)
 	}
 
 	checkPrivateNullableAttributes(t, first, second)
+	checkPrivateErrorTypeAttributes(t, first, second)
 
 	checkPrivateConstantAttributes(t, handles)
 
@@ -329,13 +331,25 @@ func checkPrivateNullableAttributes(t *testing.T, first, second privateAccessorS
 	t.Helper()
 
 	if first.Attributes["request.id"] != "approved-id" || first.Attributes["result.size"] != float64(11) ||
-		len(first.Attributes) != 12 {
+		len(first.Attributes) != 13 {
 		t.Fatalf("unexpected selected attributes: %#v", first.Attributes)
 	}
 
 	if _, captured := second.Attributes["request.id"]; captured || second.Attributes["result.size"] != float64(0) ||
 		len(second.Attributes) != 11 {
 		t.Fatalf("nil request should omit attributes: %#v", second.Attributes)
+	}
+}
+
+func checkPrivateErrorTypeAttributes(t *testing.T, first, second privateAccessorSpan) {
+	t.Helper()
+
+	if first.Attributes["failure.class"] != "errors.errorString" {
+		t.Fatalf("returned error class changed: %#v", first.Attributes)
+	}
+
+	if _, captured := second.Attributes["failure.class"]; captured {
+		t.Fatal("nil error was classified")
 	}
 }
 

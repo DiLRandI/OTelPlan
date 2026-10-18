@@ -18,6 +18,8 @@ import (
 	"golang.org/x/mod/semver"
 )
 
+const attributeStringKind = "string"
+
 // Digest returns the lowercase SHA-256 digest of data with a sha256: prefix.
 func Digest(data []byte) string { return fmt.Sprintf("sha256:%x", sha256.Sum256(data)) }
 
@@ -326,8 +328,13 @@ func checkAttributes(attributes []model.LockAttribute) error {
 			return err
 		}
 
+		err = checkErrorTypeAttribute(attribute)
+		if err != nil {
+			return err
+		}
+
 		switch attribute.Kind {
-		case "bool", "integer", "float", "string":
+		case "bool", "integer", "float", attributeStringKind:
 		default:
 			return errInvalidAttributeKind
 		}
@@ -345,7 +352,7 @@ func checkSymbolAttribute(attribute model.LockAttribute) error {
 		return nil
 	}
 
-	if attribute.SymbolValue == nil || attribute.Kind != "string" {
+	if attribute.SymbolValue == nil || attribute.Kind != attributeStringKind {
 		return errInvalidSymbolAttribute
 	}
 

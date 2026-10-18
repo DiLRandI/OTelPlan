@@ -128,6 +128,7 @@ func compileStringerReaders(t *testing.T, root *os.Root, source, guard []byte, b
 	tests.WriteString("}\n" + stringerReaderAssertions)
 
 	for name, contents := range map[string][]byte{
+		"shadow.go":           []byte("package app\nfunc recover() any { panic(\"application recover must not run\") }\n"),
 		"readers.go":          []byte(strings.TrimPrefix(string(source), "//go:build ignore\n\n")),
 		"hooks/guard.go":      append([]byte("package hooks\n"), guard...),
 		"hooks/guard_test.go": tests.Bytes(),
@@ -211,7 +212,6 @@ type Bad struct{}
 func (Bad) String() string { panic("caller-private-value") }
 type Envelope struct{ Label *Pointer }
 type Printable interface{ String() string }
-func recover() any { panic("application recover must not run") }
 func Run(ctx context.Context, value Value, pointer *Pointer, category Category, bad Bad, nested *Envelope,
  printable Printable)(result Value) {
  return value

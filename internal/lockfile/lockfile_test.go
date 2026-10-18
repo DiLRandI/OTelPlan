@@ -37,7 +37,7 @@ func fixtureLock(t *testing.T) model.Lockfile {
 			Kind:     "", PackageImportPath: "", PackageName: "", Name: "", Receiver: nil, Visibility: "",
 			Parameters: nil, Results: nil, ContextIndexes: nil, ErrorIndexes: nil, Generics: nil,
 			Generated: false, TestFile: false, Ownership: "", HasBody: false, Variadic: false,
-			Recursive: false, ManualSpan: false,
+			Recursive: false, ManualSpan: false, RecoverShadowed: false,
 		}},
 	}
 	plan := model.ResolvedPlan{

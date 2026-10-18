@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/DiLRandI/OTelPlan/internal/validate"
 )
 
 var (
@@ -42,6 +44,12 @@ func parse(args []string) (options, []string, error) {
 		return opts, arguments.positionals, errInvalidOutputFormat
 	}
 
+	opts.recordExplicitFlags(flags)
+
+	return opts, arguments.positionals, nil
+}
+
+func (opts *options) recordExplicitFlags(flags *flag.FlagSet) {
 	flags.Visit(func(option *flag.Flag) {
 		switch option.Name {
 		case "output":
@@ -50,10 +58,12 @@ func parse(args []string) (options, []string, error) {
 			opts.configSet = true
 		case "cache-dir":
 			opts.cacheSet = true
+		case "warn-targets", "strong-warn-targets":
+			opts.targetLimitsSet = true
+		case "max-targets":
+			opts.targetLimitsSet, opts.maximumTargetsSet = true, true
 		}
 	})
-
-	return opts, arguments.positionals, nil
 }
 
 func globalFlags(opts *options) *flag.FlagSet {
@@ -73,6 +83,10 @@ func globalFlags(opts *options) *flag.FlagSet {
 	flags.BoolVar(&opts.check, "check", false, "check without writing")
 	flags.BoolVar(&opts.dryRun, "dry-run", false, "preview without writing")
 	flags.BoolVar(&opts.allowLargePlan, "allow-large-plan", false, "acknowledge large target count")
+	flags.IntVar(&opts.warningTargets, "warn-targets", validate.DefaultWarningTargets, "target-count warning threshold")
+	flags.IntVar(&opts.strongWarningTargets, "strong-warn-targets", validate.DefaultStrongWarningTargets,
+		"strong target-count warning threshold")
+	flags.IntVar(&opts.maximumTargets, "max-targets", validate.DefaultMaximumTargets, "binding maximum target count")
 	flags.BoolVar(&opts.help, "help", false, "show usage")
 	flags.BoolVar(&opts.help, "h", false, "show usage")
 	flags.BoolVar(&opts.quiet, "quiet", false, "suppress informational text")

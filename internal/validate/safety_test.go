@@ -150,7 +150,10 @@ func TestSafetyWarningsAndLimits(t *testing.T) {
 	target := safetyTarget(symbol.ID, []model.AttributePlan{constantAttribute("user_id", "id")})
 	target.ContextStrategy.Strategy = model.ContextStrategyRoot
 	plan := model.ResolvedPlan{APIVersion: "", Targets: []model.ResolvedTarget{target, target}, Skipped: nil}
-	options := validate.Options{DenyPatterns: nil, WarningTargets: 1, MaximumTargets: 1, AllowLargePlan: false}
+	options := validate.Options{
+		DenyPatterns: nil, WarningTargets: 1, MaximumTargets: 1, AllowLargePlan: false,
+		StrongWarningTargets: 0, EnforceMaximum: false,
+	}
 
 	diags := validate.Safety(code, plan, options)
 	if !diags.HasErrors() || len(diags.Warnings()) < 3 {

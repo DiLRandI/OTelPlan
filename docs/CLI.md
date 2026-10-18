@@ -38,6 +38,9 @@ Explain requires exactly one canonical symbol. Build arguments should follow `--
 | `--config PATH` | Policy commands only: inspect, explain, validate, lock, diff, compile, build. Default `otelplan.yaml`. |
 | `--strict` | Policy commands only. Treat warnings as failures. |
 | `--allow-large-plan` | Policy commands only. Acknowledge the target-count limit; warnings still apply. |
+| `--warn-targets N` | Policy commands only. Warn above this count, default 100. |
+| `--strong-warn-targets N` | Policy commands only. Stronger volume warning above this count, default 500. |
+| `--max-targets N` | Policy commands only. Explicit binding maximum, default 2000. Raising it requires `--allow-large-plan`. |
 | `--dependencies` | Scan only. Include dependency declarations in analysis output. |
 | `--interfaces` | Scan only. Show interface method bindings in text output; JSON contains model metadata. |
 | `--calls` | Scan only. Include advisory SSA/CHA call relationships and precision limits. |
@@ -51,6 +54,15 @@ Explain requires exactly one canonical symbol. Build arguments should follow `--
 
 `--check --dry-run` and `--interactive --non-interactive` are contradictory and
 return usage exit code 2. Interactive JSON initialization is rejected.
+
+Target-count thresholds must be positive integers, with `--warn-targets` no
+greater than `--strong-warn-targets`. An explicit maximum can be lower than the
+warning thresholds and remains enforced even with `--allow-large-plan`. Omitting
+`--max-targets` preserves the existing acknowledgment behavior above 2,000.
+`--strict` still fails on emitted warnings. Thresholds do not change selection
+or lock identity and do not disable other safety checks. See
+[trace-volume controls](08_VALIDATION_SAFETY.md#8-denial-of-service--telemetry-explosion).
+
 Caching is disabled unless `--cache-dir` is supplied. Use a private caller-owned
 cache directory; cached metadata is trusted local state and must not be shared
 with untrusted users. An explicit empty path is a usage error. Version/help do

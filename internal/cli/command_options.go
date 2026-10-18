@@ -54,7 +54,12 @@ func validateAnalysisOptions(command string, opts options) error {
 		return errPolicyOnlyOptions
 	}
 
-	return validateCacheOptions(command, opts)
+	err := validateCacheOptions(command, opts)
+	if err != nil {
+		return err
+	}
+
+	return validateTargetLimitOptions(command, opts)
 }
 
 func validateCacheOptions(command string, opts options) error {

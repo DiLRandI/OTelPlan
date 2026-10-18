@@ -51,6 +51,8 @@ type options struct {
 	configSet                                               bool
 	cacheSet                                                bool
 	callGraph                                               bool
+	warningTargets, strongWarningTargets, maximumTargets    int
+	targetLimitsSet, maximumTargetsSet                      bool
 	root, config, format                                    string
 	cacheDir                                                string
 	quiet, verbose, noColor, dependencies, interfaces, help bool

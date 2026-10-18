@@ -156,9 +156,21 @@ Suggested defaults:
 > 2000 targets: require explicit --allow-large-plan
 ```
 
-The internal validator accepts threshold overrides. The CLI exposes
-`--allow-large-plan` for the 2,000-target limit, with warnings retained. Arbitrary
-threshold configuration is not currently a policy/CLI feature.
+Policy commands accept `--warn-targets`, `--strong-warn-targets`, and
+`--max-targets`. Values must be positive integers; the first warning threshold
+cannot exceed the strong-warning threshold. A maximum may be lower than either
+warning threshold when a stricter cap is desired. A boundary is exceeded only
+when the selected count is greater than its configured value.
+
+Without an explicit maximum, `--allow-large-plan` retains its existing behavior:
+it acknowledges exceeding 2,000 targets while keeping warnings. Raising an
+explicit maximum above 2,000 also requires that acknowledgment. An explicit
+maximum remains binding even with `--allow-large-plan`; exceeding it fails
+validation rather than silently bypassing the configured cap.
+
+These flags control validation, not selection or lock identity. They cannot
+bypass context, secret/PII, attribute, or backend checks. Init and scan do not
+accept these policy controls; their existing conservative behavior is unchanged.
 
 ## 9. Recursion
 

@@ -64,6 +64,7 @@ func TestMatchSelectors(t *testing.T) {
 		Variadic:          false,
 		Recursive:         false,
 		ManualSpan:        false,
+		RecoverShadowed:   false,
 	}
 
 	var buildEnvironment model.BuildEnvironment

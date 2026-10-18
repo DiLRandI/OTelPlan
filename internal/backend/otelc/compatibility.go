@@ -99,6 +99,10 @@ func symbolCompatibilityIssues(code *model.CodeModel, symbol *model.Symbol,
 	target model.ResolvedTarget) []string {
 	var issues []string
 
+	if symbol.RecoverShadowed {
+		issues = append(issues, "otelc v1.1.0 cannot instrument a target whose package or file shadows the recover builtin")
+	}
+
 	if symbol.PackageName == "main" {
 		issues = append(issues, "main package targets require verified command-specific build scoping")
 	}

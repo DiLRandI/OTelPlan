@@ -15,12 +15,12 @@ import (
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
-func TestStringerMetadataInvalidatesOlderCacheEntries(t *testing.T) {
+func TestRuntimeTraitsInvalidateOlderCacheEntries(t *testing.T) {
 	t.Parallel()
-	options, first, cache := cachedStringerFixture(t)
+	options, first, cache := cachedRuntimeTraitsFixture(t)
 	entryName, old := makeTraitlessCacheEntry(t, cache)
 	options.CacheReadOnly = true
-	assertStringerAnalysis(t, options, first)
+	assertRuntimeTraitsAnalysis(t, options, first)
 
 	after, err := cache.ReadFile(entryName)
 	if err != nil || !bytes.Equal(old, after) {
@@ -28,11 +28,11 @@ func TestStringerMetadataInvalidatesOlderCacheEntries(t *testing.T) {
 	}
 
 	options.CacheReadOnly = false
-	assertStringerAnalysis(t, options, first)
-	assertStringerAnalysis(t, options, first)
+	assertRuntimeTraitsAnalysis(t, options, first)
+	assertRuntimeTraitsAnalysis(t, options, first)
 }
 
-func cachedStringerFixture(t *testing.T) (discovery.Options, *model.CodeModel, *os.Root) {
+func cachedRuntimeTraitsFixture(t *testing.T) (discovery.Options, *model.CodeModel, *os.Root) {
 	t.Helper()
 
 	root, err := os.OpenRoot(t.TempDir())
@@ -51,6 +51,7 @@ func cachedStringerFixture(t *testing.T) (discovery.Options, *model.CodeModel, *
 type Value string
 func (Value) String() string { panic("must not execute") }
 func Run(Value) {}
+func recover() any { panic("must not execute") }
 `} {
 		err := root.WriteFile(name, []byte(data), 0o600)
 		if err != nil {
@@ -67,9 +68,7 @@ func Run(Value) {}
 		t.Fatal(err)
 	}
 
-	if !hasStringerType(first) {
-		t.Fatal("fresh analysis lacks Stringer metadata")
-	}
+	assertRuntimeTraits(t, first)
 
 	cache, err := os.OpenRoot(options.CacheDir)
 	if err != nil {
@@ -86,12 +85,12 @@ func Run(Value) {}
 	return options, first, cache
 }
 
-func assertStringerAnalysis(t *testing.T, options discovery.Options, want *model.CodeModel) {
+func assertRuntimeTraitsAnalysis(t *testing.T, options discovery.Options, want *model.CodeModel) {
 	t.Helper()
 
 	got, err := discovery.LoadContext(t.Context(), options)
 	if err != nil || !reflect.DeepEqual(want, got) {
-		t.Fatalf("cached Stringer analysis changed: %v", err)
+		t.Fatalf("cached runtime safety traits changed: %v", err)
 	}
 }
 
@@ -127,9 +126,7 @@ func makeTraitlessCacheEntry(t *testing.T, cache *os.Root) (string, []byte) {
 		t.Fatal(err)
 	}
 
-	for index := range code.Types {
-		code.Types[index].Stringer = false
-	}
+	clearRuntimeTraits(&code)
 
 	entry.Version--
 
@@ -162,4 +159,23 @@ func hasStringerType(code *model.CodeModel) bool {
 	}
 
 	return false
+}
+
+func assertRuntimeTraits(t *testing.T, code *model.CodeModel) {
+	t.Helper()
+
+	symbol, exists := code.Symbol(model.FunctionID("example.com/cached", "Run"))
+	if !hasStringerType(code) || !exists || !symbol.RecoverShadowed {
+		t.Fatal("fresh analysis lacks runtime safety traits")
+	}
+}
+
+func clearRuntimeTraits(code *model.CodeModel) {
+	for index := range code.Types {
+		code.Types[index].Stringer = false
+	}
+
+	for index := range code.Symbols {
+		code.Symbols[index].RecoverShadowed = false
+	}
 }

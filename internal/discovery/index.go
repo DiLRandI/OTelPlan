@@ -123,14 +123,14 @@ func (indexer *builder) collectPackage(code *model.CodeModel, pkg *packages.Pack
 }
 
 func (indexer *builder) collectSymbols(code *model.CodeModel, pkg *packages.Package) {
-	for _, f := range pkg.Syntax {
-		for _, decl := range f.Decls {
+	for _, file := range pkg.Syntax {
+		for _, decl := range file.Decls {
 			declaration, exists := decl.(*ast.FuncDecl)
 			if !exists {
 				continue
 			}
 
-			sym := indexer.symbolFromDecl(pkg, declaration)
+			sym := indexer.symbolFromDecl(pkg, file, declaration)
 			if sym == nil {
 				continue
 			}
@@ -140,7 +140,7 @@ func (indexer *builder) collectSymbols(code *model.CodeModel, pkg *packages.Pack
 	}
 }
 
-func (indexer *builder) symbolFromDecl(pkg *packages.Package, declaration *ast.FuncDecl) *model.Symbol {
+func (indexer *builder) symbolFromDecl(pkg *packages.Package, file *ast.File, declaration *ast.FuncDecl) *model.Symbol {
 	if declaration.Name.Name == "_" || declaration.Name.Name == "init" {
 		return nil
 	}
@@ -157,6 +157,7 @@ func (indexer *builder) symbolFromDecl(pkg *packages.Package, declaration *ast.F
 	sym.PackageImportPath, sym.PackageName = pkg.PkgPath, pkg.Name
 	sym.Name = declaration.Name.Name
 	sym.HasBody = declaration.Body != nil
+	sym.RecoverShadowed = recoverShadowed(pkg, file)
 	sym.Location = model.SourceLocation{File: relFile(pkg, pos.Filename), Line: pos.Line, Column: pos.Column}
 	sym.Visibility = model.VisibilityExported
 	sym.Ownership = ownership(pkg)

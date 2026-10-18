@@ -177,5 +177,9 @@ instrumented application even without attribute capture. The retained
 and checks source preservation. See the
 [pinned trampoline template](https://github.com/open-telemetry/opentelemetry-go-compile-instrumentation/blob/449ee08a682586adb177e4402845ed404565879f/tool/internal/instrument/impl.tmpl#L79).
 OTelPlan's Stringer guard lives in its controlled generated runtime and does not
-introduce another application-level recovery call. Detecting and rejecting this
-backend limitation before building remains separate compatibility hardening.
+introduce another application-level recovery call. Discovery records package-level
+bindings and file-local import aliases that hide the builtin. Backend validation
+rejects selected targets in those scopes with `OTP5001` before lock, compile, or
+build publication. Local variables and receiver methods named `recover` do not
+hide the builtin in a package-level trampoline and remain supported. Unselected
+packages and unaffected files remain usable.

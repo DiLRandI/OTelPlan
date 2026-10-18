@@ -125,7 +125,7 @@ func accessorAttributes() []model.AttributePlan {
 				ErrorType: "",
 			},
 			Classification: model.ClassificationPublic,
-			Allow:          false,
+			Allow:          false, Stringer: false,
 		},
 		{
 			Key: "constant.string",
@@ -137,7 +137,7 @@ func accessorAttributes() []model.AttributePlan {
 				ErrorType: "",
 			},
 			Classification: model.ClassificationPublic,
-			Allow:          false,
+			Allow:          false, Stringer: false,
 		},
 		constantAccessorAttribute("constant.uint", int64(7)),
 		resultAccessorAttribute("result.message", "result.Message"),
@@ -158,7 +158,7 @@ func argumentAccessorAttribute(key, argument string) model.AttributePlan {
 			ErrorType: "",
 		},
 		Classification: model.ClassificationPublic,
-		Allow:          false,
+		Allow:          false, Stringer: false,
 	}
 }
 
@@ -173,7 +173,7 @@ func constantAccessorAttribute(key string, value any) model.AttributePlan {
 			ErrorType: "",
 		},
 		Classification: model.ClassificationPublic,
-		Allow:          false,
+		Allow:          false, Stringer: false,
 	}
 }
 
@@ -188,7 +188,7 @@ func resultAccessorAttribute(key, result string) model.AttributePlan {
 			ErrorType: "",
 		},
 		Classification: model.ClassificationPublic,
-		Allow:          false,
+		Allow:          false, Stringer: false,
 	}
 }
 
@@ -388,7 +388,7 @@ func TestTypedAccessorFailuresShareCauses(t *testing.T) {
 			Key:            "secret",
 			From:           model.AttributeSource{Argument: "req.Secret", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
 			Classification: model.ClassificationSecret,
-			Allow:          false,
+			Allow:          false, Stringer: false,
 		}}
 		assertRepeatedAccessorFailureSharesCause(t, code, target)
 	})

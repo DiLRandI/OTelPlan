@@ -17,11 +17,11 @@ func TestResolveTargetAttributeOrderingAndErrorOwnership(t *testing.T) {
 			Key: "z.kind", From: model.AttributeSource{
 				Argument: "", Result: "", Constant: "operation", Symbol: "", ErrorType: "",
 			},
-			Safety: &model.Safety{Classification: model.ClassificationInternal, Allow: true},
+			Safety: &model.Safety{Classification: model.ClassificationInternal, Allow: true}, Stringer: false,
 		},
 		{
 			Key: "a.version", From: model.AttributeSource{Argument: "", Result: "", Constant: "v1", Symbol: "", ErrorType: ""},
-			Safety: nil,
+			Safety: nil, Stringer: false,
 		},
 	}
 
@@ -35,11 +35,11 @@ func TestResolveTargetAttributeOrderingAndErrorOwnership(t *testing.T) {
 	want := []model.AttributePlan{
 		{
 			Key: "a.version", From: policy.Rules[0].Attributes[1].From,
-			Classification: "", Allow: false,
+			Classification: "", Allow: false, Stringer: false,
 		},
 		{
 			Key: "z.kind", From: policy.Rules[0].Attributes[0].From,
-			Classification: model.ClassificationInternal, Allow: true,
+			Classification: model.ClassificationInternal, Allow: true, Stringer: false,
 		},
 	}
 	if !reflect.DeepEqual(target.Attributes, want) {

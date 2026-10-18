@@ -25,7 +25,7 @@ func TestErrorTypeAccessorRequiresCompleteErrorResult(t *testing.T) {
 
 		source.ErrorType = selector
 
-		accessor, err := validate.AttributeAccessor(code, symbol, source)
+		accessor, err := validate.AttributeAccessor(code, symbol, sourceAttribute(source))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -61,7 +61,7 @@ func TestErrorTypeAccessorRejectsInvalidSources(t *testing.T) {
 			source.Result = "err"
 		}
 
-		_, err := validate.AttributeAccessor(code, symbol, source)
+		_, err := validate.AttributeAccessor(code, symbol, sourceAttribute(source))
 		if err == nil || strings.Contains(err.Error(), "caller-private-value") {
 			t.Fatalf("invalid source accepted or leaked: %v", err)
 		}
@@ -71,14 +71,14 @@ func TestErrorTypeAccessorRejectsInvalidSources(t *testing.T) {
 
 	source.ErrorType = "err"
 
-	_, err := validate.AttributeAccessor(nil, symbol, source)
+	_, err := validate.AttributeAccessor(nil, symbol, sourceAttribute(source))
 	if err == nil {
 		t.Fatal("missing model accepted")
 	}
 
 	code.Types = nil
 
-	_, err = validate.AttributeAccessor(code, symbol, source)
+	_, err = validate.AttributeAccessor(code, symbol, sourceAttribute(source))
 	if err == nil {
 		t.Fatal("missing TypeInfo accepted")
 	}
@@ -195,7 +195,7 @@ func TestErrorTypeAccessorKeepsExistingErrorResultRecognition(t *testing.T) {
 		t.Fatal("missing alias declaration")
 	}
 
-	_, err := validate.AttributeAccessor(code, *alias, source)
+	_, err := validate.AttributeAccessor(code, *alias, sourceAttribute(source))
 	if err != nil {
 		t.Fatalf("error alias rejected: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestErrorTypeAccessorKeepsExistingErrorResultRecognition(t *testing.T) {
 		t.Fatal("missing concrete declaration")
 	}
 
-	_, err = validate.AttributeAccessor(code, *concrete, source)
+	_, err = validate.AttributeAccessor(code, *concrete, sourceAttribute(source))
 	if err == nil {
 		t.Fatal("unrecognized concrete error result accepted")
 	}
@@ -217,7 +217,7 @@ func TestErrorTypeAccessorKeepsExistingErrorResultRecognition(t *testing.T) {
 
 	source.ErrorType = "_"
 
-	_, err = validate.AttributeAccessor(code, *blank, source)
+	_, err = validate.AttributeAccessor(code, *blank, sourceAttribute(source))
 	if err == nil {
 		t.Fatal("ambiguous blank result name accepted")
 	}

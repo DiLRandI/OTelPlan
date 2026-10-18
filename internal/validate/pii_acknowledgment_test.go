@@ -38,7 +38,7 @@ func TestPIIAcknowledgment(t *testing.T) {
 				Key:            testCase.key,
 				From:           model.AttributeSource{Argument: "", Result: "", Constant: "private", Symbol: "", ErrorType: ""},
 				Classification: testCase.classification,
-				Allow:          testCase.allow,
+				Allow:          testCase.allow, Stringer: false,
 			}}
 
 			var plan model.ResolvedPlan

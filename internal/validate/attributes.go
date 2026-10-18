@@ -30,30 +30,32 @@ var (
 // Constant and symbol sources have no field path or Go type; symbol metadata
 // resolves to a constant scalar without reading application values.
 type Accessor struct {
-	Source string   `json:"source"`
-	Index  int      `json:"index"`
-	Fields []string `json:"fields,omitempty"`
-	Type   string   `json:"type"`
-	Kind   string   `json:"kind"`
+	Source   string   `json:"source"`
+	Index    int      `json:"index"`
+	Fields   []string `json:"fields,omitempty"`
+	Type     string   `json:"type"`
+	Kind     string   `json:"kind"`
+	Stringer bool     `json:"stringer,omitempty"`
 }
 
 // AttributeAccessor resolves exactly one constant, symbol, argument, result, or error-type source.
 // Constants must be finite scalars within the telemetry integer range. Field
-// access requires an unambiguous exported path ending in a scalar value.
+// access requires an unambiguous exported path ending in a scalar value or an
+// explicitly requested Stringer conversion.
 // Argument and result sources require type information in code; static sources do not.
-func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.AttributeSource) (Accessor, error) {
-	sources := 0
+func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, attribute model.AttributePlan) (Accessor, error) {
+	source := attribute.From
 
-	for _, present := range []bool{
-		source.Argument != "", source.Result != "", source.Constant != nil, source.Symbol != "", source.ErrorType != "",
-	} {
-		if present {
-			sources++
-		}
+	err := validateAttributeSourceCount(source)
+	if err != nil {
+		return Accessor{}, err
 	}
 
-	if sources != 1 {
-		return Accessor{}, errAttributeSourceCount
+	if attribute.Stringer {
+		err := validateStringerSource(source)
+		if err != nil {
+			return Accessor{}, err
+		}
 	}
 
 	if source.Constant != nil {
@@ -78,11 +80,30 @@ func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.
 		return Accessor{}, err
 	}
 
+	access.Stringer = attribute.Stringer
+
 	return resolveAccessorFields(code, access, fields)
 }
 
+func validateAttributeSourceCount(source model.AttributeSource) error {
+	sources := 0
+
+	for _, present := range []bool{source.Argument != "", source.Result != "", source.Constant != nil,
+		source.Symbol != "", source.ErrorType != ""} {
+		if present {
+			sources++
+		}
+	}
+
+	if sources != 1 {
+		return errAttributeSourceCount
+	}
+
+	return nil
+}
+
 func sourceAccessor(symbol model.Symbol, source model.AttributeSource) (Accessor, []string, error) {
-	access := Accessor{Source: "argument", Index: -1, Fields: nil, Type: "", Kind: ""}
+	access := Accessor{Source: "argument", Index: -1, Fields: nil, Type: "", Kind: "", Stringer: false}
 	path := source.Argument
 
 	var names, types []string
@@ -160,6 +181,20 @@ func resolveAccessorFields(code *model.CodeModel, access Accessor, parts []strin
 		return Accessor{}, errAttributeTypeUnavailable
 	}
 
+	return classifyAccessor(typ, access)
+}
+
+func classifyAccessor(typ model.TypeInfo, access Accessor) (Accessor, error) {
+	if access.Stringer {
+		if !typ.Stringer {
+			return Accessor{}, errStringerType
+		}
+
+		access.Kind = attributeStringKind
+
+		return access, nil
+	}
+
 	switch typ.Kind {
 	case "bool", "integer", "float", attributeStringKind:
 		access.Kind = typ.Kind
@@ -181,7 +216,7 @@ func constantAccessor(constant any) (Accessor, error) {
 		return Accessor{}, err
 	}
 
-	return Accessor{Source: "constant", Index: 0, Fields: nil, Type: "", Kind: kind}, nil
+	return Accessor{Source: "constant", Index: 0, Fields: nil, Type: "", Kind: kind, Stringer: false}, nil
 }
 
 func constantKind(constant any) string {

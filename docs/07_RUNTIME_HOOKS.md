@@ -103,6 +103,9 @@ Exit attributes may use results.
 Extraction failures must never change application behavior.
 
 A generated accessor must be statically type-checked; avoid runtime reflection where possible.
+Explicit Stringer conversion uses a verified method set and a runtime guard around
+only the formatting reader. Formatting panics omit the attribute without logging
+the panic value or recovering an application panic. See [the policy contract](04_POLICY_SPEC.md#explicit-stringer-conversion).
 
 ## 10. Performance
 

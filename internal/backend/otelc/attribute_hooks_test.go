@@ -309,7 +309,7 @@ func TestAttributeHooksRejectsUnsafeAttributeWithoutPartialOutput(t *testing.T) 
 		Key:            "request.secret",
 		From:           argumentAttributeSource("req.Secret"),
 		Classification: model.ClassificationSecret,
-		Allow:          false,
+		Allow:          false, Stringer: false,
 	}}
 
 	plan := resolvedPlanWithTargets(target)

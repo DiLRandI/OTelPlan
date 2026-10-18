@@ -14,7 +14,7 @@ func TestAttributeFieldTraversalWithRecursiveEmbedding(t *testing.T) {
 	code, symbol := attributeFixture(t)
 	source := model.AttributeSource{Argument: "request.Value", Result: "", Constant: nil, Symbol: "", ErrorType: ""}
 
-	access, err := validate.AttributeAccessor(code, symbol, source)
+	access, err := validate.AttributeAccessor(code, symbol, sourceAttribute(source))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func TestAttributeFieldTraversalWithRecursiveEmbedding(t *testing.T) {
 
 	source.Argument = "request.Absent"
 
-	_, err = validate.AttributeAccessor(code, symbol, source)
+	_, err = validate.AttributeAccessor(code, symbol, sourceAttribute(source))
 	if err == nil || err.Error() != "attribute field is missing or inaccessible" {
 		t.Fatalf("error = %v, want missing field after recursive traversal", err)
 	}

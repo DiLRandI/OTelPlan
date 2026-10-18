@@ -36,10 +36,10 @@ func policyDigestFixture() *model.Policy {
 				Attributes: []model.AttributeRule{
 					{Key: "b", From: model.AttributeSource{
 						Constant: "b", Argument: "", Result: "", Symbol: "", ErrorType: "",
-					}, Safety: nil},
+					}, Safety: nil, Stringer: false},
 					{Key: "a", From: model.AttributeSource{
 						Constant: "a", Argument: "", Result: "", Symbol: "", ErrorType: "",
-					}, Safety: nil},
+					}, Safety: nil, Stringer: false},
 				},
 			},
 			{

@@ -63,7 +63,8 @@ type accessorRenderer struct {
 }
 
 // RenderAccessors emits compile-only helpers for injection into the target package.
-// Helpers return primitive scalars and an availability flag without reflection.
+// Helpers return primitive scalars and an availability flag. Only explicit
+// error-type sources inspect runtime type identity.
 func RenderAccessors(code *model.CodeModel, target model.ResolvedTarget) ([]byte, []AccessorBinding, error) {
 	symbol, err := validateAccessorTarget(code, target)
 	if err != nil {
@@ -178,6 +179,10 @@ func (renderer *accessorRenderer) renderAttribute(
 		binding.Index = -1
 
 		return binding, renderer.renderStaticAccessor(binding, attribute.From)
+	}
+
+	if attribute.From.ErrorType != "" {
+		return binding, renderer.renderErrorTypeAccessor(binding)
 	}
 
 	err = renderer.renderValueAccessor(binding, access)

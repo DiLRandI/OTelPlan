@@ -117,13 +117,14 @@ const (
 	SymbolFieldKind        = "kind"
 )
 
-// AttributeSource identifies one argument, result, constant, or symbol value from
+// AttributeSource identifies one argument, result, constant, symbol, or error type from
 // which a policy attribute is obtained.
 type AttributeSource struct {
-	Argument string `json:"argument,omitempty" yaml:"argument,omitempty"`
-	Result   string `json:"result,omitempty"   yaml:"result,omitempty"`
-	Constant any    `json:"constant,omitempty" yaml:"constant,omitempty"`
-	Symbol   string `json:"symbol,omitempty"   yaml:"symbol,omitempty"`
+	Argument  string `json:"argument,omitempty"  yaml:"argument,omitempty"`
+	Result    string `json:"result,omitempty"    yaml:"result,omitempty"`
+	Constant  any    `json:"constant,omitempty"  yaml:"constant,omitempty"`
+	Symbol    string `json:"symbol,omitempty"    yaml:"symbol,omitempty"`
+	ErrorType string `json:"errorType,omitempty" yaml:"errorType,omitempty"`
 }
 
 // AttributeRule maps an explicit telemetry key to a source and optional safety

@@ -166,6 +166,10 @@ func renderPlan(text *strings.Builder, plan model.ResolvedPlan) {
 }
 
 func attributeSourceText(attribute model.AttributePlan) string {
+	if attribute.From.ErrorType != "" {
+		return "errorType " + attribute.From.ErrorType
+	}
+
 	if attribute.From.Result != "" {
 		return "result " + attribute.From.Result
 	}

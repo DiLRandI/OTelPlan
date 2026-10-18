@@ -34,8 +34,12 @@ func policyDigestFixture() *model.Policy {
 					HasContext: nil, ReturnsError: nil, Ownership: "",
 				},
 				Attributes: []model.AttributeRule{
-					{Key: "b", From: model.AttributeSource{Constant: "b", Argument: "", Result: "", Symbol: ""}, Safety: nil},
-					{Key: "a", From: model.AttributeSource{Constant: "a", Argument: "", Result: "", Symbol: ""}, Safety: nil},
+					{Key: "b", From: model.AttributeSource{
+						Constant: "b", Argument: "", Result: "", Symbol: "", ErrorType: "",
+					}, Safety: nil},
+					{Key: "a", From: model.AttributeSource{
+						Constant: "a", Argument: "", Result: "", Symbol: "", ErrorType: "",
+					}, Safety: nil},
 				},
 			},
 			{

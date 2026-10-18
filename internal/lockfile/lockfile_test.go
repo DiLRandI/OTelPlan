@@ -47,7 +47,7 @@ func fixtureLock(t *testing.T) model.Lockfile {
 			ContextStrategy: model.ContextStrategy{Strategy: model.ContextStrategyRoot, Index: 0},
 			ErrorStrategy:   model.ErrorStrategy{Record: false, Indexes: nil},
 			Attributes: []model.AttributePlan{{
-				Key: "category", From: model.AttributeSource{Constant: 1, Argument: "", Result: "", Symbol: ""},
+				Key: "category", From: model.AttributeSource{Constant: 1, Argument: "", Result: "", Symbol: "", ErrorType: ""},
 				Classification: "", Allow: false,
 			}},
 		}},

@@ -65,14 +65,17 @@ configure its normal OpenTelemetry provider/exporter for recording spans.
 
 ## Attribute capture
 
-Argument/constant/symbol attributes bind at entry; result attributes bind at exit.
+Argument/constant/symbol attributes bind at entry; result and error-type
+attributes bind at exit.
 Explicit symbol fields compile to string literals without application reads or
 method calls. Their source selector remains backend-independent; see
 [policy metadata fields](04_POLICY_SPEC.md#symbol-metadata-attributes).
 Extraction is guarded by `span.IsRecording()`. Typed package-local helpers avoid
 importing application packages into the generated runtime and avoid triggering
-otherwise unused package initializers. No reflection or object serialization is
-used for capture.
+otherwise unused package initializers. Explicit `errorType` accessors use runtime
+type metadata to classify an error without calling application methods or
+reflecting over values/fields. Other scalar capture uses typed readers. No object
+serialization is performed. See [error classification](04_POLICY_SPEC.md#error-type-classification-attributes).
 
 Helpers return a primitive value and availability flag. Wrong types, nil paths,
 unsigned overflow above `math.MaxInt64`, and non-finite floats are omitted. Zero,

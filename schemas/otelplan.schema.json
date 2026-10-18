@@ -217,6 +217,10 @@
             "constant": {},
             "symbol": {
               "enum": ["id", "package", "packageName", "name", "receiver", "signature", "kind"]
+            },
+            "errorType": {
+              "type": "string",
+              "minLength": 1
             }
           }
         },

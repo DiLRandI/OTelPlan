@@ -36,7 +36,7 @@ The CI workflow uses the exact commit rather than a moving upstream branch.
 | Selection | Exact importable-package functions and value/pointer receiver methods with Go bodies. |
 | Context | Unique `context.Context` argument is replaced with the child context for ordinary declarations. Explicit root fallback is supported. |
 | Errors | Configured returned-error indexes are recorded with a bounded status description. Return values remain unchanged. |
-| Attributes | Explicit constants and typed scalar argument/result field paths, including private/imported named types. |
+| Attributes | Explicit constants, static symbol metadata, and typed scalar argument/result field paths, including private/imported named types. |
 | Generics | Explicit root spans, returned errors, and captures through concrete types. Generic context replacement and unbound capture types are rejected. Some generic receiver methods fail under the pin. |
 | Variadics | Built-in element types supported through typed hooks. Application-defined element types rejected. |
 | `package main` | Instrumentation targets rejected pending verified command-specific build scoping. Building a command that calls instrumented library packages is supported. |
@@ -65,7 +65,10 @@ configure its normal OpenTelemetry provider/exporter for recording spans.
 
 ## Attribute capture
 
-Argument/constant attributes bind at entry; result attributes bind at exit.
+Argument/constant/symbol attributes bind at entry; result attributes bind at exit.
+Explicit symbol fields compile to string literals without application reads or
+method calls. Their source selector remains backend-independent; see
+[policy metadata fields](04_POLICY_SPEC.md#symbol-metadata-attributes).
 Extraction is guarded by `span.IsRecording()`. Typed package-local helpers avoid
 importing application packages into the generated runtime and avoid triggering
 otherwise unused package initializers. No reflection or object serialization is

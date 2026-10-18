@@ -84,6 +84,10 @@ func callSymbolID(function *ssa.Function) model.SymbolID {
 		return ""
 	}
 
+	return functionSymbolID(obj)
+}
+
+func functionSymbolID(obj *types.Func) model.SymbolID {
 	obj = obj.Origin()
 
 	receiver := obj.Signature().Recv()

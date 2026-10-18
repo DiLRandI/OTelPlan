@@ -114,6 +114,14 @@
       "items": {
         "$ref": "#/$defs/exclusion"
       }
+    },
+    "denyPatterns": {
+      "type": "array",
+      "description": "Additional literal sensitive-name fragments; built-in secret patterns always remain enabled.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     }
   },
   "$defs": {
@@ -206,7 +214,10 @@
             "result": {
               "type": "string"
             },
-            "constant": {}
+            "constant": {},
+            "symbol": {
+              "enum": ["id", "package", "packageName", "name", "receiver", "signature", "kind"]
+            }
           }
         },
         "safety": {

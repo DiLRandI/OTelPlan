@@ -520,6 +520,7 @@ func TestAnalysisCacheEntryValidation(t *testing.T) {
 		change func(*analysisCacheEntry)
 	}{
 		{name: "version", change: func(e *analysisCacheEntry) { e.Version++ }},
+		{name: "obsolete version", change: func(e *analysisCacheEntry) { e.Version-- }},
 		{name: "key", change: func(e *analysisCacheEntry) { e.Key = "other" }},
 		{name: "digest", change: func(e *analysisCacheEntry) { e.Digest = "corrupt" }},
 		{name: "model", change: func(e *analysisCacheEntry) { e.Model = []byte("null"); e.Digest = cacheDigest(e.Model) }},
@@ -772,9 +773,9 @@ func TestAnalysisCacheRetentionPreservesUnrecognizedEntries(t *testing.T) {
 		"not-hex.json": []byte("ordinary"),
 		strings.ToUpper(retentionKey('c')) + ".json": []byte("uppercase"),
 		retentionKey('d') + ".json":                  []byte("{broken"),
-		retentionKey('e') + ".json":                  retentionEntryVariant(t, 1, "wrong"),
+		retentionKey('e') + ".json":                  retentionEntryVariant(t, analysisCacheVersion, "wrong"),
 		retentionKey('f') + ".json":                  retentionEntryBadDigest(t, retentionKey('f')),
-		retentionKey('1') + ".json":                  retentionEntryVariant(t, 2, retentionKey('1')),
+		retentionKey('1') + ".json":                  retentionEntryVariant(t, analysisCacheVersion+1, retentionKey('1')),
 		"ordinary":                                   []byte("file"),
 	}
 	badModel := new(model.CodeModel)

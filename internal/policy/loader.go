@@ -43,7 +43,7 @@ func Parse(data []byte) (*model.Policy, error) {
 			Errors:     model.ErrorDefaults{Record: true},
 			Attributes: model.CaptureDefaults{Arguments: false, Results: false},
 		},
-		Rules: nil, Exclusions: nil,
+		Rules: nil, Exclusions: nil, DenyPatterns: nil,
 	}
 
 	err := dec.Decode(&parsed)

@@ -104,6 +104,17 @@ func loadPreparedModel(ctx context.Context, opts Options, cfg *packages.Config) 
 	selected, all := selectAnalysisPackages(pkgs, opts)
 
 	code := buildModel(selected, all, opts)
+
+	err = addRecursionMetadata(ctx, code, selected)
+	if err != nil {
+		return preparedAnalysis{}, err
+	}
+
+	err = addManualSpanMetadata(ctx, code, selected)
+	if err != nil {
+		return preparedAnalysis{}, err
+	}
+
 	if opts.CallGraph {
 		err = addCallGraph(ctx, code, selected)
 		if err != nil {

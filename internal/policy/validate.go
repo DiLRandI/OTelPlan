@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
@@ -109,6 +110,7 @@ func validatePolicySettings(plan *model.Policy) model.DiagnosticErrorList {
 	var diags model.DiagnosticErrorList
 
 	diags = append(diags, validateDefaults(plan.Defaults)...)
+	diags = append(diags, validateDenyPatterns(plan.DenyPatterns)...)
 
 	if plan.Backend.Name != "" && plan.Backend.Name != model.BackendNameOTelC {
 		diags = append(diags, policyDiagnostic(
@@ -302,7 +304,7 @@ func validateAttributeSource(loc string, src model.AttributeSource) model.Diagno
 
 	set := 0
 
-	for _, v := range []bool{src.Argument != "", src.Result != "", src.Constant != nil} {
+	for _, v := range []bool{src.Argument != "", src.Result != "", src.Constant != nil, src.Symbol != ""} {
 		if v {
 			set++
 		}
@@ -311,7 +313,7 @@ func validateAttributeSource(loc string, src model.AttributeSource) model.Diagno
 	if set == 0 {
 		diags = append(diags, policyDiagnostic(
 			model.CodeInvalidPolicy,
-			loc+": from must set exactly one of argument, result, constant",
+			loc+": from must set exactly one of argument, result, constant, symbol",
 			"",
 		))
 	}
@@ -324,7 +326,33 @@ func validateAttributeSource(loc string, src model.AttributeSource) model.Diagno
 		))
 	}
 
+	if src.Symbol != "" && !validSymbolAttributeField(src.Symbol) {
+		diags = append(diags, policyDiagnostic(model.CodeInvalidPolicy,
+			loc+": unsupported symbol metadata field", ""))
+	}
+
 	return diags
+}
+
+func validSymbolAttributeField(field string) bool {
+	switch field {
+	case model.SymbolFieldID, model.SymbolFieldPackage, model.SymbolFieldPackageName,
+		model.SymbolFieldName, model.SymbolFieldReceiver, model.SymbolFieldSignature, model.SymbolFieldKind:
+		return true
+	default:
+		return false
+	}
+}
+
+func validateDenyPatterns(patterns []string) model.DiagnosticErrorList {
+	for _, pattern := range patterns {
+		if strings.Trim(pattern, "._-") == "" || strings.ContainsFunc(pattern, unicode.IsSpace) {
+			return model.DiagnosticErrorList{policyDiagnostic(model.CodeInvalidPolicy,
+				"denyPatterns entries must contain a non-separator character and must not contain whitespace", "")}
+		}
+	}
+
+	return nil
 }
 
 func hasReservedPrefix(key string) bool {

@@ -110,6 +110,10 @@ type Symbol struct {
 	Signature         string         `json:"signature"`
 	HasBody           bool           `json:"hasBody"`
 	Variadic          bool           `json:"variadic"`
+	// Recursive identifies a cycle of statically resolved calls in analyzed bodies.
+	Recursive bool `json:"recursive,omitempty"`
+	// ManualSpan identifies a recognizable OpenTelemetry span-start call in the body.
+	ManualSpan bool `json:"manualSpan,omitempty"`
 }
 
 // FunctionID constructs the canonical ID for a package-level function.

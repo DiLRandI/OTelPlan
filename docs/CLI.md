@@ -38,11 +38,14 @@ Explain requires exactly one canonical symbol. Build arguments should follow `--
 | `--config PATH` | Policy commands only: inspect, explain, validate, lock, diff, compile, build. Default `otelplan.yaml`. |
 | `--strict` | Policy commands only. Treat warnings as failures. |
 | `--allow-large-plan` | Policy commands only. Acknowledge the target-count limit; warnings still apply. |
+| `--warn-targets N` | Policy commands only. Warn above this count, default 100. |
+| `--strong-warn-targets N` | Policy commands only. Stronger volume warning above this count, default 500. |
+| `--max-targets N` | Policy commands only. Explicit binding maximum, default 2000. Raising it requires `--allow-large-plan`. |
 | `--dependencies` | Scan only. Include dependency declarations in analysis output. |
 | `--interfaces` | Scan only. Show interface method bindings in text output; JSON contains model metadata. |
 | `--calls` | Scan only. Include advisory SSA/CHA call relationships and precision limits. |
 | `--check` | Lock/diff only. Fail for missing or stale resolution without writing files. |
-| `--dry-run` | Lock only. Preview refresh without writing. |
+| `--dry-run` | Init/lock/compile/build only. Preview a starter policy, lock refresh, generated artifacts, or planned build outputs without publishing. |
 | `--output PATH` | Init/compile only. Init defaults to `otelplan.yaml`; compile defaults to `.otelplan/build`. |
 | `--force` | Init only. Permit replacement of an existing regular starter-policy file. |
 | `--interactive` | Init only, text output. Review suggestions individually before writing. |
@@ -51,12 +54,21 @@ Explain requires exactly one canonical symbol. Build arguments should follow `--
 
 `--check --dry-run` and `--interactive --non-interactive` are contradictory and
 return usage exit code 2. Interactive JSON initialization is rejected.
+
+Target-count thresholds must be positive integers, with `--warn-targets` no
+greater than `--strong-warn-targets`. An explicit maximum can be lower than the
+warning thresholds and remains enforced even with `--allow-large-plan`. Omitting
+`--max-targets` preserves the existing acknowledgment behavior above 2,000.
+`--strict` still fails on emitted warnings. Thresholds do not change selection
+or lock identity and do not disable other safety checks. See
+[trace-volume controls](08_VALIDATION_SAFETY.md#8-denial-of-service--telemetry-explosion).
+
 Caching is disabled unless `--cache-dir` is supplied. Use a private caller-owned
 cache directory; cached metadata is trusted local state and must not be shared
 with untrusted users. An explicit empty path is a usage error. Version/help do
 not accept this flag.
 
-Lock check, lock dry-run, and all diff operations reuse valid existing metadata
+Init/compile/build dry-run, lock check, lock dry-run, and all diff operations reuse valid existing metadata
 without creating or refreshing cache files. Cache misses still analyze current
 source. Other analysis commands may publish refreshed cache entries. This does
 not alter resolution fingerprints or skip validation/backend verification.
@@ -93,6 +105,14 @@ starter.yml` to write another policy path. Interactive initialization writes onl
 after accepting suggestions; declining all or losing input/cancellation leaves
 no new policy.
 
+`init --dry-run` validates and previews the exact starter policy without writing
+it. Text output includes the YAML and a `would write` summary; JSON adds
+`data.dryRun=true` and the complete YAML string in `data.policy`, alongside
+`data.path` and `data.suggestions`. Normal init responses retain their existing
+shape. Destination checks still apply: use `--force --dry-run` to preview replacing
+an existing regular policy file, and provide an existing parent directory.
+Interactive text mode can review candidates before previewing the result.
+
 `scan --calls` distinguishes known static callees from conservative candidates.
 A candidate is not proof of runtime execution. Call graphs do not select targets
 or alter resolution locks. See [discovery](03_DISCOVERY_ENGINE.md).
@@ -107,6 +127,20 @@ in temporary module state, and publishes rules, hooks, and `manifest.json` with
 file hashes. Identical output is reused. `--clean` replaces changed generated
 output only after validating the previous manifest; edited generated files and
 unrelated files prevent replacement.
+
+`compile --dry-run` performs the same backend verification, rendering, and
+generated-source compilation in disposable state, then previews publication.
+JSON adds `data.dryRun=true` and `data.artifacts`, a sorted inventory of relative
+file paths and SHA-256 digests including the manifest. Text reports `would write`
+and lists the inventory. Normal compile JSON retains its existing shape.
+
+The preview creates no output directories and preserves existing output and
+requested analysis caches. `--clean --dry-run` previews replacement of a verified
+bundle; changed output still requires `--clean`, and modified or unrelated files
+remain errors. Missing output parents are allowed without creating them. The
+preview cannot guarantee that a later write will succeed. Go dependency/build
+caches may still be used or populated; use `--offline` with prepared dependencies
+to disable module lookup.
 
 Build copies application modules, local replacements, and workspace state into
 a disposable workspace. It verifies that adding the generated runtime preserves
@@ -139,6 +173,21 @@ project metadata, directories, or symlinks.
 Build from an application module or pass explicit targets from a workspace root,
 for example `otelplan build -- ./app`. Workspace-root builds require a package
 target. Backend subprocess logs are suppressed.
+
+`build --dry-run` verifies the policy, pinned backend, isolated workspace,
+recorded build environment, generated runtime artifacts, and module selection.
+It queries package metadata to plan output names, but does not invoke backend
+compilation or publish binaries. JSON returns `data.dryRun=true`, `data.outputs`
+as an array of absolute destination paths, and the verified `data.backend`.
+Text reports `would build` for each output. Library and multi-package builds
+without `-o` return an empty output array. Normal build JSON is unchanged.
+
+Preview retains source and destination safety checks without creating output
+directories or changing existing outputs, locks, or requested analysis caches.
+It uses disposable workspace copies and may populate Go dependency/build caches;
+use `--offline` after preparing dependencies to disable module lookup. A
+successful preflight does not prove that eventual compilation or publication
+will succeed. No binary digests are reported for unbuilt outputs.
 
 ## Offline execution and cancellation
 
@@ -181,6 +230,9 @@ JSON responses use `otelplan.io/cli/v1alpha1`:
 ```
 
 `data` is command-specific. `--verbose` adds an optional `details` object.
+Inspect output retains explicit `from.symbol` metadata selectors; text renders
+them as `attribute KEY from symbol FIELD`. Frozen metadata values are recorded
+in the lock, without changing inspect's source provenance or constant redaction.
 Machine-readable usage errors also produce an envelope on stdout with `ok=false`;
 invalid flag values are not echoed. Text usage errors go to stderr. Failures to
 write output return 1 and may prevent emitting an envelope. A stale `diff --check`
@@ -209,6 +261,8 @@ artifacts may contain explicitly configured constants; protect those files.
 | OTP1001 through OTP1005 | Invalid selector, unresolved symbol, conflicting rules, unknown template variable, invalid policy. |
 | OTP3001 through OTP3002 | Missing or multiple usable contexts. |
 | OTP4001 through OTP4005 | Secret, PII, cardinality, broad plan, unsupported capture. |
+| OTP4006 | Selected target participates in a static recursive call cycle. |
+| OTP4007 | Selected target contains a recognizable OpenTelemetry span-start call. |
 | OTP5001 through OTP5004 | Backend unsupported/version mismatch, compilation, artifact output. |
 | OTP6001 | Resolution lock failure. |
 

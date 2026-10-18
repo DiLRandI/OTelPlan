@@ -62,6 +62,8 @@ func TestMatchSelectors(t *testing.T) {
 		Signature:         "",
 		HasBody:           false,
 		Variadic:          false,
+		Recursive:         false,
+		ManualSpan:        false,
 	}
 
 	var buildEnvironment model.BuildEnvironment

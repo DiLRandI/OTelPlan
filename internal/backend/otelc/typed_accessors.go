@@ -176,16 +176,31 @@ func (renderer *accessorRenderer) renderAttribute(
 
 	if access.Source == "constant" {
 		binding.Index = -1
-		resultType, _ := scalarType(access.Kind)
-		fmt.Fprintf(&renderer.body, "func %s(_ any) (%s, bool) { return %s, true }\n",
-			name, resultType, scalarLiteral(attribute.From.Constant))
 
-		return binding, nil
+		return binding, renderer.renderStaticAccessor(binding, attribute.From)
 	}
 
 	err = renderer.renderValueAccessor(binding, access)
 
 	return binding, err
+}
+
+func (renderer *accessorRenderer) renderStaticAccessor(binding AccessorBinding, source model.AttributeSource) error {
+	value := source.Constant
+	if source.Symbol != "" {
+		metadata, err := validate.SymbolMetadataValue(*renderer.symbol, source.Symbol)
+		if err != nil {
+			return fmt.Errorf("resolve static symbol attribute: %w", err)
+		}
+
+		value = metadata
+	}
+
+	resultType, _ := scalarType(binding.Kind)
+	fmt.Fprintf(&renderer.body, "func %s(_ any) (%s, bool) { return %s, true }\n",
+		binding.Function, resultType, scalarLiteral(value))
+
+	return nil
 }
 
 func (renderer *accessorRenderer) accessorName(key string) (string, error) {

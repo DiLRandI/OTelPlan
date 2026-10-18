@@ -61,10 +61,25 @@ Search both:
 - telemetry key;
 - source field/path.
 
-The internal validator accepts supplemental deny patterns. The current policy
-schema and CLI do not expose a configurable denylist. Built-in checks cannot be
-disabled wholesale; sensitive captures require explicit per-attribute safety
-acknowledgment.
+Policies can add sensitive-name fragments:
+
+```yaml
+denyPatterns:
+  - bank_reference
+  - account_number
+```
+
+These literal fragments supplement built-in patterns. Matching ignores case and
+dot, underscore, and hyphen separators, using the attribute key and argument/result
+path. Entries must contain a non-separator character and no whitespace. An omitted
+or empty list leaves every built-in check enabled. Sensitive captures still
+require `safety: {classification: secret, allow: true}` on that attribute; public
+classification cannot bypass the check. Captured constants and deny-pattern
+contents are not echoed in these diagnostics.
+
+Order and duplicate entries do not affect the policy digest. A changed set of
+configured fragments changes policy identity and can make a lock stale. Analysis
+cache reuse does not bypass current policy safety validation.
 
 ## 3. PII
 
@@ -141,21 +156,58 @@ Suggested defaults:
 > 2000 targets: require explicit --allow-large-plan
 ```
 
-The internal validator accepts threshold overrides. The CLI exposes
-`--allow-large-plan` for the 2,000-target limit, with warnings retained. Arbitrary
-threshold configuration is not currently a policy/CLI feature.
+Policy commands accept `--warn-targets`, `--strong-warn-targets`, and
+`--max-targets`. Values must be positive integers; the first warning threshold
+cannot exceed the strong-warning threshold. A maximum may be lower than either
+warning threshold when a stricter cap is desired. A boundary is exceeded only
+when the selected count is greater than its configured value.
+
+Without an explicit maximum, `--allow-large-plan` retains its existing behavior:
+it acknowledges exceeding 2,000 targets while keeping warnings. Raising an
+explicit maximum above 2,000 also requires that acknowledgment. An explicit
+maximum remains binding even with `--allow-large-plan`; exceeding it fails
+validation rather than silently bypassing the configured cap.
+
+These flags control validation, not selection or lock identity. They cannot
+bypass context, secret/PII, attribute, or backend checks. Init and scan do not
+accept these policy controls; their existing conservative behavior is unchanged.
 
 ## 9. Recursion
 
 Instrumenting recursive functions is allowed but can create deep traces.
-Dedicated recursion warnings remain planned. Advisory call edges can help a
-human review recursion but are not an automatic safety diagnostic.
+Discovery marks declarations that belong to statically resolved call cycles,
+including mutual recursion through other analyzed declarations. Selecting one
+produces warning `OTP4006` with its policy rule and exact symbol; `--strict`
+treats the warning as a validation failure. A caller that only reaches a cycle
+is not itself marked recursive. No target is automatically excluded.
+
+This check uses typed calls in analyzed bodies without requiring the optional
+SSA call graph. Immediately invoked closures are included; stored or returned
+closure bodies are not attributed to the enclosing declaration. Arbitrary
+function-value calls, interface dispatch, reflection, and cycles through bodies
+outside the analyzed package set are not resolved. A static cycle does not
+prove that the recursive path executes for a particular input. Absence of a
+warning is not proof that recursion is impossible.
 
 ## 10. Double instrumentation
 
-Dedicated manual-span/double-instrumentation detection remains planned.
-The current validator does not claim to detect existing `tracer.Start` calls or
-automatically suppress them. Review overlap with existing application tracing.
+Selecting a declaration with a recognizable OpenTelemetry span-start call
+produces warning `OTP4007`. The check uses Go types: a `Start` method must have
+a receiver implementing `go.opentelemetry.io/otel/trace.Tracer`. It recognizes
+interface calls, aliases, concrete wrappers, promoted methods, and method
+expressions. Unrelated methods named `Start` do not match by name alone.
+
+Immediately invoked closure bodies are included. Stored/returned closures,
+indirect function-value calls, helper-function bodies, and reflection are not
+attributed to the enclosing declaration. The warning does not prove that a
+particular path executes or that spans are duplicates. Absence of a warning is
+not proof that manual instrumentation is absent.
+
+The diagnostic retains the selected symbol and rule without exposing span names
+or attribute values. No target is automatically excluded and no application span
+is suppressed. Review the overlap and use ordinary policy exclusions when
+appropriate. Existing `--strict` semantics treat this warning as a validation
+failure.
 
 ## Returned-error messages
 

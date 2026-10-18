@@ -121,6 +121,7 @@ func accessorAttributes() []model.AttributePlan {
 				Argument: "",
 				Result:   "",
 				Constant: false,
+				Symbol:   "",
 			},
 			Classification: model.ClassificationPublic,
 			Allow:          false,
@@ -131,6 +132,7 @@ func accessorAttributes() []model.AttributePlan {
 				Argument: "",
 				Result:   "",
 				Constant: "fixed",
+				Symbol:   "",
 			},
 			Classification: model.ClassificationPublic,
 			Allow:          false,
@@ -150,6 +152,7 @@ func argumentAccessorAttribute(key, argument string) model.AttributePlan {
 			Argument: argument,
 			Result:   "",
 			Constant: nil,
+			Symbol:   "",
 		},
 		Classification: model.ClassificationPublic,
 		Allow:          false,
@@ -163,6 +166,7 @@ func constantAccessorAttribute(key string, value any) model.AttributePlan {
 			Argument: "",
 			Result:   "",
 			Constant: value,
+			Symbol:   "",
 		},
 		Classification: model.ClassificationPublic,
 		Allow:          false,
@@ -176,6 +180,7 @@ func resultAccessorAttribute(key, result string) model.AttributePlan {
 			Argument: "",
 			Result:   result,
 			Constant: nil,
+			Symbol:   "",
 		},
 		Classification: model.ClassificationPublic,
 		Allow:          false,
@@ -314,7 +319,7 @@ func constantAccessorSource(value any) model.AttributeSource {
 }
 
 func invalidAccessorCases() []invalidAccessorCase {
-	multipleSources := model.AttributeSource{Argument: "req.ID", Result: "result.Message", Constant: nil}
+	multipleSources := model.AttributeSource{Argument: "req.ID", Result: "result.Message", Constant: nil, Symbol: ""}
 	secret := argumentAccessorAttribute("secret", "req.Secret")
 	secret.Classification = model.ClassificationSecret
 
@@ -374,7 +379,7 @@ func TestTypedAccessorFailuresShareCauses(t *testing.T) {
 		_, code, target := accessorFixture(t)
 		target.Attributes = []model.AttributePlan{{
 			Key:            "secret",
-			From:           model.AttributeSource{Argument: "req.Secret", Result: "", Constant: nil},
+			From:           model.AttributeSource{Argument: "req.Secret", Result: "", Constant: nil, Symbol: ""},
 			Classification: model.ClassificationSecret,
 			Allow:          false,
 		}}

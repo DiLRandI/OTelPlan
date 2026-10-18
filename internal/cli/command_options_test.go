@@ -38,7 +38,7 @@ func TestCommandOptionErrorPrecedence(t *testing.T) {
 		{name: "check applicability", args: []string{"version", "--check", "--dry-run=false"},
 			message: "--check is supported by lock and diff"},
 		{name: "dry run applicability", args: []string{"diff", "--dry-run"},
-			message: "--dry-run is supported by lock"},
+			message: "--dry-run is supported by init, lock, compile, and build"},
 	}
 
 	for _, testCase := range tests {

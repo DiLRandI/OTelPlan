@@ -18,6 +18,7 @@ var (
 	errInvalidErrorIndex         = errors.New("invalid error index")
 	errInvalidAttributeKey       = errors.New("invalid attribute key")
 	errInvalidAttributeKind      = errors.New("invalid attribute kind")
+	errInvalidSymbolAttribute    = errors.New("invalid locked symbol metadata source or frozen value")
 	errInvalidTarget             = errors.New("invalid or duplicate locked target")
 	errInvalidArtifacts          = errors.New("invalid artifact manifest")
 	errRefreshBuildIdentity      = errors.New("resolution refresh cannot supply build-owned identity")

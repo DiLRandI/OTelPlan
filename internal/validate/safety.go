@@ -3,6 +3,7 @@
 package validate
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"unicode"
@@ -14,22 +15,29 @@ import (
 type Options struct {
 	// DenyPatterns supplements the built-in sensitive-name patterns.
 	DenyPatterns []string
-	// AllowLargePlan acknowledges exceeding MaximumTargets; warnings still apply.
+	// AllowLargePlan acknowledges exceeding MaximumTargets unless EnforceMaximum
+	// is set. Warnings still apply.
 	AllowLargePlan bool
 	// WarningTargets defaults to 100 when non-positive.
 	WarningTargets int
+	// StrongWarningTargets defaults to 500 when non-positive.
+	StrongWarningTargets int
 	// MaximumTargets defaults to 2000 when non-positive.
 	MaximumTargets int
+	// EnforceMaximum keeps an explicitly configured maximum binding even when
+	// exceeding the default limit has been acknowledged.
+	EnforceMaximum bool
 }
 
+// Default target-count thresholds retain conservative validation without configuration.
 const (
-	defaultWarningTargets   = 100
-	defaultMaximumTargets   = 2000
-	spanNoiseWarningTargets = 500
+	DefaultWarningTargets       = 100
+	DefaultStrongWarningTargets = 500
+	DefaultMaximumTargets       = 2000
 )
 
 // Safety reports unresolved targets, unsafe attributes, and potential span noise.
-// It also warns whenever a plan exceeds 500 targets, independently of Options.
+// An additional span-noise warning uses StrongWarningTargets, defaulting to 500.
 // Attribute values are not included in diagnostics.
 func Safety(code *model.CodeModel, plan model.ResolvedPlan, opts Options) model.DiagnosticErrorList {
 	if code == nil {
@@ -61,11 +69,15 @@ func planSizeDiagnostics(count int, opts Options) model.DiagnosticErrorList {
 	var diags model.DiagnosticErrorList
 
 	if opts.WarningTargets <= 0 {
-		opts.WarningTargets = defaultWarningTargets
+		opts.WarningTargets = DefaultWarningTargets
+	}
+
+	if opts.StrongWarningTargets <= 0 {
+		opts.StrongWarningTargets = DefaultStrongWarningTargets
 	}
 
 	if opts.MaximumTargets <= 0 {
-		opts.MaximumTargets = defaultMaximumTargets
+		opts.MaximumTargets = DefaultMaximumTargets
 	}
 
 	if count > opts.WarningTargets {
@@ -75,17 +87,23 @@ func planSizeDiagnostics(count int, opts Options) model.DiagnosticErrorList {
 		))
 	}
 
-	if count > spanNoiseWarningTargets {
+	if count > opts.StrongWarningTargets {
 		diags = append(diags, safetyDiagnostic(
 			model.SeverityWarning, model.CodeBroadPlan,
-			"policy selects more than 500 targets; review span noise and telemetry cost carefully",
+			fmt.Sprintf("policy selects more than %d targets; review span noise and telemetry cost carefully",
+				opts.StrongWarningTargets),
 		))
 	}
 
-	if count > opts.MaximumTargets && !opts.AllowLargePlan {
+	if count > opts.MaximumTargets && (opts.EnforceMaximum || !opts.AllowLargePlan) {
+		message := "plan exceeds target limit; explicit large-plan acknowledgment is required"
+		if opts.EnforceMaximum {
+			message = "plan exceeds explicitly configured maximum target count"
+		}
+
 		diags = append(diags, safetyDiagnostic(
 			model.SeverityError, model.CodeBroadPlan,
-			"plan exceeds target limit; explicit large-plan acknowledgment is required",
+			message,
 		))
 	}
 
@@ -110,6 +128,20 @@ func targetSafety(code *model.CodeModel, target model.ResolvedTarget, secrets []
 		diags = append(diags, safetyDiagnostic(
 			model.SeverityWarning, model.CodeBroadPlan,
 			"selection includes generated or test code",
+		))
+	}
+
+	if symbol.Recursive {
+		diags = append(diags, safetyDiagnostic(
+			model.SeverityWarning, model.CodeRecursiveTarget,
+			"selected target participates in a static recursive call cycle; review trace depth and volume",
+		))
+	}
+
+	if symbol.ManualSpan {
+		diags = append(diags, safetyDiagnostic(
+			model.SeverityWarning, model.CodeManualSpan,
+			"selected target contains an OpenTelemetry span-start call; review overlapping instrumentation",
 		))
 	}
 

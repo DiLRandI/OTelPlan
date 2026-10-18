@@ -25,7 +25,8 @@ var (
 
 // Accessor describes a validated scalar attribute source. Index addresses the
 // argument or result; Fields includes embedded fields needed to reach the value.
-// Constant sources have no field path or Go type and use Kind for their scalar type.
+// Constant and symbol sources have no field path or Go type; symbol metadata
+// resolves to a constant scalar without reading application values.
 type Accessor struct {
 	Source string   `json:"source"`
 	Index  int      `json:"index"`
@@ -34,14 +35,16 @@ type Accessor struct {
 	Kind   string   `json:"kind"`
 }
 
-// AttributeAccessor resolves exactly one constant, argument, or result source.
+// AttributeAccessor resolves exactly one constant, symbol, argument, or result source.
 // Constants must be finite scalars within the telemetry integer range. Field
 // access requires an unambiguous exported path ending in a scalar value.
-// Argument and result sources require type information in code; constants do not.
+// Argument and result sources require type information in code; static sources do not.
 func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.AttributeSource) (Accessor, error) {
 	sources := 0
 
-	for _, present := range []bool{source.Argument != "", source.Result != "", source.Constant != nil} {
+	for _, present := range []bool{
+		source.Argument != "", source.Result != "", source.Constant != nil, source.Symbol != "",
+	} {
 		if present {
 			sources++
 		}
@@ -53,6 +56,15 @@ func AttributeAccessor(code *model.CodeModel, symbol model.Symbol, source model.
 
 	if source.Constant != nil {
 		return constantAccessor(source.Constant)
+	}
+
+	if source.Symbol != "" {
+		value, err := SymbolMetadataValue(symbol, source.Symbol)
+		if err != nil {
+			return Accessor{}, err
+		}
+
+		return constantAccessor(value)
 	}
 
 	access, fields, err := sourceAccessor(symbol, source)

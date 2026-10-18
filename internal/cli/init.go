@@ -43,6 +43,8 @@ var (
 type initSummary struct {
 	Path        string               `json:"path"`
 	Suggestions []suggest.Suggestion `json:"suggestions"`
+	DryRun      bool                 `json:"dryRun,omitempty"`
+	Policy      string               `json:"policy,omitempty"`
 }
 
 func initCommand(ctx context.Context, opts options, patterns []string, stdin io.Reader,
@@ -56,6 +58,10 @@ func initCommand(ctx context.Context, opts options, patterns []string, stdin io.
 	}
 
 	err = checkStarterDestination(path, opts.force)
+	if err == nil && opts.dryRun {
+		err = checkStarterPreviewDirectory(path)
+	}
+
 	if err != nil {
 		recordFailure(opts, model.CodeArtifactOutput, "inspect starter policy destination", err)
 
@@ -108,6 +114,17 @@ func finishStarterPolicy(ctx context.Context, opts options, path string, code *m
 		return initFailure(1, model.CodeArtifactOutput, fmt.Sprintf("starter policy generation canceled: %v", err))
 	}
 
+	if opts.dryRun {
+		data, encodeErr := starterPolicyContent(starter)
+		if encodeErr != nil {
+			recordFailure(opts, model.CodeArtifactOutput, "preview starter policy", encodeErr)
+
+			return initFailure(1, model.CodeArtifactOutput, encodeErr.Error())
+		}
+
+		return initSummary{Path: path, Suggestions: selected, DryRun: true, Policy: string(data)}, 0, diagnostics
+	}
+
 	err = writeStarter(starter, path, opts.force)
 	if err != nil {
 		recordFailure(opts, model.CodeArtifactOutput, "write starter policy", err)
@@ -115,7 +132,7 @@ func finishStarterPolicy(ctx context.Context, opts options, path string, code *m
 		return initFailure(1, model.CodeArtifactOutput, err.Error())
 	}
 
-	return initSummary{Path: path, Suggestions: selected}, 0, diagnostics
+	return initSummary{Path: path, Suggestions: selected, DryRun: false, Policy: ""}, 0, diagnostics
 }
 
 func initFailure(exit int, code model.Code, message string) (any, int, model.DiagnosticErrorList) {
@@ -140,14 +157,35 @@ func loadStarterCode(ctx context.Context, opts options, patterns []string) (*mod
 }
 
 func writeStarter(starter *model.Policy, path string, force bool) error {
-	data, err := yaml.Marshal(starter)
+	data, err := starterPolicyContent(starter)
 	if err != nil {
-		return fmt.Errorf("encode starter policy: %w", err)
+		return err
 	}
 
-	data = append([]byte(starterHeader), data...)
-
 	return writeStarterPolicy(path, data, force)
+}
+
+func starterPolicyContent(starter *model.Policy) ([]byte, error) {
+	data, err := yaml.Marshal(starter)
+	if err != nil {
+		return nil, fmt.Errorf("encode starter policy: %w", err)
+	}
+
+	return append([]byte(starterHeader), data...), nil
+}
+
+func checkStarterPreviewDirectory(path string) error {
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("open starter policy output directory: %w", err)
+	}
+
+	err = root.Close()
+	if err != nil {
+		return fmt.Errorf("close starter policy output directory: %w", err)
+	}
+
+	return nil
 }
 
 func validateStarterPolicy(starter *model.Policy, code *model.CodeModel,

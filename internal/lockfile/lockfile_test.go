@@ -20,7 +20,8 @@ func fixtureLock(t *testing.T) model.Lockfile {
 	)
 
 	policy := &model.Policy{
-		APIVersion: "", Kind: "", Project: model.ProjectConfig{
+		DenyPatterns: nil,
+		APIVersion:   "", Kind: "", Project: model.ProjectConfig{
 			Packages: nil, BuildTags: nil, IncludeTests: false, IncludeDependencies: false,
 		},
 		Backend:  model.BackendConfig{Name: "otelc", Version: "v1.1.0"},
@@ -36,6 +37,7 @@ func fixtureLock(t *testing.T) model.Lockfile {
 			Kind:     "", PackageImportPath: "", PackageName: "", Name: "", Receiver: nil, Visibility: "",
 			Parameters: nil, Results: nil, ContextIndexes: nil, ErrorIndexes: nil, Generics: nil,
 			Generated: false, TestFile: false, Ownership: "", HasBody: false, Variadic: false,
+			Recursive: false, ManualSpan: false,
 		}},
 	}
 	plan := model.ResolvedPlan{
@@ -45,7 +47,7 @@ func fixtureLock(t *testing.T) model.Lockfile {
 			ContextStrategy: model.ContextStrategy{Strategy: model.ContextStrategyRoot, Index: 0},
 			ErrorStrategy:   model.ErrorStrategy{Record: false, Indexes: nil},
 			Attributes: []model.AttributePlan{{
-				Key: "category", From: model.AttributeSource{Constant: 1, Argument: "", Result: ""},
+				Key: "category", From: model.AttributeSource{Constant: 1, Argument: "", Result: "", Symbol: ""},
 				Classification: "", Allow: false,
 			}},
 		}},

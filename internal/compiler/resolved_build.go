@@ -31,12 +31,16 @@ type ResolvedBuildRequest struct {
 	DefaultOutput                                  bool
 	DirectoryOutput                                bool
 	Packages                                       []string
+	DryRun                                         bool
 }
 
-// BuildResult owns the disposable workspace containing verified build artifacts.
+// BuildResult owns the disposable workspace. Files contains verified artifacts
+// after execution. Dry-runs instead populate PreviewNames with planned default
+// filenames; an empty name means the caller supplies the output filename.
 type BuildResult struct {
-	Dir   string
-	Files []BuildArtifact
+	Dir          string
+	Files        []BuildArtifact
+	PreviewNames []string
 }
 
 // BuildArtifact identifies a temporary output by its digest and optional default filename.
@@ -48,14 +52,16 @@ type BuildArtifact struct {
 }
 
 type resolvedBuildOutput struct {
-	path        string
-	defaultName string
-	discard     bool
-	arguments   []string
+	path         string
+	defaultName  string
+	discard      bool
+	arguments    []string
+	previewNames []string
 }
 
 // BuildResolved builds an already validated plan in disposable module copies.
 // GoArgs must match analysis and omit -o. The caller owns returned Dir cleanup.
+// DryRun verifies prepared inputs and plans outputs without backend compilation.
 func BuildResolved(ctx context.Context, request ResolvedBuildRequest) (BuildResult, error) {
 	var empty BuildResult
 
@@ -199,12 +205,21 @@ func executeResolvedBuild(ctx context.Context, request ResolvedBuildRequest, wor
 		return empty, err
 	}
 
-	artifacts, err := collectResolvedBuildArtifacts(prepared.Dir, output, request.DirectoryOutput)
-	if err != nil {
-		return empty, err
+	return resolvedBuildResult(prepared.Dir, output, request)
+}
+
+func resolvedBuildResult(directory string, output resolvedBuildOutput,
+	request ResolvedBuildRequest) (BuildResult, error) {
+	if request.DryRun {
+		return BuildResult{Dir: directory, Files: nil, PreviewNames: output.previewNames}, nil
 	}
 
-	return BuildResult{Dir: prepared.Dir, Files: artifacts}, nil
+	artifacts, err := collectResolvedBuildArtifacts(directory, output, request.DirectoryOutput)
+	if err != nil {
+		return BuildResult{Dir: "", Files: nil, PreviewNames: nil}, err
+	}
+
+	return BuildResult{Dir: directory, Files: artifacts, PreviewNames: nil}, nil
 }
 
 func resolvedBuildDirectory(request ResolvedBuildRequest, prepared PreparedWorkspace,
@@ -259,7 +274,7 @@ func resolvedPreparedBuildRequest(ctx context.Context, request ResolvedBuildRequ
 	return PreparedBuildRequest{
 		BuildEnvironment: request.Code.EffectiveBuild, Workspace: prepared, ModuleDir: copiedDir,
 		Executable: request.Executable, Backend: request.Backend, ApplicationModules: applicationModules,
-		RuntimeModules: runtimeSelection, RuntimeOriginalDir: runtime.Dir, Env: env, GoArgs: nil,
+		RuntimeModules: runtimeSelection, RuntimeOriginalDir: runtime.Dir, Env: env, GoArgs: nil, DryRun: request.DryRun,
 	}, nil
 }
 
@@ -273,15 +288,13 @@ func planResolvedBuildOutput(ctx context.Context, request ResolvedBuildRequest, 
 	}
 
 	output := resolvedBuildOutput{
-		path: filepath.Join(build.Workspace.Dir, "output"), defaultName: "", discard: false, arguments: args,
+		path: filepath.Join(build.Workspace.Dir, "output"), defaultName: "", discard: false,
+		arguments: args, previewNames: nil,
 	}
-	if request.DefaultOutput {
-		output.defaultName, err = resolvedDefaultBuildOutput(ctx, request, build, workingDir, buildFlags)
-		if err != nil {
-			return empty, err
-		}
 
-		output.discard = output.defaultName == ""
+	err = output.planNames(ctx, request, build, workingDir, buildFlags)
+	if err != nil {
+		return empty, err
 	}
 
 	if request.DirectoryOutput {
@@ -296,6 +309,52 @@ func planResolvedBuildOutput(ctx context.Context, request ResolvedBuildRequest, 
 	}
 
 	return output, nil
+}
+
+func (output *resolvedBuildOutput) planNames(ctx context.Context, request ResolvedBuildRequest,
+	build PreparedBuildRequest, workingDir string, buildFlags []string) error {
+	if !request.DefaultOutput {
+		if !request.DryRun {
+			return nil
+		}
+
+		names, err := resolvedPreviewBuildOutputs(ctx, request, build, workingDir, buildFlags)
+		output.previewNames = names
+
+		return err
+	}
+
+	name, err := resolvedDefaultBuildOutput(ctx, request, build, workingDir, buildFlags)
+	if err != nil {
+		return err
+	}
+
+	output.defaultName, output.discard = name, name == ""
+	if request.DryRun && !output.discard {
+		output.previewNames = []string{name}
+	}
+
+	return nil
+}
+
+func resolvedPreviewBuildOutputs(ctx context.Context, request ResolvedBuildRequest, build PreparedBuildRequest,
+	workingDir string, buildFlags []string) ([]string, error) {
+	packages := request.GoArgs[buildPackageStart(request.GoArgs):]
+
+	targets, err := build.Workspace.RelocateBuildArguments(packages, workingDir)
+	if err != nil {
+		return nil, err
+	}
+
+	env := append(append([]string(nil), build.Env...), "GOWORK="+build.Workspace.WorkspaceFile)
+
+	data, err := queryBuildTargets(ctx, build.ModuleDir, env, buildFlags, targets,
+		request.Code.EffectiveBuild.ModuleMode)
+	if err != nil {
+		return nil, err
+	}
+
+	return decodePreviewBuildOutputs(data, request.Code.EffectiveBuild.GOOS, request.DirectoryOutput)
 }
 
 func resolvedDefaultBuildOutput(ctx context.Context, request ResolvedBuildRequest, build PreparedBuildRequest,

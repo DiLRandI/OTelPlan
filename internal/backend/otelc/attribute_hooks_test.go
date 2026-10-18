@@ -65,8 +65,10 @@ func TestAttributeHooksAreTypedAndBound(t *testing.T) {
 		accessorAttributePlan("request.float", argumentAttributeSource("req.Inner.Score")),
 		accessorAttributePlan("request.int", argumentAttributeSource("req.Signed")),
 		accessorAttributePlan("request.string", argumentAttributeSource("req.ID")),
-		accessorAttributePlan("result.int", model.AttributeSource{Argument: "", Result: "result.Big", Constant: nil}),
-		accessorAttributePlan("result.string", model.AttributeSource{Argument: "", Result: "result.Message", Constant: nil}),
+		accessorAttributePlan("result.int",
+			model.AttributeSource{Argument: "", Result: "result.Big", Constant: nil, Symbol: ""}),
+		accessorAttributePlan("result.string",
+			model.AttributeSource{Argument: "", Result: "result.Message", Constant: nil, Symbol: ""}),
 		accessorAttributePlan("fixed.bool", constantAccessorSource(false)),
 	}
 	plan := resolvedPlanWithTargets(target)

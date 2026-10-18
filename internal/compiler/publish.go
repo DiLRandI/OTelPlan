@@ -33,7 +33,7 @@ func ReadArtifacts(dir string) (model.Artifacts, error) {
 
 	defer func() { _ = root.Close() }()
 
-	data, err := root.ReadFile("manifest.json")
+	data, err := readRegularArtifact(root, "manifest.json")
 	if err != nil {
 		return empty, fmt.Errorf("read artifact manifest: %w", err)
 	}

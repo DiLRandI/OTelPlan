@@ -12,7 +12,7 @@ This is a pre-stable implementation, not a completed release.
 | Phase | Status and remaining evidence |
 | --- | --- |
 | Foundation | Semantic discovery, policy matching, exact resolution, exclusions, inspect/explain implemented. |
-| Safety/reproducibility | Static context/error/capture checks, canonical policy/build fingerprints, resolution locks and drift implemented. Dedicated recursion/manual-span warnings and some configuration controls remain goals. |
+| Safety/reproducibility | Static context/error/capture checks, static recursion and manual-span warnings, configurable trace-volume thresholds, canonical policy/build fingerprints, resolution locks and drift implemented. |
 | OTelC backend | Real rules/hooks/attributes and isolated compile/build implemented. Some generic, variadic, main-package, and panic capabilities are limited by the documented pin/scoping constraints. |
 | Hardening | Workspaces, local replacements, tags, isolated vendor builds, advisory call graphs, safe verbose diagnostics, and opt-in engine cache implemented. Opt-in CLI cache controls and read-only cache reuse are implemented. Bounded writable cache retention is implemented. Runtime benchmark/report, security verification, and multi-platform confidence remain; the authoritative lint gate is clean. |
 | Initialization | Deterministic scoring/evidence, exact starter policy, interactive review, and no default capture implemented. Representative open-source application usefulness gate still needs evidence. |

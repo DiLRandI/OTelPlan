@@ -227,8 +227,8 @@ Allowed attribute sources:
 - error classification.
 
 Every attribute rule requires an explicit key. Current attribute sources are
-constants and typed scalar argument/result paths; dedicated symbol-metadata and
-error-classification sources remain product goals.
+constants, typed scalar argument/result paths, and explicit static symbol
+metadata. Dedicated error-classification sources remain a product goal.
 
 Never serialize whole objects by default.
 
@@ -325,8 +325,10 @@ OTelPlan's public policy schema must not expose raw `otelc` pointcut/advice synt
 ### FR-018 Dry-run
 
 All mutating/generating commands must support `--dry-run` where meaningful.
-Currently the CLI supports this flag only for lock refresh; init/compile/build
-preview behavior remains a requirement to assess before stability.
+The CLI supports this flag for starter-policy generation, lock refresh,
+compilation previews, and build preflight. Build preflight verifies isolated
+inputs and plans output paths without invoking backend compilation or publishing
+binaries; it does not guarantee that a subsequent build will succeed.
 
 ### FR-019 JSON output
 

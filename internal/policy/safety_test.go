@@ -23,7 +23,7 @@ func validPolicyModel() *model.Policy {
 			ID: "operations", Description: "", Match: testFunctionMatch("Run"),
 			Exclude: nil, Span: nil, Errors: nil, Attributes: nil,
 		}},
-		Exclusions: nil,
+		Exclusions: nil, DenyPatterns: nil,
 	}
 }
 
@@ -106,7 +106,7 @@ func testFunctionMatch(name string) model.Match {
 func testConstantAttribute(key, value string) model.AttributeRule {
 	return model.AttributeRule{
 		Key:    key,
-		From:   model.AttributeSource{Argument: "", Result: "", Constant: value},
+		From:   model.AttributeSource{Argument: "", Result: "", Constant: value, Symbol: ""},
 		Safety: nil,
 	}
 }

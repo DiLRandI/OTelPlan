@@ -126,9 +126,8 @@ func loadPolicyInventory(ctx context.Context, command string, opts options, load
 }
 
 func validatePolicyExecution(opts options, execution policyExecution) (model.DiagnosticErrorList, int) {
-	var safetyOptions validate.Options
-
-	safetyOptions.AllowLargePlan = opts.allowLargePlan
+	safetyOptions := targetSafetyOptions(opts)
+	safetyOptions.DenyPatterns = execution.policy.DenyPatterns
 	diagnostics := execution.resolution.Diagnostics
 	diagnostics = append(diagnostics, validate.Safety(execution.inventory, execution.resolution.Plan, safetyOptions)...)
 

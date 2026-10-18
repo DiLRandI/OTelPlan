@@ -54,6 +54,7 @@ func TestPrivateAccessorsWithPinnedBackend(t *testing.T) {
 	handles, downstream, parent := privateAccessorSpans(t, result.Spans)
 	checkPrivateAccessorParents(t, handles, downstream, parent)
 	checkPrivateCapturedAttributes(t, handles)
+	checkPrivateSymbolAttributes(t, handles, plan.Targets[0].Signature)
 }
 
 func privateAccessorWorkspace(t *testing.T) *os.Root {
@@ -148,7 +149,17 @@ func privateAccessorAttributes() []model.AttributePlan {
 	cacheHit.Key, cacheHit.From.Constant = "cache.hit", false
 	weight.Key, weight.From.Constant = "weight", 1.5
 
-	return []model.AttributePlan{requestID, size, component, cacheHit, weight}
+	attributes := make([]model.AttributePlan, 0, 12)
+	attributes = append(attributes, requestID, size, component, cacheHit, weight)
+
+	for _, field := range []string{"id", "package", "packageName", "name", "receiver", "signature", "kind"} {
+		var metadata model.AttributePlan
+
+		metadata.Key, metadata.From.Symbol = "code."+field, field
+		attributes = append(attributes, metadata)
+	}
+
+	return attributes
 }
 
 func writePrivateAccessorBundle(t *testing.T, root *os.Root, files []otelc.GeneratedFile, original fileSnapshot) {
@@ -318,12 +329,12 @@ func checkPrivateNullableAttributes(t *testing.T, first, second privateAccessorS
 	t.Helper()
 
 	if first.Attributes["request.id"] != "approved-id" || first.Attributes["result.size"] != float64(11) ||
-		len(first.Attributes) != 5 {
+		len(first.Attributes) != 12 {
 		t.Fatalf("unexpected selected attributes: %#v", first.Attributes)
 	}
 
 	if _, captured := second.Attributes["request.id"]; captured || second.Attributes["result.size"] != float64(0) ||
-		len(second.Attributes) != 4 {
+		len(second.Attributes) != 11 {
 		t.Fatalf("nil request should omit attributes: %#v", second.Attributes)
 	}
 }
@@ -335,6 +346,22 @@ func checkPrivateConstantAttributes(t *testing.T, handles []privateAccessorSpan)
 		if span.Attributes["component"] != "probe" || span.Attributes["cache.hit"] != false ||
 			span.Attributes["weight"] != 1.5 {
 			t.Fatalf("constant attributes changed: %#v", span.Attributes)
+		}
+	}
+}
+
+func checkPrivateSymbolAttributes(t *testing.T, handles []privateAccessorSpan, signature string) {
+	t.Helper()
+
+	want := map[string]string{
+		"id": "example.com/probe/ops.(*Worker).Handle", "package": "example.com/probe/ops",
+		"packageName": "ops", "name": "Handle", "receiver": "*Worker", "signature": signature, "kind": "method",
+	}
+	for _, span := range handles {
+		for field, value := range want {
+			if span.Attributes["code."+field] != value {
+				t.Fatalf("symbol metadata %s=%v, want %s", field, span.Attributes["code."+field], value)
+			}
 		}
 	}
 }

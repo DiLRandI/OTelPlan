@@ -13,7 +13,8 @@ func policyDigestFixture() *model.Policy {
 	var defaults model.Defaults
 
 	return &model.Policy{
-		APIVersion: "", Kind: "", Defaults: defaults,
+		DenyPatterns: nil,
+		APIVersion:   "", Kind: "", Defaults: defaults,
 		Backend: model.BackendConfig{Name: "otelc", Version: "v1.1.0"},
 		Project: model.ProjectConfig{
 			Packages: []string{"./b/...", "./a/..."}, BuildTags: []string{"two", "one"},
@@ -33,8 +34,8 @@ func policyDigestFixture() *model.Policy {
 					HasContext: nil, ReturnsError: nil, Ownership: "",
 				},
 				Attributes: []model.AttributeRule{
-					{Key: "b", From: model.AttributeSource{Constant: "b", Argument: "", Result: ""}, Safety: nil},
-					{Key: "a", From: model.AttributeSource{Constant: "a", Argument: "", Result: ""}, Safety: nil},
+					{Key: "b", From: model.AttributeSource{Constant: "b", Argument: "", Result: "", Symbol: ""}, Safety: nil},
+					{Key: "a", From: model.AttributeSource{Constant: "a", Argument: "", Result: "", Symbol: ""}, Safety: nil},
 				},
 			},
 			{

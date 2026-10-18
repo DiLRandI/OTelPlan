@@ -35,7 +35,7 @@ func BenchmarkResolveExactApplicationFunctions(b *testing.B) {
 			Errors:     model.ErrorDefaults{Record: true},
 		},
 		Rules:      make([]model.Rule, 0, ruleCount),
-		Exclusions: nil,
+		Exclusions: nil, DenyPatterns: nil,
 	}
 
 	for ruleIndex := range ruleCount {
@@ -68,6 +68,7 @@ func BenchmarkResolveExactApplicationFunctions(b *testing.B) {
 				Receiver:          nil,
 				Location:          model.SourceLocation{File: "", Line: 0, Column: 0},
 				Generics:          nil, Generated: false, TestFile: false, HasBody: false, Variadic: false,
+				Recursive: false, ManualSpan: false,
 			})
 		}
 

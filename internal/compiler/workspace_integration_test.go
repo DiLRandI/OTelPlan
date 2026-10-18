@@ -46,6 +46,19 @@ func TestPreparedWorkspaceWithBackend(t *testing.T) {
 
 	env := append(os.Environ(), "GOFLAGS=-tags=wrong", "GOOS=wrong")
 	request := pinnedPreparedBuildRequest(t, fixture, prepared, runtime, backend, executable, env)
+	preview := request
+	preview.DryRun = true
+
+	err = compiler.BuildPrepared(t.Context(), preview)
+	if err != nil {
+		t.Fatalf("preflight with pinned backend: %v", err)
+	}
+
+	_, err = os.Lstat(filepath.Join(prepared.Dir, "probe"))
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("preflight created a backend output: %v", err)
+	}
+
 	assertInvalidPreparedBuilds(t, request, fixture.root.Name())
 
 	built := buildPinnedWorkspace(t, fixture, backend, executable, env)
@@ -253,6 +266,7 @@ func pinnedPreparedBuildRequest(t *testing.T, fixture pinnedWorkspaceFixture,
 		Executable: executable, Backend: backend, ApplicationModules: fixture.code.Modules,
 		RuntimeModules: selection, RuntimeOriginalDir: runtime.Dir, Env: env,
 		GoArgs: []string{"-o", filepath.Join(prepared.Dir, "probe"), "."},
+		DryRun: false,
 	}
 }
 

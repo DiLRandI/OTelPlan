@@ -58,7 +58,7 @@ func TestAttributeAccessors(t *testing.T) {
 
 	source := model.AttributeSource{Argument: "request.Kind", Result: "", Constant: nil, Symbol: "", ErrorType: ""}
 
-	access, err := validate.AttributeAccessor(code, symbol, source)
+	access, err := validate.AttributeAccessor(code, symbol, sourceAttribute(source))
 	if err != nil || access.Kind != "string" || !reflect.DeepEqual(access.Fields, []string{"Details", "Kind"}) {
 		t.Fatalf("promoted scalar: %+v %v", access, err)
 	}
@@ -72,7 +72,7 @@ func TestAttributeAccessors(t *testing.T) {
 		{Argument: "", Result: "", Constant: 0, Symbol: "", ErrorType: ""},
 		{Argument: "", Result: "", Constant: "", Symbol: "", ErrorType: ""},
 	} {
-		_, err := validate.AttributeAccessor(code, symbol, source)
+		_, err := validate.AttributeAccessor(code, symbol, sourceAttribute(source))
 		if err != nil {
 			t.Fatalf("valid source %+v: %v", source, err)
 		}
@@ -91,7 +91,7 @@ func TestAttributeAccessors(t *testing.T) {
 		{Argument: "request.Count", Result: "", Constant: 1, Symbol: "", ErrorType: ""},
 		{Argument: "", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
 	} {
-		_, err := validate.AttributeAccessor(code, symbol, source)
+		_, err := validate.AttributeAccessor(code, symbol, sourceAttribute(source))
 		if err == nil {
 			t.Fatalf("invalid source accepted: %+v", source)
 		}
@@ -170,7 +170,7 @@ func TestSafetyWarningsAndLimits(t *testing.T) {
 func constantAttribute(key string, value any) model.AttributePlan {
 	return model.AttributePlan{
 		Key: key, From: model.AttributeSource{Argument: "", Result: "", Constant: value, Symbol: "", ErrorType: ""},
-		Classification: "", Allow: false,
+		Classification: "", Allow: false, Stringer: false,
 	}
 }
 

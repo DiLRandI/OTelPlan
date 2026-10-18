@@ -20,6 +20,7 @@ func (indexer *builder) collectType(typ types.Type) string {
 	var info model.TypeInfo
 
 	info.Type, info.Kind = name, unsupportedTypeKind
+	info.Stringer = implementsStringer(typ)
 	// Reserve before traversing fields so recursive types terminate.
 	indexer.types[name] = info
 	info.Expression, info.Imports = typeExpression(typ)

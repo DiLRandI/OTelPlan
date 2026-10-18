@@ -24,9 +24,9 @@ func TestSafetyDiagnosticContract(t *testing.T) {
 		{Key: "email_token", From: model.AttributeSource{
 			Argument: "", Result: "", Constant: "private-value", Symbol: "", ErrorType: "",
 		},
-			Classification: "", Allow: false},
+			Classification: "", Allow: false, Stringer: false},
 		{Key: "query", From: model.AttributeSource{Argument: "", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
-			Classification: "", Allow: false},
+			Classification: "", Allow: false, Stringer: false},
 	}
 
 	var plan model.ResolvedPlan

@@ -26,3 +26,10 @@ func (*Worker) Handle(ctx context.Context, request *request) (size int, err erro
 	}
 	return len(request.ID), errors.New("operation failed")
 }
+
+func (request *request) String() string {
+	if request == nil {
+		panic("unexpected nil request")
+	}
+	return "request:" + request.ID
+}

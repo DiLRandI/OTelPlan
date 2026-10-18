@@ -107,6 +107,6 @@ func testConstantAttribute(key, value string) model.AttributeRule {
 	return model.AttributeRule{
 		Key:    key,
 		From:   model.AttributeSource{Argument: "", Result: "", Constant: value, Symbol: "", ErrorType: ""},
-		Safety: nil,
+		Safety: nil, Stringer: false,
 	}
 }

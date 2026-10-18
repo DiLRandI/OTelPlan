@@ -72,7 +72,7 @@ func TestAttributeAccessorSymbolSourceNeedsNoCodeTypes(t *testing.T) {
 	var source model.AttributeSource
 
 	source.Symbol = "name"
-	accessor, err := validate.AttributeAccessor(nil, symbol, source)
+	accessor, err := validate.AttributeAccessor(nil, symbol, sourceAttribute(source))
 
 	valid := err == nil && accessor.Source == "constant" && accessor.Kind == "string" &&
 		accessor.Type == "" && accessor.Index == 0
@@ -86,7 +86,7 @@ func TestAttributeAccessorSymbolSourceNeedsNoCodeTypes(t *testing.T) {
 
 	source.Constant = "other"
 
-	_, err = validate.AttributeAccessor(nil, symbol, source)
+	_, err = validate.AttributeAccessor(nil, symbol, sourceAttribute(source))
 	if err == nil {
 		t.Fatal("mixed symbol and constant sources accepted")
 	}

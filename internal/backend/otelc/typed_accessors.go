@@ -50,6 +50,7 @@ type AccessorBinding struct {
 	Source   string
 	Index    int
 	Kind     string
+	Stringer bool
 }
 
 type accessorRenderer struct {
@@ -156,7 +157,7 @@ func (renderer *accessorRenderer) renderAttribute(
 
 	renderer.keys[attribute.Key] = true
 
-	access, err := validate.AttributeAccessor(code, *renderer.symbol, attribute.From)
+	access, err := validate.AttributeAccessor(code, *renderer.symbol, attribute)
 	if err != nil {
 		return binding, fmt.Errorf("resolve attribute accessor: %w", err)
 	}
@@ -168,6 +169,7 @@ func (renderer *accessorRenderer) renderAttribute(
 
 	binding = AccessorBinding{
 		Key: attribute.Key, Function: name, Source: access.Source, Index: access.Index, Kind: access.Kind,
+		Stringer: access.Stringer,
 	}
 
 	err = renderer.addScalarImports(access.Kind)
@@ -263,7 +265,20 @@ func (renderer *accessorRenderer) renderValueAccessor(binding AccessorBinding, a
 		return err
 	}
 
-	fmt.Fprintf(&renderer.body, "scalarValue := %s\nconverted := %s(scalarValue)\n", expression, resultType)
+	fmt.Fprintf(&renderer.body, "scalarValue := %s\n", expression)
+
+	if access.Stringer {
+		switch renderer.types[access.Type].Kind {
+		case "pointer", "interface", "slice", "map", "function", "channel":
+			renderer.body.WriteString("if scalarValue == nil { return \"\", false }\n")
+		}
+
+		renderer.body.WriteString("return scalarValue.String(), true\n}\n")
+
+		return nil
+	}
+
+	fmt.Fprintf(&renderer.body, "converted := %s(scalarValue)\n", resultType)
 
 	switch access.Kind {
 	case "integer":

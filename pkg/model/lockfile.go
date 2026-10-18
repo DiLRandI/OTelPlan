@@ -20,6 +20,7 @@ type LockAttribute struct {
 	Key            string               `json:"key"`
 	From           AttributeSource      `json:"from"`
 	Kind           string               `json:"kind"`
+	Stringer       bool                 `json:"stringer,omitempty"`
 	Classification SafetyClassification `json:"classification,omitempty"`
 	Allow          bool                 `json:"allow,omitempty"`
 	// SymbolValue freezes the static value while From retains its metadata selector.

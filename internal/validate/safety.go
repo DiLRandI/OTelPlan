@@ -171,7 +171,7 @@ func attributeSafety(
 ) model.DiagnosticErrorList {
 	var diags model.DiagnosticErrorList
 
-	_, err := AttributeAccessor(code, symbol, attr.From)
+	_, err := AttributeAccessor(code, symbol, attr)
 	if err != nil {
 		diags = append(diags, safetyDiagnostic(model.SeverityError, model.CodeCaptureNotAllowed, err.Error()))
 	}

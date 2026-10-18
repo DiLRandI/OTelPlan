@@ -282,6 +282,10 @@ func validateAttribute(ruleID string, idx int, attr *model.AttributeRule) model.
 	}
 
 	diags = append(diags, validateAttributeSource(loc, attr.From)...)
+	if attr.Stringer && attr.From.Argument == "" && attr.From.Result == "" {
+		diags = append(diags, policyDiagnostic(model.CodeInvalidPolicy,
+			loc+": stringer conversion requires an argument or result source", ""))
+	}
 
 	if attr.Safety != nil {
 		switch attr.Safety.Classification {

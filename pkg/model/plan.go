@@ -25,6 +25,7 @@ type ErrorStrategy struct {
 type AttributePlan struct {
 	Key            string               `json:"key"`
 	From           AttributeSource      `json:"from"`
+	Stringer       bool                 `json:"stringer,omitempty"`
 	Classification SafetyClassification `json:"classification,omitempty"`
 	Allow          bool                 `json:"allow,omitempty"`
 }

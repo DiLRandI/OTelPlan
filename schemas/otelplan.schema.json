@@ -224,6 +224,9 @@
             }
           }
         },
+        "stringer": {
+          "type": "boolean"
+        },
         "safety": {
           "type": "object",
           "additionalProperties": false,

@@ -141,7 +141,7 @@ func privateAccessorPlan(t *testing.T, code *model.CodeModel) model.ResolvedPlan
 }
 
 func privateAccessorAttributes() []model.AttributePlan {
-	var requestID, size, component, cacheHit, weight, failure model.AttributePlan
+	var requestID, size, component, cacheHit, weight, failure, display model.AttributePlan
 
 	requestID.Key, requestID.From.Argument = "request.id", "request.ID"
 	size.Key, size.From.Result = "result.size", "size"
@@ -149,9 +149,10 @@ func privateAccessorAttributes() []model.AttributePlan {
 	cacheHit.Key, cacheHit.From.Constant = "cache.hit", false
 	weight.Key, weight.From.Constant = "weight", 1.5
 	failure.Key, failure.From.ErrorType = "failure.class", "err"
+	display.Key, display.From.Argument, display.Stringer = "request.display", "request", true
 
-	attributes := make([]model.AttributePlan, 0, 13)
-	attributes = append(attributes, requestID, size, component, cacheHit, weight, failure)
+	attributes := make([]model.AttributePlan, 0, 14)
+	attributes = append(attributes, requestID, size, component, cacheHit, weight, failure, display)
 
 	for _, field := range []string{"id", "package", "packageName", "name", "receiver", "signature", "kind"} {
 		var metadata model.AttributePlan
@@ -331,7 +332,8 @@ func checkPrivateNullableAttributes(t *testing.T, first, second privateAccessorS
 	t.Helper()
 
 	if first.Attributes["request.id"] != "approved-id" || first.Attributes["result.size"] != float64(11) ||
-		len(first.Attributes) != 13 {
+		first.Attributes["request.display"] != "request:approved-id" ||
+		len(first.Attributes) != 14 {
 		t.Fatalf("unexpected selected attributes: %#v", first.Attributes)
 	}
 

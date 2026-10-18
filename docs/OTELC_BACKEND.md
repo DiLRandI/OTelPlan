@@ -74,8 +74,10 @@ Extraction is guarded by `span.IsRecording()`. Typed package-local helpers avoid
 importing application packages into the generated runtime and avoid triggering
 otherwise unused package initializers. Explicit `errorType` accessors use runtime
 type metadata to classify an error without calling application methods or
-reflecting over values/fields. Other scalar capture uses typed readers. No object
-serialization is performed. See [error classification](04_POLICY_SPEC.md#error-type-classification-attributes).
+reflecting over values/fields. Other scalar capture uses typed readers. Opt-in `stringer: true` calls are
+protected in the generated runtime rather than injecting recovery into application
+packages; formatting panics omit that attribute. Application panic propagation
+is preserved. No automatic object serialization is performed. See [error classification](04_POLICY_SPEC.md#error-type-classification-attributes).
 
 Helpers return a primitive value and availability flag. Wrong types, nil paths,
 unsigned overflow above `math.MaxInt64`, and non-finite floats are omitted. Zero,
@@ -165,3 +167,15 @@ module/vendor isolation, artifact checks, and source immutability. Architecture
 E2E tests independently cover cold-cache online and prepared-cache offline paths.
 See [testing](10_TEST_STRATEGY.md) and the
 [fixture README](../internal/cli/testdata/architectures/README.md).
+
+## Shadowed recovery builtin
+
+The v1.1.0 trampoline emits an unqualified `recover()` inside the application
+package. A package-level function named `recover` can therefore crash an
+instrumented application even without attribute capture. The retained
+`TestPinnedBackendShadowedRecoverLimitation` reproduces the failed application
+and checks source preservation. See the
+[pinned trampoline template](https://github.com/open-telemetry/opentelemetry-go-compile-instrumentation/blob/449ee08a682586adb177e4402845ed404565879f/tool/internal/instrument/impl.tmpl#L79).
+OTelPlan's Stringer guard lives in its controlled generated runtime and does not
+introduce another application-level recovery call. Detecting and rejecting this
+backend limitation before building remains separate compatibility hardening.

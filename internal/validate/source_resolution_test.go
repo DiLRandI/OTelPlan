@@ -17,7 +17,7 @@ func TestAttributeSourceIndexBounds(t *testing.T) {
 
 			source := model.AttributeSource{Argument: selector, Result: "", Constant: nil, Symbol: "", ErrorType: ""}
 
-			_, err := validate.AttributeAccessor(code, symbol, source)
+			_, err := validate.AttributeAccessor(code, symbol, sourceAttribute(source))
 			if err == nil || err.Error() != "attribute source parameter or result does not exist" {
 				t.Fatalf("error = %v, want missing source", err)
 			}
@@ -31,7 +31,7 @@ func TestAttributeSourceRequiresTypeInformation(t *testing.T) {
 	_, symbol := attributeFixture(t)
 	source := model.AttributeSource{Argument: "request.Count", Result: "", Constant: nil, Symbol: "", ErrorType: ""}
 
-	_, err := validate.AttributeAccessor(nil, symbol, source)
+	_, err := validate.AttributeAccessor(nil, symbol, sourceAttribute(source))
 	if err == nil || err.Error() != "attribute source type is unavailable" {
 		t.Fatalf("error = %v, want unavailable type", err)
 	}

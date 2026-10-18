@@ -156,7 +156,12 @@ func renderPlan(text *strings.Builder, plan model.ResolvedPlan) {
 			target.ErrorStrategy.Record, target.ErrorStrategy.Indexes, target.RuleID)
 
 		for _, attribute := range target.Attributes {
-			fmt.Fprintf(text, "  attribute %s from %s\n", attribute.Key, attributeSourceText(attribute))
+			source := attributeSourceText(attribute)
+			if attribute.Stringer {
+				source += " stringer=true"
+			}
+
+			fmt.Fprintf(text, "  attribute %s from %s\n", attribute.Key, source)
 		}
 	}
 

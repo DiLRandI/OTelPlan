@@ -97,6 +97,7 @@ type TypeInfo struct {
 	Imports    []TypeImport `json:"imports,omitempty"`
 	Type       string       `json:"type"`
 	Kind       string       `json:"kind"`
+	Stringer   bool         `json:"stringer,omitempty"`
 	Element    string       `json:"element,omitempty"`
 	Fields     []TypeField  `json:"fields,omitempty"`
 }

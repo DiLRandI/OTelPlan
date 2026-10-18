@@ -215,7 +215,8 @@ func targetAttributes(attributes []model.AttributeRule) []model.AttributePlan {
 	plans := make([]model.AttributePlan, 0, len(attributes))
 
 	for _, attribute := range attributes {
-		plan := model.AttributePlan{Key: attribute.Key, From: attribute.From, Classification: "", Allow: false}
+		plan := model.AttributePlan{Key: attribute.Key, From: attribute.From, Stringer: attribute.Stringer,
+			Classification: "", Allow: false}
 		if attribute.Safety != nil {
 			plan.Classification = attribute.Safety.Classification
 			plan.Allow = attribute.Safety.Allow

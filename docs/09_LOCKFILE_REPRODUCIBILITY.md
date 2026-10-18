@@ -70,6 +70,10 @@ Explicit error-type classification stores `from.errorType` and its string kind.
 It records no runtime error class or message. Changing the selected error result
 creates attribute drift; malformed mixed sources and non-string kinds are rejected.
 
+The optional `stringer` flag freezes explicit method conversion. Toggling it
+creates attribute drift even for an underlying string source. Legacy attributes
+omit the false flag; malformed static/mixed Stringer sources are rejected.
+
 Before hashing:
 
 - sort maps by key;

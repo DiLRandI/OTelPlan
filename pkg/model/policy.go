@@ -130,9 +130,10 @@ type AttributeSource struct {
 // AttributeRule maps an explicit telemetry key to a source and optional safety
 // acknowledgement.
 type AttributeRule struct {
-	Key    string          `json:"key"              yaml:"key"`
-	From   AttributeSource `json:"from"             yaml:"from"`
-	Safety *Safety         `json:"safety,omitempty" yaml:"safety,omitempty"`
+	Key      string          `json:"key"                yaml:"key"`
+	From     AttributeSource `json:"from"               yaml:"from"`
+	Stringer bool            `json:"stringer,omitempty" yaml:"stringer,omitempty"`
+	Safety   *Safety         `json:"safety,omitempty"   yaml:"safety,omitempty"`
 }
 
 // SpanConfig defines target span naming and kind overrides.

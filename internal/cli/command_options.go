@@ -8,7 +8,8 @@ import (
 var (
 	errCheckDryRunConflict = errors.New("cannot combine --check and --dry-run")
 	errScanOnlyOptions     = errors.New("--dependencies, --interfaces, and --calls are supported by scan")
-	errPolicyOnlyOptions   = errors.New("--config, --strict, and --allow-large-plan require a policy command")
+	errPolicyOnlyOptions   = errors.New("--strict and --allow-large-plan require a policy command")
+	errConfigApplicability = errors.New("--config requires a policy command or version")
 	errEmptyCachePath      = errors.New("--cache-dir must not be empty")
 	errCacheApplicability  = errors.New("--cache-dir requires a project analysis command")
 	errEmptyCompileOutput  = errors.New("--output must not be empty")
@@ -50,11 +51,12 @@ func validateAnalysisOptions(command string, opts options) error {
 		return errScanOnlyOptions
 	}
 
-	if (opts.strict || opts.allowLargePlan || opts.configSet) && !isPolicyCommand(command) {
-		return errPolicyOnlyOptions
+	err := validatePolicyOptions(command, opts)
+	if err != nil {
+		return err
 	}
 
-	err := validateCacheOptions(command, opts)
+	err = validateCacheOptions(command, opts)
 	if err != nil {
 		return err
 	}
@@ -132,6 +134,18 @@ func validateLockOptions(command string, opts options) error {
 	if opts.dryRun && command != lockCommandName && command != initCommandName &&
 		command != compileCommandName && command != buildCommandName {
 		return errDryRunApplicability
+	}
+
+	return nil
+}
+
+func validatePolicyOptions(command string, opts options) error {
+	if opts.configSet && command != versionCommandName && !isPolicyCommand(command) {
+		return errConfigApplicability
+	}
+
+	if (opts.strict || opts.allowLargePlan) && !isPolicyCommand(command) {
+		return errPolicyOnlyOptions
 	}
 
 	return nil

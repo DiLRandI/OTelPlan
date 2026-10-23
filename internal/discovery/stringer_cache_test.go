@@ -48,10 +48,13 @@ func cachedRuntimeTraitsFixture(t *testing.T) (discovery.Options, *model.CodeMod
 	})
 
 	for name, data := range map[string]string{"go.mod": "module example.com/cached\n\ngo 1.27\n", "app.go": `package app
+import "net/http"
 type Value string
 func (Value) String() string { panic("must not execute") }
 func Run(Value) {}
 func recover() any { panic("must not execute") }
+func Handler(http.ResponseWriter, *http.Request) {}
+func register() { http.HandleFunc("/must-not-capture", Handler) }
 `} {
 		err := root.WriteFile(name, []byte(data), 0o600)
 		if err != nil {
@@ -168,6 +171,11 @@ func assertRuntimeTraits(t *testing.T, code *model.CodeModel) {
 	if !hasStringerType(code) || !exists || !symbol.RecoverShadowed {
 		t.Fatal("fresh analysis lacks runtime safety traits")
 	}
+
+	handler, found := code.Symbol(model.FunctionID("example.com/cached", "Handler"))
+	if !found || len(handler.Entrypoints) != 1 || handler.Entrypoints[0] != "net/http.HandleFunc" {
+		t.Fatal("fresh analysis lacks technical entrypoint metadata")
+	}
 }
 
 func clearRuntimeTraits(code *model.CodeModel) {
@@ -177,5 +185,6 @@ func clearRuntimeTraits(code *model.CodeModel) {
 
 	for index := range code.Symbols {
 		code.Symbols[index].RecoverShadowed = false
+		code.Symbols[index].Entrypoints = nil
 	}
 }

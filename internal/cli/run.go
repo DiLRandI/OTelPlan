@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"runtime"
 
 	"github.com/DiLRandI/OTelPlan/internal/discovery"
 	"github.com/DiLRandI/OTelPlan/pkg/model"
@@ -118,8 +117,10 @@ func dispatchCommand(ctx context.Context, command string, opts options, args []s
 	}
 
 	switch command {
-	case helpCommandName, versionCommandName:
+	case helpCommandName:
 		return describeCommand(command, args)
+	case versionCommandName:
+		return versionCommand(ctx, opts, args)
 	case scanCommandName:
 		return scanCommand(ctx, opts, args)
 	case initCommandName:
@@ -148,15 +149,11 @@ func describeCommand(command string, args []string) (any, int, model.DiagnosticE
 		return nil, exitUsage, compileDiagnostic(model.CodeInvalidPolicy, command+" takes no positional arguments")
 	}
 
-	if command == helpCommandName {
-		overview := commandUsage + "\ninit [packages...] writes a starter policy; " +
-			"scan [packages...] lists Go symbols; inspect resolves policy; " +
-			"explain <symbol> shows rule decisions"
+	overview := commandUsage + "\ninit [packages...] writes a starter policy; " +
+		"scan [packages...] lists Go symbols; inspect resolves policy; " +
+		"explain <symbol> shows rule decisions"
 
-		return overview, 0, nil
-	}
-
-	return map[string]string{"otelplan": Version, "go": runtime.Version()}, 0, nil
+	return overview, 0, nil
 }
 
 func scanCommand(ctx context.Context, opts options, patterns []string) (any, int, model.DiagnosticErrorList) {

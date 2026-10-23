@@ -31,7 +31,7 @@ func TestCommandDispatchBuiltins(t *testing.T) {
 			message: "unknown command: missing"},
 		{name: "help override", args: []string{"missing", "extra", "--help"}, command: "help", exit: 0, message: ""},
 		{name: "option validation before unknown command", args: []string{"missing", "--strict"},
-			command: "missing", exit: 2, message: "--config, --strict, and --allow-large-plan require a policy command"},
+			command: "missing", exit: 2, message: "--strict and --allow-large-plan require a policy command"},
 	}
 
 	for _, testCase := range tests {

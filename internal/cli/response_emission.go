@@ -208,7 +208,7 @@ func renderCommandSummary(text *strings.Builder, data any) {
 			fmt.Fprintf(text, "%s %s %s\n", entry.Classification, entry.Symbol, entry.Detail)
 		}
 	case map[string]string:
-		fmt.Fprintf(text, "otelplan %s\nGo %s\n", contents["otelplan"], contents["go"])
+		renderVersionSummary(text, contents)
 	}
 }
 
@@ -266,5 +266,19 @@ func renderInitSummary(text *strings.Builder, summary initSummary) {
 
 	if summary.DryRun {
 		text.WriteString(summary.Policy)
+	}
+}
+
+func renderVersionSummary(text *strings.Builder, contents map[string]string) {
+	fmt.Fprintf(text, "otelplan %s\nGo %s\n", contents["otelplan"], contents["go"])
+	fmt.Fprintf(text, "backend %s supported=%s status=%s\n", contents["backend"],
+		contents["backendSupportedVersion"], contents["backendStatus"])
+
+	if configured := contents["backendConfiguredVersion"]; configured != "" {
+		fmt.Fprintf(text, "  configured %s\n", configured)
+	}
+
+	if available := contents["backendAvailableVersion"]; available != "" {
+		fmt.Fprintf(text, "  available %s\n", available)
 	}
 }

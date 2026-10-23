@@ -115,15 +115,27 @@ Name patterns may appear as weak evidence only and must be disclosed.
 
 ## 7. Entrypoints
 
-Current suggestions use `main.main` declarations and static call-path proximity. Expanded integration-specific entrypoint recognition
-remains a discovery goal, including:
+Suggestions use `main.main` and statically visible `net/http` registrations as
+technical roots. Discovery records the registration API identity in each exact
+handler declaration's optional `entrypoints` metadata. It recognizes package
+`HandleFunc`/`Handle` calls and the equivalent `ServeMux` methods using Go types,
+including import aliases, bound methods, and concrete `Handler` implementations.
+Standard `http.HandlerFunc` adapters follow the underlying declaration; custom
+function types follow their own `ServeHTTP` implementation. Registration values
+such as route patterns are not retained.
 
-- `main.main`;
-- HTTP handlers when statically identifiable;
-- gRPC methods;
-- message handlers through known integration metadata.
+Initialization uses the nearest root through statically resolved application
+calls, with deterministic provenance when paths tie. HTTP handlers lacking an
+explicit context parameter remain outside the default starter targets; eligible
+downstream operations receive the additional evidence. Policy remains authoritative.
+The metadata does not prove that registration executes or that requests reach a
+handler. Conservative call candidates do not become proven static paths.
 
-These are analysis goals, not promises of complete protocol detection.
+Mutable function variables, interface-valued callbacks, anonymous handlers, and
+indirect registration wrappers remain unresolved by this reader. gRPC and message
+integration metadata recognition remain separate discovery work. Recognizers are
+private typed-analysis functions; adding integrations does not change policy syntax
+or load executable plugins.
 
 ## 8. Call graph
 

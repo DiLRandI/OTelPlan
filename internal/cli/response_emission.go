@@ -121,6 +121,10 @@ func renderInventory(text *strings.Builder, opts options, code *model.CodeModel)
 		fmt.Fprintf(text, "%s\n  signature %s\n  source %s:%d\n  context %v  errors %v\n",
 			symbol.ID, symbol.Signature, symbol.Location.File, symbol.Location.Line,
 			symbol.ContextIndexes, symbol.ErrorIndexes)
+
+		if len(symbol.Entrypoints) > 0 {
+			fmt.Fprintf(text, "  entrypoints %s\n", strings.Join(symbol.Entrypoints, ", "))
+		}
 	}
 
 	renderAdvisoryCalls(text, code)

@@ -115,10 +115,9 @@ Name patterns may appear as weak evidence only and must be disclosed.
 
 ## 7. Entrypoints
 
-Suggestions use `main.main`, statically visible `net/http` registrations, and
-typed gRPC service registrations as
-technical roots. Discovery records the registration API identity in each exact
-handler declaration's optional `entrypoints` metadata. It recognizes package
+Suggestions use `main.main` and statically visible HTTP, gRPC, and NATS
+registrations as technical roots. Discovery records the registration API identity
+in each exact handler declaration's optional `entrypoints` metadata. It recognizes package
 `HandleFunc`/`Handle` calls and the equivalent `ServeMux` methods using Go types,
 including import aliases, bound methods, and concrete `Handler` implementations.
 Standard `http.HandlerFunc` adapters follow the underlying declaration; custom
@@ -136,23 +135,34 @@ including dependency symbols in the inventory is not required. Tests exercise
 the generated health service from gRPC v1.81.1. Service names, wire names, and
 descriptor metadata values are not retained.
 
+The NATS reader recognizes core and legacy JetStream `Subscribe`/`QueueSubscribe`
+methods and the current JetStream `Consumer.Consume`/`PushConsumer.Consume` APIs.
+It matches library-owned methods and their actual named callback parameter types,
+then maps that parameter to the supplied declaration. Variadic options and method
+expressions do not change which argument is the message handler. Subject, queue,
+option, and payload values are not retained. This metadata does not infer remote
+trace context or add message capture.
+
 Initialization uses the nearest root through statically resolved application
 calls, with deterministic provenance when paths tie. HTTP handlers lacking an
 explicit context parameter remain outside the default starter targets; eligible
 downstream operations receive the additional evidence. Registered gRPC methods
 with one explicit context parameter can themselves receive entrypoint evidence.
-Streaming methods receiving context only through a stream remain outside default
-starter targets. Policy remains authoritative.
+Streaming methods receiving context only through a stream, and message callbacks
+without explicit context, remain outside default starter targets. Eligible
+downstream operations can receive static-path evidence from those roots. Policy
+remains authoritative.
 The metadata does not prove that registration executes or that requests reach a
 handler. Conservative call candidates do not become proven static paths.
 
 Mutable function variables, interface-valued callbacks, anonymous handlers, and
-indirect HTTP registration wrappers remain unresolved by this reader. gRPC
+indirect HTTP/NATS registration wrappers remain unresolved by this reader. gRPC
 interface-valued implementations, dynamically constructed descriptors, reassigned
 service parameters, and wrappers beyond the direct forwarding form remain
 unresolved. These facts do not prove registration executes; arbitrary descriptor
-mutation through aliases or external calls is not modeled. Message integration
-metadata recognition remains separate discovery work. Recognizers are
+mutation through aliases or external calls is not modeled. Channel-based and
+synchronous message receive loops, encoded callbacks, and other broker APIs have
+no registration reader. Recognizers are
 private typed-analysis functions; adding integrations does not change policy syntax
 or load executable plugins.
 

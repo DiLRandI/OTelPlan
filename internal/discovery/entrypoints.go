@@ -26,7 +26,7 @@ func addEntrypointMetadata(ctx context.Context, code *model.CodeModel, pkgs []*p
 	}
 
 	sources := newEntrypointSources(ctx, pkgs)
-	recognizers := []entrypointRecognizer{httpEntrypoints}
+	recognizers := []entrypointRecognizer{httpEntrypoints, natsEntrypoints}
 
 	if sources != nil {
 		recognizers = append(recognizers, sources.grpcEntrypoints)
@@ -75,4 +75,25 @@ func collectEntrypoints(ctx context.Context, info *types.Info, file *ast.File,
 
 		return true
 	})
+}
+
+func forwardedEntrypointArgument(signature *types.Signature, object types.Object,
+	info *types.Info, call *ast.CallExpr,
+) ast.Expr {
+	offset := 0
+
+	if selector, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr); ok {
+		selection := info.Selections[selector]
+		if selection != nil && selection.Kind() == types.MethodExpr {
+			offset = 1
+		}
+	}
+
+	for index := range signature.Params().Len() {
+		if signature.Params().At(index) == object && index+offset < len(call.Args) {
+			return call.Args[index+offset]
+		}
+	}
+
+	return nil
 }

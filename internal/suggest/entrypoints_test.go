@@ -139,3 +139,32 @@ func TestRankTechnicalEntrypointTiesAreDeterministic(t *testing.T) {
 		}
 	}
 }
+
+func TestRankExplainsRegisteredContextEntrypoints(t *testing.T) {
+	t.Parallel()
+
+	registered := function("example.com/app.(Endpoint).Run", "Run")
+	registered.Entrypoints = []string{"google.golang.org/grpc.(*Server).RegisterService"}
+	other := function("example.com/app.(Other).Run", "Run")
+	code := new(model.CodeModel)
+	code.Symbols = []model.Symbol{other, registered}
+
+	ranked := suggest.Rank(code)
+	if len(ranked) != 2 || ranked[0].SymbolID != registered.ID || ranked[0].Score <= ranked[1].Score {
+		t.Fatalf("registered entrypoint received no ranking evidence: %+v", ranked)
+	}
+
+	evidence := strings.Join(ranked[0].Evidence, " ")
+	if !strings.Contains(evidence, "registered entrypoint") ||
+		!strings.Contains(evidence, "google.golang.org/grpc.(*Server).RegisterService") ||
+		strings.Contains(evidence, "low signal") || strings.Contains(evidence, "reachable") {
+		t.Fatalf("registered entrypoint evidence is misleading: %+v", ranked[0])
+	}
+
+	registered.ContextIndexes = nil
+	code.Symbols[1] = registered
+
+	if next := suggest.Rank(code); len(next) != 1 || next[0].SymbolID != other.ID {
+		t.Fatalf("registration bypassed context eligibility: %+v", next)
+	}
+}

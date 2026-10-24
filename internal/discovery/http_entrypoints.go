@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"context"
 	"go/ast"
 	"go/types"
 
@@ -9,7 +10,7 @@ import (
 
 const httpImportPath = "net/http"
 
-func httpEntrypoints(info *types.Info, call *ast.CallExpr) []entrypointCandidate {
+func httpEntrypoints(_ context.Context, info *types.Info, call *ast.CallExpr) []entrypointCandidate {
 	registrar := typeutil.StaticCallee(info, call)
 	if !httpRegistrar(registrar) || len(call.Args) == 0 {
 		return nil
@@ -92,7 +93,7 @@ func httpHandlerMethod(typ types.Type) *types.Func {
 }
 
 func httpHandlerFunction(info *types.Info, expression ast.Expr) *types.Func {
-	expression = concreteHTTPHandlerExpression(info, expression)
+	expression = concreteEntrypointExpression(info, expression)
 	if httpNamedType(info.TypeOf(expression), "HandlerFunc") {
 		return entrypointFunction(info, entrypointExpression(info, expression))
 	}
@@ -100,7 +101,7 @@ func httpHandlerFunction(info *types.Info, expression ast.Expr) *types.Func {
 	return httpHandlerMethod(info.TypeOf(expression))
 }
 
-func concreteHTTPHandlerExpression(info *types.Info, expression ast.Expr) ast.Expr {
+func concreteEntrypointExpression(info *types.Info, expression ast.Expr) ast.Expr {
 	for {
 		expression = ast.Unparen(expression)
 

@@ -29,7 +29,13 @@ func addEntrypointMetadata(ctx context.Context, code *model.CodeModel, pkgs []*p
 	recognizers := []entrypointRecognizer{httpEntrypoints, natsEntrypoints}
 
 	if sources != nil {
-		recognizers = append(recognizers, sources.grpcEntrypoints)
+		if sources.packages[grpcImportPath] != nil {
+			recognizers = append(recognizers, sources.grpcEntrypoints)
+		}
+
+		if sources.packages[connectImportPath] != nil {
+			recognizers = append(recognizers, sources.connectEntrypoints)
+		}
 	}
 
 	for _, pkg := range pkgs {

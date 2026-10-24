@@ -44,7 +44,7 @@ func newEntrypointSources(ctx context.Context, pkgs []*packages.Package) *entryp
 		return ctx.Err() == nil
 	}, nil)
 
-	if sources.packages[grpcImportPath] == nil {
+	if sources.packages[grpcImportPath] == nil && sources.packages[connectImportPath] == nil {
 		return nil
 	}
 

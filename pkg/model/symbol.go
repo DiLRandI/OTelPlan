@@ -116,7 +116,7 @@ type Symbol struct {
 	ManualSpan bool `json:"manualSpan,omitempty"`
 	// RecoverShadowed identifies a package/file binding that hides Go's recover builtin.
 	RecoverShadowed bool `json:"recoverShadowed,omitempty"`
-	// Entrypoints records typed registration APIs that reference this declaration.
+	// Entrypoints records typed registration or handler-construction APIs referencing this declaration.
 	Entrypoints []string `json:"entrypoints,omitempty"`
 }
 

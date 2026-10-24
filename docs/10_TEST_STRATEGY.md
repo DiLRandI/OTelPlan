@@ -49,7 +49,7 @@ Matrix:
 
 - supported Go versions;
 - supported `otelc` versions;
-- Linux/macOS build where backend supports;
+- Linux builds;
 - pointer/value receivers;
 - interfaces;
 - generics;
@@ -157,8 +157,8 @@ make lint GOLANGCI_LINT=/path/to/golangci-lint
 make test-gates
 ```
 
-`make check` runs all of these. The required linter version is v2.14.0, which
-supports the export data emitted by Go 1.27.2. Tool absence, version mismatch,
+`make check` runs all of these. The required linter version is v2.14.0, verified
+with the export data emitted by Go 1.27.3. Tool absence, version mismatch,
 and real lint failures return nonzero. No broad suppression is an acceptable
 substitute for fixing a finding.
 
@@ -213,3 +213,29 @@ inference retain expected failed-build tests with source/output safety assertion
 Generic context replacement, unsupported variadic types, and main-package targets
 have validation regressions. Upstream issue closure does not imply that a fix is
 present in the pinned executable; see [backend limits](OTELC_BACKEND.md).
+
+## 9. Pinned open-source starter regression
+
+```sh
+OTELPLAN_OTELC=/absolute/path/to/otelc go test ./internal/cli \
+  -run '^TestMemosStarterAcceptance$' -count=1 -timeout=20m
+```
+
+The expensive integration profile analyzes the complete Memos v0.26.0 Go module,
+pinned to source commit `1696c6c41428f98c06fcaf8838d43bcbf784c413` and verified
+module checksums. It copies the source into disposable state, prepares dependencies
+in a private cache, then denies dependency network access before running OTelPlan.
+It runs no application server, database, or Memos code.
+
+The regression checks explainable API-operation suggestions, repeated identical
+previews, exact-symbol policy generation, no default capture, validation and
+inspection, deterministic resolution locks, read-only checks, and unchanged source
+and module files. Generated protobuf/Connect files and embedded frontend assets
+remain part of the input; the test does not replace or simplify application code.
+
+Before Connect entrypoint recognition, the same source produced 19 database-driver
+suggestions and one API operation. With typed handler evidence, all 20 suggestions
+identify API operations with known static paths from their Connect handlers.
+Scoring weights are unchanged. This is one application regression, not proof of
+usefulness across all architectures or a performance benchmark. Broader OSS
+coverage remains part of the initialization acceptance gate.

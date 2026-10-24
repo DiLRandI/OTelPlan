@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	analysisCacheVersion = 7
+	analysisCacheVersion = 8
 	cacheMissingFile     = "missing"
 )
 

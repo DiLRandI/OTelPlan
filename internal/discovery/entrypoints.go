@@ -16,7 +16,7 @@ type entrypointCandidate struct {
 	integration string
 }
 
-type entrypointRecognizer func(*types.Info, *ast.CallExpr) []entrypointCandidate
+type entrypointRecognizer func(context.Context, *types.Info, *ast.CallExpr) []entrypointCandidate
 
 func addEntrypointMetadata(ctx context.Context, code *model.CodeModel, pkgs []*packages.Package) error {
 	symbols := make(map[model.SymbolID]*model.Symbol, len(code.Symbols))
@@ -25,7 +25,12 @@ func addEntrypointMetadata(ctx context.Context, code *model.CodeModel, pkgs []*p
 		symbols[symbol.ID] = symbol
 	}
 
+	sources := newEntrypointSources(ctx, pkgs)
 	recognizers := []entrypointRecognizer{httpEntrypoints}
+
+	if sources != nil {
+		recognizers = append(recognizers, sources.grpcEntrypoints)
+	}
 
 	for _, pkg := range pkgs {
 		for _, file := range pkg.Syntax {
@@ -60,7 +65,7 @@ func collectEntrypoints(ctx context.Context, info *types.Info, file *ast.File,
 		}
 
 		for _, recognize := range recognizers {
-			for _, candidate := range recognize(info, call) {
+			for _, candidate := range recognize(ctx, info, call) {
 				symbol := symbols[functionSymbolID(candidate.function)]
 				if symbol != nil {
 					symbol.Entrypoints = append(symbol.Entrypoints, candidate.integration)

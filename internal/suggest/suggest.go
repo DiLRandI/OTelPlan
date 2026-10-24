@@ -96,7 +96,7 @@ func rankSymbol(symbol model.Symbol, implementsInterface bool, calls callSignals
 	addCallEvidence(&suggestion, calls)
 
 	if len(symbol.ErrorIndexes) == 0 && !implementsInterface && !calls.staticCaller &&
-		!calls.infrastructure && calls.entrypointDepth == 0 {
+		!calls.infrastructure && calls.entrypointDepth == 0 && len(symbol.Entrypoints) == 0 {
 		suggestion.Score -= lowSignalPenalty
 		suggestion.Evidence = append(suggestion.Evidence, "low signal: no error, interface boundary, or static call path")
 	}
@@ -111,6 +111,11 @@ func rankSymbol(symbol model.Symbol, implementsInterface bool, calls callSignals
 }
 
 func addStructuralEvidence(suggestion *Suggestion, symbol model.Symbol, implementsInterface bool) {
+	if len(symbol.Entrypoints) > 0 {
+		suggestion.Score += nearEntrypointScore
+		suggestion.Evidence = append(suggestion.Evidence, "registered entrypoint: "+entrypointSource(symbol))
+	}
+
 	if symbol.Visibility == model.VisibilityExported {
 		suggestion.Score += exportedScore
 		suggestion.Evidence = append(suggestion.Evidence, "exported declaration")

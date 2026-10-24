@@ -115,8 +115,8 @@ Name patterns may appear as weak evidence only and must be disclosed.
 
 ## 7. Entrypoints
 
-Suggestions use `main.main` and statically visible HTTP, gRPC, and NATS
-registrations as technical roots. Discovery records the registration API identity
+Suggestions use `main.main`, statically visible HTTP/gRPC/NATS registrations,
+and Connect handler construction as technical roots. Discovery records the API identity
 in each exact handler declaration's optional `entrypoints` metadata. It recognizes package
 `HandleFunc`/`Handle` calls and the equivalent `ServeMux` methods using Go types,
 including import aliases, bound methods, and concrete `Handler` implementations.
@@ -134,6 +134,16 @@ unchanged. Descriptor and handler source can live in an imported dependency;
 including dependency symbols in the inventory is not required. Tests exercise
 the generated health service from gRPC v1.81.1. Service names, wire names, and
 descriptor metadata values are not retained.
+
+For Connect, discovery recognizes the typed unary, client/server-streaming, and
+bidirectional handler constructors, including the `Simple` variants. It records
+named function and method callbacks and follows one-level generated factories
+that bind an unchanged service parameter to a statically known concrete
+implementation. Variadic options do not become callbacks. Interface-valued
+implementations, changed/address-taken service parameters, anonymous callbacks,
+and function fields remain unresolved. Tests use Connect v1.19.1. Procedure and
+option values are not retained. Construction is technical evidence, not proof
+that a handler is mounted on an HTTP mux or receives requests.
 
 The NATS reader recognizes core and legacy JetStream `Subscribe`/`QueueSubscribe`
 methods and the current JetStream `Consumer.Consume`/`PushConsumer.Consume` APIs.
@@ -159,7 +169,7 @@ Mutable function variables, interface-valued callbacks, anonymous handlers, and
 indirect HTTP/NATS registration wrappers remain unresolved by this reader. gRPC
 interface-valued implementations, dynamically constructed descriptors, reassigned
 service parameters, and wrappers beyond the direct forwarding form remain
-unresolved. These facts do not prove registration executes; arbitrary descriptor
+unresolved. These facts do not prove registration or construction executes; arbitrary descriptor
 mutation through aliases or external calls is not modeled. Channel-based and
 synchronous message receive loops, encoded callbacks, and other broker APIs have
 no registration reader. Recognizers are

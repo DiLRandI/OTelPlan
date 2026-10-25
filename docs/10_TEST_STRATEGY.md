@@ -162,9 +162,26 @@ with the export data emitted by Go 1.27.3. Tool absence, version mismatch,
 and real lint failures return nonzero. No broad suppression is an acceptable
 substitute for fixing a finding.
 
-GitHub Actions runs unit, race, vet, lint, pinned OTelC integration/E2E, and
-quality-gate tests as separate Linux jobs. The aggregate check requires every
+GitHub Actions runs unit, race, vet, lint, pinned OTelC integration/E2E,
+dependency-vulnerability scans, and quality-gate tests as separate Linux jobs.
+The aggregate check requires every
 job to pass. Linux is the current support and release-verification target.
+
+The network-dependent vulnerability gate is explicit:
+
+```sh
+GOBIN="$PWD/bin" go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+make vuln
+```
+
+`GOVULNCHECK=/path/to/govulncheck` overrides the executable. The gate requires
+the pinned scanner version, scans source including tests, then checks all modules
+used by the CLI without filtering by reachability. Text mode returns nonzero for
+findings; JSON mode is not used as a pass/fail gate. Missing tools, scanner errors,
+and version mismatches also fail. CI requires this separate gate; `make check`
+keeps its existing local checks without adding a vulnerability-database lookup.
+Results depend on the current Go vulnerability database and supplement, rather
+than replace, source review and other security verification.
 
 ## 7. Real pinned backend
 

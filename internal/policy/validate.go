@@ -282,6 +282,10 @@ func validateAttribute(ruleID string, idx int, attr *model.AttributeRule) model.
 	}
 
 	diags = append(diags, validateAttributeSource(loc, attr.From)...)
+	if attr.Stringer && attr.From.Argument == "" && attr.From.Result == "" {
+		diags = append(diags, policyDiagnostic(model.CodeInvalidPolicy,
+			loc+": stringer conversion requires an argument or result source", ""))
+	}
 
 	if attr.Safety != nil {
 		switch attr.Safety.Classification {
@@ -304,7 +308,9 @@ func validateAttributeSource(loc string, src model.AttributeSource) model.Diagno
 
 	set := 0
 
-	for _, v := range []bool{src.Argument != "", src.Result != "", src.Constant != nil, src.Symbol != ""} {
+	for _, v := range []bool{
+		src.Argument != "", src.Result != "", src.Constant != nil, src.Symbol != "", src.ErrorType != "",
+	} {
 		if v {
 			set++
 		}
@@ -313,7 +319,7 @@ func validateAttributeSource(loc string, src model.AttributeSource) model.Diagno
 	if set == 0 {
 		diags = append(diags, policyDiagnostic(
 			model.CodeInvalidPolicy,
-			loc+": from must set exactly one of argument, result, constant, symbol",
+			loc+": from must set exactly one of argument, result, constant, symbol, errorType",
 			"",
 		))
 	}

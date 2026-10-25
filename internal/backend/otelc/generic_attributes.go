@@ -29,7 +29,7 @@ func genericCaptureIssue(code *model.CodeModel, symbol *model.Symbol, attributes
 	}
 
 	for _, attribute := range attributes {
-		access, err := validate.AttributeAccessor(code, *symbol, attribute.From)
+		access, err := validate.AttributeAccessor(code, *symbol, attribute)
 		if err != nil {
 			return "generic attribute source cannot be resolved safely"
 		}

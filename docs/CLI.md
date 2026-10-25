@@ -18,11 +18,42 @@ output. Flags may appear before or after the command, except arguments following
 | `diff` | Compare current resolution with the lock. Drift alone returns success unless `--check` is set. |
 | `compile` | Verify the backend executable, generate and compile its runtime artifacts, then publish a verified bundle. |
 | `build` | Generate artifacts and execute the pinned backend in isolated module/workspace copies, then verify and publish binaries. |
-| `version` | Report the OTelPlan version and the Go version used to build it. It does not query a backend executable. |
+| `version` | Report OTelPlan/Go versions, the supported backend pin, configured backend version, and available backend version. |
 | `help` | Print a short command overview. `--help` and `-h` select this operation. |
 
 Inspect, validate, lock, diff, and compile take no positional arguments.
 Explain requires exactly one canonical symbol. Build arguments should follow `--`.
+
+## Version details
+
+`otelplan version` works outside a Go module and does not analyze source code.
+It reads an existing `otelplan.yaml`, or the explicit `--config` path, only for
+backend metadata. A missing default policy is allowed. An explicit missing policy,
+unreadable/malformed policy, unsupported backend name, or non-exact version returns
+exit code 3 while retaining the OTelPlan/Go identity. Version reporting parses known
+policy fields but does not validate unrelated rules or resolve targets.
+
+The command queries `otelc version` from `PATH` with a five-second deadline and
+bounded output. Caller cancellation applies. Process cleanup can take one further
+second if inherited output handles remain open. A missing executable is
+informational and returns success. Probe execution or output failures return
+exit code 7 with a stable diagnostic; raw subprocess output is omitted even in
+verbose mode. No Go command, build, or network resolution is performed by OTelPlan.
+As with compile/build, the caller must trust the executable selected through `PATH`.
+
+JSON retains the existing string fields `data.otelplan` and `data.go` and adds:
+
+- `backend`: `otelc`.
+- `backendSupportedVersion`: the adapter's pinned version.
+- `backendConfiguredVersion`: the policy version, when a valid policy is present.
+- `backendAvailableVersion`: the executable's reported version, when available.
+- `backendStatus`: `available`, `unavailable`, or `unverified`.
+
+Version values require an exact semantic version; build metadata is omitted.
+An available version may differ from the supported or configured version. Reporting
+it does not establish build compatibility or verify executable content identity.
+Compile/build retain their pinned-version and digest checks. Version never writes
+project files. `--quiet` suppresses text summaries and preserves JSON responses.
 
 ## Flags
 
@@ -35,7 +66,7 @@ Explain requires exactly one canonical symbol. Build arguments should follow `--
 | `--no-color` | Accepted for monochrome output. Current output contains no ANSI color. |
 | `--offline` | Disable Go module/checksum lookups and automatic toolchain downloads for analysis, compile, and build. |
 | `--cache-dir PATH` | Project analysis commands only. Opt into private semantic metadata caching; relative paths resolve against `--root`. |
-| `--config PATH` | Policy commands only: inspect, explain, validate, lock, diff, compile, build. Default `otelplan.yaml`. |
+| `--config PATH` | Policy commands and version. Default `otelplan.yaml`. |
 | `--strict` | Policy commands only. Treat warnings as failures. |
 | `--allow-large-plan` | Policy commands only. Acknowledge the target-count limit; warnings still apply. |
 | `--warn-targets N` | Policy commands only. Warn above this count, default 100. |

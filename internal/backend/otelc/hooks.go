@@ -52,6 +52,7 @@ func RenderHooks(version, runtimeVersion string, code *model.CodeModel, plan mod
 	}
 
 	renderer.writeImports()
+	renderer.writeStringerGuard()
 
 	for _, binding := range bindings {
 		err = renderer.render(binding)
@@ -271,8 +272,14 @@ func writeHookAttributes(source *bytes.Buffer, symbol *model.Symbol, bindings []
 		constructor := map[string]string{
 			"string": "String", "bool": "Bool", "integer": "Int64", "float": "Float64",
 		}[binding.Kind]
-		fmt.Fprintf(source, "if value, ok := read_%s(%s); ok { span.SetAttributes(attribute.%s(%q, value)) }\n",
-			binding.Function, input, constructor, binding.Key)
+
+		call := fmt.Sprintf("read_%s(%s)", binding.Function, input)
+		if binding.Stringer {
+			call = fmt.Sprintf("otelplanReadStringer(read_%s, %s)", binding.Function, input)
+		}
+
+		fmt.Fprintf(source, "if value, ok := %s; ok { span.SetAttributes(attribute.%s(%q, value)) }\n",
+			call, constructor, binding.Key)
 	}
 
 	if opened {

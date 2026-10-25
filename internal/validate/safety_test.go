@@ -56,42 +56,42 @@ func TestAttributeAccessors(t *testing.T) {
 
 	code, symbol := attributeFixture(t)
 
-	source := model.AttributeSource{Argument: "request.Kind", Result: "", Constant: nil, Symbol: ""}
+	source := model.AttributeSource{Argument: "request.Kind", Result: "", Constant: nil, Symbol: "", ErrorType: ""}
 
-	access, err := validate.AttributeAccessor(code, symbol, source)
+	access, err := validate.AttributeAccessor(code, symbol, sourceAttribute(source))
 	if err != nil || access.Kind != "string" || !reflect.DeepEqual(access.Fields, []string{"Details", "Kind"}) {
 		t.Fatalf("promoted scalar: %+v %v", access, err)
 	}
 
 	for _, source := range []model.AttributeSource{
-		{Argument: "request.Count", Result: "", Constant: nil, Symbol: ""},
-		{Argument: "0.Count", Result: "", Constant: nil, Symbol: ""},
-		{Argument: "", Result: "result", Constant: nil, Symbol: ""},
-		{Argument: "", Result: "0", Constant: nil, Symbol: ""},
-		{Argument: "", Result: "", Constant: false, Symbol: ""},
-		{Argument: "", Result: "", Constant: 0, Symbol: ""},
-		{Argument: "", Result: "", Constant: "", Symbol: ""},
+		{Argument: "request.Count", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
+		{Argument: "0.Count", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
+		{Argument: "", Result: "result", Constant: nil, Symbol: "", ErrorType: ""},
+		{Argument: "", Result: "0", Constant: nil, Symbol: "", ErrorType: ""},
+		{Argument: "", Result: "", Constant: false, Symbol: "", ErrorType: ""},
+		{Argument: "", Result: "", Constant: 0, Symbol: "", ErrorType: ""},
+		{Argument: "", Result: "", Constant: "", Symbol: "", ErrorType: ""},
 	} {
-		_, err := validate.AttributeAccessor(code, symbol, source)
+		_, err := validate.AttributeAccessor(code, symbol, sourceAttribute(source))
 		if err != nil {
 			t.Fatalf("valid source %+v: %v", source, err)
 		}
 	}
 
 	for _, source := range []model.AttributeSource{
-		{Argument: "request", Result: "", Constant: nil, Symbol: ""},
-		{Argument: "request.Payload", Result: "", Constant: nil, Symbol: ""},
-		{Argument: "request.password", Result: "", Constant: nil, Symbol: ""},
-		{Argument: "request.ID", Result: "", Constant: nil, Symbol: ""},
-		{Argument: "missing.Kind", Result: "", Constant: nil, Symbol: ""},
-		{Argument: "", Result: "3", Constant: nil, Symbol: ""},
-		{Argument: "", Result: "", Constant: map[string]string{"key": "value"}, Symbol: ""},
-		{Argument: "", Result: "", Constant: math.NaN(), Symbol: ""},
-		{Argument: "", Result: "", Constant: uint64(math.MaxUint64), Symbol: ""},
-		{Argument: "request.Count", Result: "", Constant: 1, Symbol: ""},
-		{Argument: "", Result: "", Constant: nil, Symbol: ""},
+		{Argument: "request", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
+		{Argument: "request.Payload", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
+		{Argument: "request.password", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
+		{Argument: "request.ID", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
+		{Argument: "missing.Kind", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
+		{Argument: "", Result: "3", Constant: nil, Symbol: "", ErrorType: ""},
+		{Argument: "", Result: "", Constant: map[string]string{"key": "value"}, Symbol: "", ErrorType: ""},
+		{Argument: "", Result: "", Constant: math.NaN(), Symbol: "", ErrorType: ""},
+		{Argument: "", Result: "", Constant: uint64(math.MaxUint64), Symbol: "", ErrorType: ""},
+		{Argument: "request.Count", Result: "", Constant: 1, Symbol: "", ErrorType: ""},
+		{Argument: "", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
 	} {
-		_, err := validate.AttributeAccessor(code, symbol, source)
+		_, err := validate.AttributeAccessor(code, symbol, sourceAttribute(source))
 		if err == nil {
 			t.Fatalf("invalid source accepted: %+v", source)
 		}
@@ -169,8 +169,8 @@ func TestSafetyWarningsAndLimits(t *testing.T) {
 
 func constantAttribute(key string, value any) model.AttributePlan {
 	return model.AttributePlan{
-		Key: key, From: model.AttributeSource{Argument: "", Result: "", Constant: value, Symbol: ""},
-		Classification: "", Allow: false,
+		Key: key, From: model.AttributeSource{Argument: "", Result: "", Constant: value, Symbol: "", ErrorType: ""},
+		Classification: "", Allow: false, Stringer: false,
 	}
 }
 

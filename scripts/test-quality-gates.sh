@@ -29,3 +29,42 @@ if EXPECTED_LINT_VERSION=incorrect make --no-print-directory -s lint GOLANGCI_LI
   echo 'lint accepted an unexpected tool version' >&2
   exit 1
 fi
+
+cat > "$scratch/go" <<'TOOL'
+#!/bin/sh
+printf '%s\n' "$*" >> "$FAKE_GO_LOG"
+if [ "${FAKE_GO_FAIL:-}" = all ]; then
+  exit 42
+fi
+if [ "${FAKE_GO_FAIL:-}" = race ] && [ "${2:-}" = -race ]; then
+  exit 43
+fi
+TOOL
+chmod +x "$scratch/go"
+FAKE_GO_LOG="$scratch/go.calls"
+export FAKE_GO_LOG
+OTELPLAN_OTELC=fake sh scripts/test-otelc-shard.sh a-m
+OTELPLAN_OTELC=fake sh scripts/test-otelc-shard.sh remaining
+cat > "$scratch/expected.calls" <<'CALLS'
+test -timeout=20m -run ^Test[A-M] ./...
+test -race -timeout=20m -run ^Test[A-M] ./...
+test -timeout=20m -skip ^Test[A-M] ./...
+test -race -timeout=20m -skip ^Test[A-M] ./...
+CALLS
+cmp "$scratch/go.calls" "$scratch/expected.calls"
+for shard in a-m remaining; do
+  for failure in all race; do
+    if OTELPLAN_OTELC=fake FAKE_GO_FAIL="$failure" sh scripts/test-otelc-shard.sh "$shard" > "$scratch/output" 2>&1; then
+      echo 'OTelC shard swallowed a test failure' >&2
+      exit 1
+    fi
+  done
+done
+if OTELPLAN_OTELC= sh scripts/test-otelc-shard.sh a-m > "$scratch/output" 2>&1; then
+  echo 'OTelC shard accepted a missing backend' >&2
+  exit 1
+fi
+if OTELPLAN_OTELC=fake sh scripts/test-otelc-shard.sh unknown > "$scratch/output" 2>&1; then
+  echo 'OTelC shard accepted an unknown selection' >&2
+  exit 1
+fi

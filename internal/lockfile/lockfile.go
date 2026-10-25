@@ -18,6 +18,8 @@ import (
 	"golang.org/x/mod/semver"
 )
 
+const attributeStringKind = "string"
+
 // Digest returns the lowercase SHA-256 digest of data with a sha256: prefix.
 func Digest(data []byte) string { return fmt.Sprintf("sha256:%x", sha256.Sum256(data)) }
 
@@ -135,14 +137,14 @@ func createAttribute(code *model.CodeModel, symbol model.Symbol,
 	attribute model.AttributePlan) (model.LockAttribute, error) {
 	var locked model.LockAttribute
 
-	access, err := validate.AttributeAccessor(code, symbol, attribute.From)
+	access, err := validate.AttributeAccessor(code, symbol, attribute)
 	if err != nil {
 		return locked, fmt.Errorf("resolve locked attribute: %w", err)
 	}
 
 	locked = model.LockAttribute{
 		Key: attribute.Key, From: attribute.From, Kind: access.Kind,
-		Classification: attribute.Classification, Allow: attribute.Allow, SymbolValue: nil,
+		Classification: attribute.Classification, Allow: attribute.Allow, SymbolValue: nil, Stringer: attribute.Stringer,
 	}
 	if attribute.From.Symbol != "" {
 		value, valueErr := validate.SymbolMetadataValue(symbol, attribute.From.Symbol)
@@ -321,13 +323,23 @@ func checkAttributes(attributes []model.LockAttribute) error {
 
 		keys[attribute.Key] = true
 
-		err := checkSymbolAttribute(attribute)
+		err := checkStringerAttribute(attribute)
+		if err != nil {
+			return err
+		}
+
+		err = checkSymbolAttribute(attribute)
+		if err != nil {
+			return err
+		}
+
+		err = checkErrorTypeAttribute(attribute)
 		if err != nil {
 			return err
 		}
 
 		switch attribute.Kind {
-		case "bool", "integer", "float", "string":
+		case "bool", "integer", "float", attributeStringKind:
 		default:
 			return errInvalidAttributeKind
 		}
@@ -345,13 +357,17 @@ func checkSymbolAttribute(attribute model.LockAttribute) error {
 		return nil
 	}
 
-	if attribute.SymbolValue == nil || attribute.Kind != "string" {
+	if attribute.SymbolValue == nil || attribute.Kind != attributeStringKind {
 		return errInvalidSymbolAttribute
 	}
 
 	var symbol model.Symbol
 
-	_, err := validate.AttributeAccessor(nil, symbol, attribute.From)
+	var plan model.AttributePlan
+
+	plan.From, plan.Stringer = attribute.From, attribute.Stringer
+
+	_, err := validate.AttributeAccessor(nil, symbol, plan)
 	if err != nil {
 		return errInvalidSymbolAttribute
 	}

@@ -50,6 +50,7 @@ type AccessorBinding struct {
 	Source   string
 	Index    int
 	Kind     string
+	Stringer bool
 }
 
 type accessorRenderer struct {
@@ -63,7 +64,8 @@ type accessorRenderer struct {
 }
 
 // RenderAccessors emits compile-only helpers for injection into the target package.
-// Helpers return primitive scalars and an availability flag without reflection.
+// Helpers return primitive scalars and an availability flag. Only explicit
+// error-type sources inspect runtime type identity.
 func RenderAccessors(code *model.CodeModel, target model.ResolvedTarget) ([]byte, []AccessorBinding, error) {
 	symbol, err := validateAccessorTarget(code, target)
 	if err != nil {
@@ -155,7 +157,7 @@ func (renderer *accessorRenderer) renderAttribute(
 
 	renderer.keys[attribute.Key] = true
 
-	access, err := validate.AttributeAccessor(code, *renderer.symbol, attribute.From)
+	access, err := validate.AttributeAccessor(code, *renderer.symbol, attribute)
 	if err != nil {
 		return binding, fmt.Errorf("resolve attribute accessor: %w", err)
 	}
@@ -167,6 +169,7 @@ func (renderer *accessorRenderer) renderAttribute(
 
 	binding = AccessorBinding{
 		Key: attribute.Key, Function: name, Source: access.Source, Index: access.Index, Kind: access.Kind,
+		Stringer: access.Stringer,
 	}
 
 	err = renderer.addScalarImports(access.Kind)
@@ -178,6 +181,10 @@ func (renderer *accessorRenderer) renderAttribute(
 		binding.Index = -1
 
 		return binding, renderer.renderStaticAccessor(binding, attribute.From)
+	}
+
+	if attribute.From.ErrorType != "" {
+		return binding, renderer.renderErrorTypeAccessor(binding)
 	}
 
 	err = renderer.renderValueAccessor(binding, access)
@@ -258,7 +265,20 @@ func (renderer *accessorRenderer) renderValueAccessor(binding AccessorBinding, a
 		return err
 	}
 
-	fmt.Fprintf(&renderer.body, "scalarValue := %s\nconverted := %s(scalarValue)\n", expression, resultType)
+	fmt.Fprintf(&renderer.body, "scalarValue := %s\n", expression)
+
+	if access.Stringer {
+		switch renderer.types[access.Type].Kind {
+		case "pointer", "interface", "slice", "map", "function", "channel":
+			renderer.body.WriteString("if scalarValue == nil { return \"\", false }\n")
+		}
+
+		renderer.body.WriteString("return scalarValue.String(), true\n}\n")
+
+		return nil
+	}
+
+	fmt.Fprintf(&renderer.body, "converted := %s(scalarValue)\n", resultType)
 
 	switch access.Kind {
 	case "integer":

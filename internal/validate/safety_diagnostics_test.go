@@ -21,10 +21,12 @@ func TestSafetyDiagnosticContract(t *testing.T) {
 	target.ContextStrategy.Strategy = model.ContextStrategyRoot
 	target.ErrorStrategy.Record = true
 	target.Attributes = []model.AttributePlan{
-		{Key: "email_token", From: model.AttributeSource{Argument: "", Result: "", Constant: "private-value", Symbol: ""},
-			Classification: "", Allow: false},
-		{Key: "query", From: model.AttributeSource{Argument: "", Result: "", Constant: nil, Symbol: ""},
-			Classification: "", Allow: false},
+		{Key: "email_token", From: model.AttributeSource{
+			Argument: "", Result: "", Constant: "private-value", Symbol: "", ErrorType: "",
+		},
+			Classification: "", Allow: false, Stringer: false},
+		{Key: "query", From: model.AttributeSource{Argument: "", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
+			Classification: "", Allow: false, Stringer: false},
 	}
 
 	var plan model.ResolvedPlan

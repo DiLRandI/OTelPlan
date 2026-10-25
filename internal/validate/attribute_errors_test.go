@@ -28,9 +28,9 @@ func TestConstantAccessorErrorMessages(t *testing.T) {
 
 			var symbol model.Symbol
 
-			source := model.AttributeSource{Argument: "", Result: "", Constant: testCase.value, Symbol: ""}
+			source := model.AttributeSource{Argument: "", Result: "", Constant: testCase.value, Symbol: "", ErrorType: ""}
 
-			access, err := validate.AttributeAccessor(nil, symbol, source)
+			access, err := validate.AttributeAccessor(nil, symbol, sourceAttribute(source))
 			if err == nil || err.Error() != testCase.message {
 				t.Fatalf("error = %v, want %q", err, testCase.message)
 			}

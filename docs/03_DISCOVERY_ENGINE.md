@@ -115,15 +115,66 @@ Name patterns may appear as weak evidence only and must be disclosed.
 
 ## 7. Entrypoints
 
-Current suggestions use `main.main` declarations and static call-path proximity. Expanded integration-specific entrypoint recognition
-remains a discovery goal, including:
+Suggestions use `main.main`, statically visible HTTP/gRPC/NATS registrations,
+and Connect handler construction as technical roots. Discovery records the API identity
+in each exact handler declaration's optional `entrypoints` metadata. It recognizes package
+`HandleFunc`/`Handle` calls and the equivalent `ServeMux` methods using Go types,
+including import aliases, bound methods, and concrete `Handler` implementations.
+Standard `http.HandlerFunc` adapters follow the underlying declaration; custom
+function types follow their own `ServeHTTP` implementation. Registration values
+such as route patterns are not retained.
 
-- `main.main`;
-- HTTP handlers when statically identifiable;
-- gRPC methods;
-- message handlers through known integration metadata.
+For gRPC, discovery reads actual `Server.RegisterService` and
+`ServiceRegistrar.RegisterService` calls with a statically known concrete service.
+It follows known `ServiceDesc` initializers and the unary/stream handlers' typed
+calls to the registered implementation. Wire method names and matching method
+signatures alone do not identify application methods. One-level generated-style
+registration wrappers are supported when they forward the service parameter
+unchanged. Descriptor and handler source can live in an imported dependency;
+including dependency symbols in the inventory is not required. Tests exercise
+the generated health service from gRPC v1.81.1. Service names, wire names, and
+descriptor metadata values are not retained.
 
-These are analysis goals, not promises of complete protocol detection.
+For Connect, discovery recognizes the typed unary, client/server-streaming, and
+bidirectional handler constructors, including the `Simple` variants. It records
+named function and method callbacks and follows one-level generated factories
+that bind an unchanged service parameter to a statically known concrete
+implementation. Variadic options do not become callbacks. Interface-valued
+implementations, changed/address-taken service parameters, anonymous callbacks,
+and function fields remain unresolved. Tests use Connect v1.19.1. Procedure and
+option values are not retained. Construction is technical evidence, not proof
+that a handler is mounted on an HTTP mux or receives requests.
+
+The NATS reader recognizes core and legacy JetStream `Subscribe`/`QueueSubscribe`
+methods and the current JetStream `Consumer.Consume`/`PushConsumer.Consume` APIs.
+It matches library-owned methods and their actual named callback parameter types,
+then maps that parameter to the supplied declaration. Variadic options and method
+expressions do not change which argument is the message handler. Subject, queue,
+option, and payload values are not retained. This metadata does not infer remote
+trace context or add message capture.
+
+Initialization uses the nearest root through statically resolved application
+calls, with deterministic provenance when paths tie. HTTP handlers lacking an
+explicit context parameter remain outside the default starter targets; eligible
+downstream operations receive the additional evidence. Registered gRPC methods
+with one explicit context parameter can themselves receive entrypoint evidence.
+Streaming methods receiving context only through a stream, and message callbacks
+without explicit context, remain outside default starter targets. Eligible
+downstream operations can receive static-path evidence from those roots. Policy
+remains authoritative.
+The metadata does not prove that registration executes or that requests reach a
+handler. Conservative call candidates do not become proven static paths.
+
+Mutable function variables, interface-valued callbacks, anonymous handlers, and
+indirect HTTP/NATS registration wrappers remain unresolved by this reader. gRPC
+interface-valued implementations, dynamically constructed descriptors, reassigned
+service parameters, and wrappers beyond the direct forwarding form remain
+unresolved. These facts do not prove registration or construction executes; arbitrary descriptor
+mutation through aliases or external calls is not modeled. Channel-based and
+synchronous message receive loops, encoded callbacks, and other broker APIs have
+no registration reader. Recognizers are
+private typed-analysis functions; adding integrations does not change policy syntax
+or load executable plugins.
 
 ## 8. Call graph
 

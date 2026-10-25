@@ -171,12 +171,12 @@ func attributeSafety(
 ) model.DiagnosticErrorList {
 	var diags model.DiagnosticErrorList
 
-	_, err := AttributeAccessor(code, symbol, attr.From)
+	_, err := AttributeAccessor(code, symbol, attr)
 	if err != nil {
 		diags = append(diags, safetyDiagnostic(model.SeverityError, model.CodeCaptureNotAllowed, err.Error()))
 	}
 
-	source := attr.Key + " " + attr.From.Argument + " " + attr.From.Result
+	source := attr.Key + " " + attr.From.Argument + " " + attr.From.Result + " " + attr.From.ErrorType
 	if matchesAny(source, secrets) || attr.Classification == model.ClassificationSecret {
 		if !attr.Allow || attr.Classification != model.ClassificationSecret {
 			diags = append(diags, safetyDiagnostic(

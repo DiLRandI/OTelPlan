@@ -24,7 +24,7 @@ func TestCommandOptionErrorPrecedence(t *testing.T) {
 		{name: "scan flags before policy flags", args: []string{"version", "--dependencies", "--strict"},
 			message: "--dependencies, --interfaces, and --calls are supported by scan"},
 		{name: "policy flags before output flags", args: []string{"scan", "--config=caller-private-value", "--output=x"},
-			message: "--config, --strict, and --allow-large-plan require a policy command"},
+			message: "--config requires a policy command or version"},
 		{name: "empty compile output before init flags", args: []string{"compile", "--output=", "--force"},
 			message: "--output must not be empty"},
 		{name: "output applicability before clean", args: []string{"lock", "--output=x", "--clean"},

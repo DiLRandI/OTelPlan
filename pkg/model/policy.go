@@ -117,21 +117,23 @@ const (
 	SymbolFieldKind        = "kind"
 )
 
-// AttributeSource identifies one argument, result, constant, or symbol value from
+// AttributeSource identifies one argument, result, constant, symbol, or error type from
 // which a policy attribute is obtained.
 type AttributeSource struct {
-	Argument string `json:"argument,omitempty" yaml:"argument,omitempty"`
-	Result   string `json:"result,omitempty"   yaml:"result,omitempty"`
-	Constant any    `json:"constant,omitempty" yaml:"constant,omitempty"`
-	Symbol   string `json:"symbol,omitempty"   yaml:"symbol,omitempty"`
+	Argument  string `json:"argument,omitempty"  yaml:"argument,omitempty"`
+	Result    string `json:"result,omitempty"    yaml:"result,omitempty"`
+	Constant  any    `json:"constant,omitempty"  yaml:"constant,omitempty"`
+	Symbol    string `json:"symbol,omitempty"    yaml:"symbol,omitempty"`
+	ErrorType string `json:"errorType,omitempty" yaml:"errorType,omitempty"`
 }
 
 // AttributeRule maps an explicit telemetry key to a source and optional safety
 // acknowledgement.
 type AttributeRule struct {
-	Key    string          `json:"key"              yaml:"key"`
-	From   AttributeSource `json:"from"             yaml:"from"`
-	Safety *Safety         `json:"safety,omitempty" yaml:"safety,omitempty"`
+	Key      string          `json:"key"                yaml:"key"`
+	From     AttributeSource `json:"from"               yaml:"from"`
+	Stringer bool            `json:"stringer,omitempty" yaml:"stringer,omitempty"`
+	Safety   *Safety         `json:"safety,omitempty"   yaml:"safety,omitempty"`
 }
 
 // SpanConfig defines target span naming and kind overrides.

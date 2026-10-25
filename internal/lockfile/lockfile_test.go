@@ -37,7 +37,7 @@ func fixtureLock(t *testing.T) model.Lockfile {
 			Kind:     "", PackageImportPath: "", PackageName: "", Name: "", Receiver: nil, Visibility: "",
 			Parameters: nil, Results: nil, ContextIndexes: nil, ErrorIndexes: nil, Generics: nil,
 			Generated: false, TestFile: false, Ownership: "", HasBody: false, Variadic: false,
-			Recursive: false, ManualSpan: false,
+			Recursive: false, ManualSpan: false, RecoverShadowed: false, Entrypoints: nil,
 		}},
 	}
 	plan := model.ResolvedPlan{
@@ -47,8 +47,8 @@ func fixtureLock(t *testing.T) model.Lockfile {
 			ContextStrategy: model.ContextStrategy{Strategy: model.ContextStrategyRoot, Index: 0},
 			ErrorStrategy:   model.ErrorStrategy{Record: false, Indexes: nil},
 			Attributes: []model.AttributePlan{{
-				Key: "category", From: model.AttributeSource{Constant: 1, Argument: "", Result: "", Symbol: ""},
-				Classification: "", Allow: false,
+				Key: "category", From: model.AttributeSource{Constant: 1, Argument: "", Result: "", Symbol: "", ErrorType: ""},
+				Classification: "", Allow: false, Stringer: false,
 			}},
 		}},
 	}

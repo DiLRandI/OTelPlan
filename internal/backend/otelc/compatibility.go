@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
@@ -98,6 +99,10 @@ func backendCompatibilityDiagnostic(code model.Code, message string) model.Diagn
 func symbolCompatibilityIssues(code *model.CodeModel, symbol *model.Symbol,
 	target model.ResolvedTarget) []string {
 	var issues []string
+
+	if symbol.RecoverShadowed {
+		issues = append(issues, "otelc v1.1.0 cannot instrument a target whose package or file shadows the recover builtin")
+	}
 
 	if symbol.PackageName == "main" {
 		issues = append(issues, "main package targets require verified command-specific build scoping")
@@ -192,9 +197,7 @@ func VerifyExecutable(ctx context.Context, executable, version string) (model.Lo
 		return identity, fmt.Errorf("find pinned otelc executable: %w", err)
 	}
 
-	command := exec.CommandContext(ctx, path, "version")
-
-	output, err := command.Output()
+	output, err := executableVersionOutput(ctx, path)
 	if err != nil {
 		return identity, fmt.Errorf("read otelc version: %w", err)
 	}
@@ -210,6 +213,25 @@ func VerifyExecutable(ctx context.Context, executable, version string) (model.Lo
 	}
 
 	return identity, nil
+}
+
+func executableVersionOutput(ctx context.Context, path string) ([]byte, error) {
+	var output versionOutput
+
+	command := exec.CommandContext(ctx, path, "version")
+	command.Stdout, command.Stderr = &output, io.Discard
+	command.WaitDelay = time.Second
+
+	err := command.Run()
+	if err != nil {
+		return nil, errors.Join(err, ctx.Err())
+	}
+
+	if output.oversized {
+		return nil, errVersionOutputTooLarge
+	}
+
+	return output.buffer.Bytes(), nil
 }
 
 func validateReportedVersion(output []byte, version string) error {

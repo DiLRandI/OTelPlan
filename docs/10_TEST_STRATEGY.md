@@ -49,7 +49,7 @@ Matrix:
 
 - supported Go versions;
 - supported `otelc` versions;
-- Linux/macOS build where backend supports;
+- Linux builds;
 - pointer/value receivers;
 - interfaces;
 - generics;
@@ -157,14 +157,14 @@ make lint GOLANGCI_LINT=/path/to/golangci-lint
 make test-gates
 ```
 
-`make check` runs all of these. The required linter version is v2.14.0, which
-supports the export data emitted by Go 1.27.2. Tool absence, version mismatch,
+`make check` runs all of these. The required linter version is v2.14.0, verified
+with the export data emitted by Go 1.27.3. Tool absence, version mismatch,
 and real lint failures return nonzero. No broad suppression is an acceptable
 substitute for fixing a finding.
 
 GitHub Actions runs unit, race, vet, lint, pinned OTelC integration/E2E, and
 quality-gate tests as separate Linux jobs. The aggregate check requires every
-job to pass. macOS/Windows matrix coverage remains pending.
+job to pass. Linux is the current support and release-verification target.
 
 ## 7. Real pinned backend
 
@@ -177,8 +177,21 @@ OTELPLAN_OTELC=/absolute/path/to/otelc go test -race -timeout=20m ./...
 ```
 
 Both runs use an explicit per-package timeout because cold-cache instrumented
-builds can exceed Go's default 10-minute package budget on CI runners. The E2E
-job allows 45 minutes for both bounded runs and pinned-backend setup.
+builds can exceed Go's default 10-minute package budget on CI runners. CI divides
+the workload into complementary shards, each running normal and race tests:
+
+```sh
+OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh a-m
+OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh remaining
+```
+
+The first selects top-level tests matching `^Test[A-M]`; the second skips exactly
+that pattern and retains every other test, example, and fuzz seed. Together they
+retain the full suite, including future test names. Each shard keeps the
+20-minute package timeout and 45-minute job limit. Matrix failures do not cancel
+the other shard, and the aggregate check requires both to pass. Quality-gate
+tests verify selection arguments, backend requirements, and failure propagation
+for both normal and race commands.
 
 Without `OTELPLAN_OTELC`, backend integration tests skip locally. A configured
 missing or incompatible executable fails. Do not treat skipped tests as trace
@@ -200,3 +213,29 @@ inference retain expected failed-build tests with source/output safety assertion
 Generic context replacement, unsupported variadic types, and main-package targets
 have validation regressions. Upstream issue closure does not imply that a fix is
 present in the pinned executable; see [backend limits](OTELC_BACKEND.md).
+
+## 9. Pinned open-source starter regression
+
+```sh
+OTELPLAN_OTELC=/absolute/path/to/otelc go test ./internal/cli \
+  -run '^TestMemosStarterAcceptance$' -count=1 -timeout=20m
+```
+
+The expensive integration profile analyzes the complete Memos v0.26.0 Go module,
+pinned to source commit `1696c6c41428f98c06fcaf8838d43bcbf784c413` and verified
+module checksums. It copies the source into disposable state, prepares dependencies
+in a private cache, then denies dependency network access before running OTelPlan.
+It runs no application server, database, or Memos code.
+
+The regression checks explainable API-operation suggestions, repeated identical
+previews, exact-symbol policy generation, no default capture, validation and
+inspection, deterministic resolution locks, read-only checks, and unchanged source
+and module files. Generated protobuf/Connect files and embedded frontend assets
+remain part of the input; the test does not replace or simplify application code.
+
+Before Connect entrypoint recognition, the same source produced 19 database-driver
+suggestions and one API operation. With typed handler evidence, all 20 suggestions
+identify API operations with known static paths from their Connect handlers.
+Scoring weights are unchanged. This is one application regression, not proof of
+usefulness across all architectures or a performance benchmark. Broader OSS
+coverage remains part of the initialization acceptance gate.

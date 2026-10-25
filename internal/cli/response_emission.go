@@ -121,6 +121,10 @@ func renderInventory(text *strings.Builder, opts options, code *model.CodeModel)
 		fmt.Fprintf(text, "%s\n  signature %s\n  source %s:%d\n  context %v  errors %v\n",
 			symbol.ID, symbol.Signature, symbol.Location.File, symbol.Location.Line,
 			symbol.ContextIndexes, symbol.ErrorIndexes)
+
+		if len(symbol.Entrypoints) > 0 {
+			fmt.Fprintf(text, "  entrypoints %s\n", strings.Join(symbol.Entrypoints, ", "))
+		}
 	}
 
 	renderAdvisoryCalls(text, code)
@@ -156,7 +160,12 @@ func renderPlan(text *strings.Builder, plan model.ResolvedPlan) {
 			target.ErrorStrategy.Record, target.ErrorStrategy.Indexes, target.RuleID)
 
 		for _, attribute := range target.Attributes {
-			fmt.Fprintf(text, "  attribute %s from %s\n", attribute.Key, attributeSourceText(attribute))
+			source := attributeSourceText(attribute)
+			if attribute.Stringer {
+				source += " stringer=true"
+			}
+
+			fmt.Fprintf(text, "  attribute %s from %s\n", attribute.Key, source)
 		}
 	}
 
@@ -166,6 +175,10 @@ func renderPlan(text *strings.Builder, plan model.ResolvedPlan) {
 }
 
 func attributeSourceText(attribute model.AttributePlan) string {
+	if attribute.From.ErrorType != "" {
+		return "errorType " + attribute.From.ErrorType
+	}
+
 	if attribute.From.Result != "" {
 		return "result " + attribute.From.Result
 	}
@@ -199,7 +212,7 @@ func renderCommandSummary(text *strings.Builder, data any) {
 			fmt.Fprintf(text, "%s %s %s\n", entry.Classification, entry.Symbol, entry.Detail)
 		}
 	case map[string]string:
-		fmt.Fprintf(text, "otelplan %s\nGo %s\n", contents["otelplan"], contents["go"])
+		renderVersionSummary(text, contents)
 	}
 }
 
@@ -257,5 +270,19 @@ func renderInitSummary(text *strings.Builder, summary initSummary) {
 
 	if summary.DryRun {
 		text.WriteString(summary.Policy)
+	}
+}
+
+func renderVersionSummary(text *strings.Builder, contents map[string]string) {
+	fmt.Fprintf(text, "otelplan %s\nGo %s\n", contents["otelplan"], contents["go"])
+	fmt.Fprintf(text, "backend %s supported=%s status=%s\n", contents["backend"],
+		contents["backendSupportedVersion"], contents["backendStatus"])
+
+	if configured := contents["backendConfiguredVersion"]; configured != "" {
+		fmt.Fprintf(text, "  configured %s\n", configured)
+	}
+
+	if available := contents["backendAvailableVersion"]; available != "" {
+		fmt.Fprintf(text, "  available %s\n", available)
 	}
 }

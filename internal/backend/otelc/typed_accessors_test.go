@@ -118,24 +118,26 @@ func accessorAttributes() []model.AttributePlan {
 		{
 			Key: "constant.bool",
 			From: model.AttributeSource{
-				Argument: "",
-				Result:   "",
-				Constant: false,
-				Symbol:   "",
+				Argument:  "",
+				Result:    "",
+				Constant:  false,
+				Symbol:    "",
+				ErrorType: "",
 			},
 			Classification: model.ClassificationPublic,
-			Allow:          false,
+			Allow:          false, Stringer: false,
 		},
 		{
 			Key: "constant.string",
 			From: model.AttributeSource{
-				Argument: "",
-				Result:   "",
-				Constant: "fixed",
-				Symbol:   "",
+				Argument:  "",
+				Result:    "",
+				Constant:  "fixed",
+				Symbol:    "",
+				ErrorType: "",
 			},
 			Classification: model.ClassificationPublic,
-			Allow:          false,
+			Allow:          false, Stringer: false,
 		},
 		constantAccessorAttribute("constant.uint", int64(7)),
 		resultAccessorAttribute("result.message", "result.Message"),
@@ -149,13 +151,14 @@ func argumentAccessorAttribute(key, argument string) model.AttributePlan {
 	return model.AttributePlan{
 		Key: key,
 		From: model.AttributeSource{
-			Argument: argument,
-			Result:   "",
-			Constant: nil,
-			Symbol:   "",
+			Argument:  argument,
+			Result:    "",
+			Constant:  nil,
+			Symbol:    "",
+			ErrorType: "",
 		},
 		Classification: model.ClassificationPublic,
-		Allow:          false,
+		Allow:          false, Stringer: false,
 	}
 }
 
@@ -163,13 +166,14 @@ func constantAccessorAttribute(key string, value any) model.AttributePlan {
 	return model.AttributePlan{
 		Key: key,
 		From: model.AttributeSource{
-			Argument: "",
-			Result:   "",
-			Constant: value,
-			Symbol:   "",
+			Argument:  "",
+			Result:    "",
+			Constant:  value,
+			Symbol:    "",
+			ErrorType: "",
 		},
 		Classification: model.ClassificationPublic,
-		Allow:          false,
+		Allow:          false, Stringer: false,
 	}
 }
 
@@ -177,13 +181,14 @@ func resultAccessorAttribute(key, result string) model.AttributePlan {
 	return model.AttributePlan{
 		Key: key,
 		From: model.AttributeSource{
-			Argument: "",
-			Result:   result,
-			Constant: nil,
-			Symbol:   "",
+			Argument:  "",
+			Result:    result,
+			Constant:  nil,
+			Symbol:    "",
+			ErrorType: "",
 		},
 		Classification: model.ClassificationPublic,
-		Allow:          false,
+		Allow:          false, Stringer: false,
 	}
 }
 
@@ -319,7 +324,9 @@ func constantAccessorSource(value any) model.AttributeSource {
 }
 
 func invalidAccessorCases() []invalidAccessorCase {
-	multipleSources := model.AttributeSource{Argument: "req.ID", Result: "result.Message", Constant: nil, Symbol: ""}
+	multipleSources := model.AttributeSource{
+		Argument: "req.ID", Result: "result.Message", Constant: nil, Symbol: "", ErrorType: "",
+	}
 	secret := argumentAccessorAttribute("secret", "req.Secret")
 	secret.Classification = model.ClassificationSecret
 
@@ -379,9 +386,9 @@ func TestTypedAccessorFailuresShareCauses(t *testing.T) {
 		_, code, target := accessorFixture(t)
 		target.Attributes = []model.AttributePlan{{
 			Key:            "secret",
-			From:           model.AttributeSource{Argument: "req.Secret", Result: "", Constant: nil, Symbol: ""},
+			From:           model.AttributeSource{Argument: "req.Secret", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
 			Classification: model.ClassificationSecret,
-			Allow:          false,
+			Allow:          false, Stringer: false,
 		}}
 		assertRepeatedAccessorFailureSharesCause(t, code, target)
 	})

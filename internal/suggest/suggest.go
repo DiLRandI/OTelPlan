@@ -40,6 +40,7 @@ type callSignals struct {
 	conservativeCaller bool
 	infrastructure     bool
 	entrypointDepth    int
+	entrypointSource   string
 }
 
 // Rank returns conservative, deterministic suggestions without selecting policy targets.
@@ -95,7 +96,7 @@ func rankSymbol(symbol model.Symbol, implementsInterface bool, calls callSignals
 	addCallEvidence(&suggestion, calls)
 
 	if len(symbol.ErrorIndexes) == 0 && !implementsInterface && !calls.staticCaller &&
-		!calls.infrastructure && calls.entrypointDepth == 0 {
+		!calls.infrastructure && calls.entrypointDepth == 0 && len(symbol.Entrypoints) == 0 {
 		suggestion.Score -= lowSignalPenalty
 		suggestion.Evidence = append(suggestion.Evidence, "low signal: no error, interface boundary, or static call path")
 	}
@@ -110,6 +111,11 @@ func rankSymbol(symbol model.Symbol, implementsInterface bool, calls callSignals
 }
 
 func addStructuralEvidence(suggestion *Suggestion, symbol model.Symbol, implementsInterface bool) {
+	if len(symbol.Entrypoints) > 0 {
+		suggestion.Score += nearEntrypointScore
+		suggestion.Evidence = append(suggestion.Evidence, "registered entrypoint: "+entrypointSource(symbol))
+	}
+
 	if symbol.Visibility == model.VisibilityExported {
 		suggestion.Score += exportedScore
 		suggestion.Evidence = append(suggestion.Evidence, "exported declaration")
@@ -143,7 +149,7 @@ func addCallEvidence(suggestion *Suggestion, calls callSignals) {
 	if calls.entrypointDepth > 0 {
 		suggestion.Score += entrypointWeight(calls.entrypointDepth)
 		suggestion.Evidence = append(suggestion.Evidence,
-			fmt.Sprintf("reachable from main.main through %d static call(s)", calls.entrypointDepth))
+			fmt.Sprintf("reachable from %s through %d static call(s)", calls.entrypointSource, calls.entrypointDepth))
 	}
 }
 
@@ -183,9 +189,9 @@ func collectCallSignals(code *model.CodeModel, symbols map[model.SymbolID]model.
 		recordCallSignal(edge, symbols, signals, static)
 	}
 
-	for id, depth := range entrypointDepths(symbols, static) {
+	for id, path := range entrypointPaths(symbols, static) {
 		signal := signals[id]
-		signal.entrypointDepth = depth
+		signal.entrypointDepth, signal.entrypointSource = path.depth, path.source
 		signals[id] = signal
 	}
 
@@ -213,36 +219,6 @@ func recordCallSignal(edge model.CallRelation, symbols map[model.SymbolID]model.
 		signal.infrastructure = true
 		signals[edge.Caller] = signal
 	}
-}
-
-func entrypointDepths(symbols map[model.SymbolID]model.Symbol,
-	calls map[model.SymbolID][]model.SymbolID,
-) map[model.SymbolID]int {
-	depths := map[model.SymbolID]int{}
-	queue := []model.SymbolID{}
-
-	for _, symbol := range symbols {
-		if isMainEntrypoint(symbol) {
-			queue = append(queue, symbol.ID)
-			depths[symbol.ID] = 0
-		}
-	}
-
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
-
-		for _, callee := range calls[current] {
-			if _, visited := depths[callee]; visited {
-				continue
-			}
-
-			depths[callee] = depths[current] + 1
-			queue = append(queue, callee)
-		}
-	}
-
-	return depths
 }
 
 func isMainEntrypoint(symbol model.Symbol) bool {

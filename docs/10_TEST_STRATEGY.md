@@ -164,7 +164,7 @@ substitute for fixing a finding.
 
 GitHub Actions runs unit, race, vet, lint, pinned OTelC integration/E2E, and
 quality-gate tests as separate Linux jobs. The aggregate check requires every
-job to pass. macOS/Windows matrix coverage remains pending.
+job to pass. Linux is the current support and release-verification target.
 
 ## 7. Real pinned backend
 
@@ -177,8 +177,21 @@ OTELPLAN_OTELC=/absolute/path/to/otelc go test -race -timeout=20m ./...
 ```
 
 Both runs use an explicit per-package timeout because cold-cache instrumented
-builds can exceed Go's default 10-minute package budget on CI runners. The E2E
-job allows 45 minutes for both bounded runs and pinned-backend setup.
+builds can exceed Go's default 10-minute package budget on CI runners. CI divides
+the workload into complementary shards, each running normal and race tests:
+
+```sh
+OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh a-m
+OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh remaining
+```
+
+The first selects top-level tests matching `^Test[A-M]`; the second skips exactly
+that pattern and retains every other test, example, and fuzz seed. Together they
+retain the full suite, including future test names. Each shard keeps the
+20-minute package timeout and 45-minute job limit. Matrix failures do not cancel
+the other shard, and the aggregate check requires both to pass. Quality-gate
+tests verify selection arguments, backend requirements, and failure propagation
+for both normal and race commands.
 
 Without `OTELPLAN_OTELC`, backend integration tests skip locally. A configured
 missing or incompatible executable fails. Do not treat skipped tests as trace

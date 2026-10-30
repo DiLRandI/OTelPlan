@@ -231,7 +231,7 @@ Generic context replacement, unsupported variadic types, and main-package target
 have validation regressions. Upstream issue closure does not imply that a fix is
 present in the pinned executable; see [backend limits](OTELC_BACKEND.md).
 
-## 9. Pinned open-source starter regression
+## 9. Pinned open-source starter regressions
 
 ```sh
 OTELPLAN_OTELC=/absolute/path/to/otelc go test ./internal/cli \
@@ -253,6 +253,24 @@ remain part of the input; the test does not replace or simplify application code
 Before Connect entrypoint recognition, the same source produced 19 database-driver
 suggestions and one API operation. With typed handler evidence, all 20 suggestions
 identify API operations with known static paths from their Connect handlers.
-Scoring weights are unchanged. This is one application regression, not proof of
-usefulness across all architectures or a performance benchmark. Broader OSS
-coverage remains part of the initialization acceptance gate.
+Scoring weights are unchanged.
+
+```sh
+OTELPLAN_OTELC=/absolute/path/to/otelc go test ./internal/cli \
+  -run '^TestTaskStarterAcceptance$' -count=1 -timeout=20m
+```
+
+The complementary CLI workflow regression analyzes the complete Task v3.44.1
+module at source commit `72991d4f041e18d925d073e54bc7d264a6d361fb`, with verified
+module checksums. Expected suggestions include task execution, command execution,
+taskfile reading, and remote reads, with static call and interface evidence.
+It checks deterministic previews and locks, exact policy and inspected targets,
+strict validation, no capture defaults, and read-only checks.
+
+Task dependency preparation uses a separate copy of its manifests because
+`go mod download all` adds transitive checksums. The analyzed application retains
+the original source and manifests. Network access is denied before CLI execution;
+no Taskfile, shell task, or Task application code runs. Both OSS regressions use
+the expensive integration profile enabled by `OTELPLAN_OTELC`. They provide
+complementary web/API and CLI workflow evidence; performance measurements belong
+in the [performance report](11_PERFORMANCE.md).

@@ -78,7 +78,7 @@ Deliver:
 - build tags;
 - generics;
 - diagnostics documentation;
-- multi-platform CI;
+- Linux CI and release verification;
 - compatibility matrix.
 
 Exit gate: beta quality.

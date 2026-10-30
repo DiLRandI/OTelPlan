@@ -1,28 +1,9 @@
 package model
 
-import (
-	"errors"
-	"fmt"
-	"strings"
-)
-
-var (
-	errEmptySymbolID       = errors.New("empty symbol id")
-	errMalformedMethodID   = errors.New("malformed method symbol id")
-	errMalformedFunctionID = errors.New("malformed function symbol id")
-)
-
 // SymbolID is the canonical identity of a function or method. Function IDs use
 // import.path.Name; method IDs include the receiver form so pointer and value
 // methods remain distinct.
 type SymbolID string
-
-const (
-	receiverOpen  = "("
-	receiverClose = ")"
-	pointerPrefix = "*"
-	separator     = "."
-)
 
 // SymbolKind distinguishes free functions from methods.
 type SymbolKind string
@@ -120,71 +101,11 @@ type Symbol struct {
 	Entrypoints []string `json:"entrypoints,omitempty"`
 }
 
-// FunctionID constructs the canonical ID for a package-level function.
-func FunctionID(importPath, name string) SymbolID {
-	return SymbolID(importPath + separator + name)
-}
-
-// MethodID constructs the canonical ID for a method, preserving whether its
-// receiver is a pointer.
-func MethodID(importPath string, recv Receiver, method string) SymbolID {
-	recvType := recv.Type
-	if recv.Pointer {
-		recvType = pointerPrefix + recvType
-	}
-
-	return SymbolID(importPath + separator + receiverOpen + recvType + receiverClose + separator + method)
-}
-
 // ParsedSymbolID is the structured form of a canonical function or method ID.
 type ParsedSymbolID struct {
 	ImportPath string
 	Receiver   *Receiver
 	Name       string
-}
-
-// ParseSymbolID validates and splits a canonical symbol ID into its import
-// path, optional receiver, and declaration name.
-func ParseSymbolID(id SymbolID) (ParsedSymbolID, error) {
-	symbol := string(id)
-	if symbol == "" {
-		return ParsedSymbolID{}, errEmptySymbolID
-	}
-
-	if idx := strings.LastIndex(symbol, receiverOpen); idx > 0 && symbol[idx-1] == separator[0] {
-		closeRel := strings.Index(symbol[idx:], receiverClose)
-		if closeRel < 0 {
-			return ParsedSymbolID{}, fmt.Errorf("%w %q: unterminated receiver", errMalformedMethodID, symbol)
-		}
-
-		idxClose := idx + closeRel
-		recvPart := symbol[idx+1 : idxClose]
-
-		rest := symbol[idxClose+1:]
-		if !strings.HasPrefix(rest, separator) || len(rest) == 1 {
-			return ParsedSymbolID{}, fmt.Errorf("%w %q", errMalformedMethodID, symbol)
-		}
-
-		method := rest[1:]
-		recv := &Receiver{
-			Name:    "",
-			Type:    strings.TrimPrefix(recvPart, pointerPrefix),
-			Pointer: strings.HasPrefix(recvPart, pointerPrefix),
-		}
-
-		if recv.Type == "" {
-			return ParsedSymbolID{}, fmt.Errorf("%w %q: empty receiver type", errMalformedMethodID, symbol)
-		}
-
-		return ParsedSymbolID{ImportPath: symbol[:idx-1], Receiver: recv, Name: method}, nil
-	}
-
-	idx := strings.LastIndex(symbol, separator)
-	if idx <= 0 || idx == len(symbol)-1 {
-		return ParsedSymbolID{}, fmt.Errorf("%w %q", errMalformedFunctionID, symbol)
-	}
-
-	return ParsedSymbolID{ImportPath: symbol[:idx], Receiver: nil, Name: symbol[idx+1:]}, nil
 }
 
 // IsMethod reports whether the symbol represents a method declaration.

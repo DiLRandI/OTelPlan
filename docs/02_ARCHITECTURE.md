@@ -55,14 +55,27 @@ internal/validate
 internal/lockfile
 internal/compiler
 internal/backend/otelc
-pkg/model
+internal/model
+pkg/model                 # compatibility names
 ```
 
 Presentation and diagnostics are handled by the CLI and domain model rather than
-separate placeholder packages. The public Go model package currently supports
-internal cross-package contracts; it is not a stable SDK commitment. Public Go
-types require a demonstrated consumer need. Primary compatibility contracts are
-policy YAML, lockfiles, CLI JSON, and diagnostic codes.
+separate placeholder packages. Domain definitions belong to `internal/model`.
+`pkg/model` retains existing type aliases, constants, and symbol helpers for Go
+source compatibility while internal consumers migrate separately. New internal
+types do not expand this compatibility package. Public Go types require a
+demonstrated consumer need; the model package is not a stable SDK commitment.
+Primary compatibility contracts are policy YAML, lockfiles, CLI JSON, and
+diagnostic codes.
+
+Canonical symbol-ID helpers retain their existing public implementation and
+error identities; model types and their methods are owned internally.
+
+Field tags, serialized formats, helper behavior, and error identities remain the
+same. Reflection reports the defining package as `internal/model`, so callers
+that inspect `reflect.Type.PkgPath` observe the ownership change. Existing Go
+imports, composite literals, and interface implementations remain supported by
+the compatibility names.
 
 ## 3. Core domain models
 

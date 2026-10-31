@@ -65,8 +65,8 @@ go test ./internal/resolve -run '^$' -bench . -benchmem
 for 100 functions importing context. Record the revision, Go version, platform,
 CPU, commands, and samples with any published result. The CLI opts into
 this cache only with `--cache-dir`; these engine benchmark timings are not a
-representative CLI performance report. Generated-hook runtime benchmarks and
-a representative performance report remain pending.
+CLI measurement. The medium-project CLI profile below measures the scan command
+separately. Generated-hook runtime measurements are maintained as separate work.
 
 ## Large-plan regression workload
 

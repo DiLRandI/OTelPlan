@@ -57,10 +57,10 @@ The following boundaries matter when operating the tool:
   events. Disable `errors.record` for targets whose errors may contain private
   data, or sanitize those errors in the application. A fixed span status description
   does not redact the exception message.
-- Run `otelplan lock --check` explicitly before building when resolution must be
-  frozen. Compile/build verify their own inputs and artifacts but do not enforce
-  resolution-lock freshness. Artifact hashes establish consistency with the
-  supplied manifest, not its origin.
+- Use `otelplan build --locked` when resolution must be frozen; keep
+  `otelplan lock --check` as a separate gate where useful. Default builds and
+  compile do not enforce resolution-lock freshness. Artifact hashes establish
+  consistency with the supplied manifest, not its origin.
 
 See [capture and privacy](08_VALIDATION_SAFETY.md),
 [CLI behavior](CLI.md), and [reproducibility](09_LOCKFILE_REPRODUCIBILITY.md)

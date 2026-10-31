@@ -93,12 +93,14 @@ permits replacement; unrelated or modified output still fails ownership checks:
 
 ```sh
 otelplan compile --clean --output .otelplan/build
-otelplan build -- -trimpath -o bin/api ./cmd/api
+otelplan build --locked -- -o bin/api ./cmd/api
 ```
 
 Adapt the application target and destination to your project. Review the resulting
-artifact manifest and policy/lock changes. Compile/build do not enforce lock
-freshness themselves. See [resolution/build ownership](09_LOCKFILE_REPRODUCIBILITY.md#resolution-and-build-ownership).
+artifact manifest and policy/lock changes. Locked builds enforce resolution
+freshness; default builds and compile do not. Generate the lock with matching
+effective Go flags if adding options such as `-trimpath`; see [build inputs](CLI.md).
+See [resolution/build ownership](09_LOCKFILE_REPRODUCIBILITY.md#resolution-and-build-ownership).
 
 ## Requirements before stable v1
 

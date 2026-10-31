@@ -76,6 +76,7 @@ project files. `--quiet` suppresses text summaries and preserves JSON responses.
 | `--interfaces` | Scan only. Show interface method bindings in text output; JSON contains model metadata. |
 | `--calls` | Scan only. Include advisory SSA/CHA call relationships and precision limits. |
 | `--check` | Lock/diff only. Fail for missing or stale resolution without writing files. |
+| `--locked` | Build only. Require a valid, current resolution lock before backend verification or compilation. |
 | `--dry-run` | Init/lock/compile/build only. Preview a starter policy, lock refresh, generated artifacts, or planned build outputs without publishing. |
 | `--output PATH` | Init/compile only. Init defaults to `otelplan.yaml`; compile defaults to `.otelplan/build`. |
 | `--force` | Init only. Permit replacement of an existing regular starter-policy file. |
@@ -177,8 +178,24 @@ Build copies application modules, local replacements, and workspace state into
 a disposable workspace. It verifies that adding the generated runtime preserves
 the analyzed module selection and that generated artifacts and backend identity
 remain valid. It publishes binaries only after successful build and hashing.
-It does not read or refresh the resolution lock. Run `lock --check` explicitly
-before build when enforcing frozen resolution in CI.
+`build --locked` requires a valid, current resolution lock before invoking the
+backend or preparing build output. Missing, malformed, or stale locks return 6
+with `OTP6001`; the command never refreshes the lock. The same guard applies to
+`build --locked --dry-run`. Resolution comparison preserves the independent
+ownership of backend digests/artifact metadata and ignores line/column movement.
+The default build mode does not require a lock. Use `--locked` for frozen builds
+in CI; a separate `lock --check` remains useful as an independent quality gate.
+
+The lock must represent the build's effective analysis settings. Set matching
+`GOFLAGS` when generating it if Go flags passed to build affect that fingerprint:
+
+```sh
+GOFLAGS='-trimpath -buildvcs=false' otelplan lock
+otelplan build --locked -- -trimpath -buildvcs=false -o bin/api ./cmd/api
+```
+
+This also applies to tags, module mode, and alternate manifests. A source-selection
+override is not silently accepted against a lock generated with different inputs.
 
 Supported Go flags after `--` are `-o`, `-p`, `-tags`, `-mod`, `-modfile`, `-race`,
 `-msan`, `-asan`, `-trimpath`, `-buildvcs`, `-a`, `-v`, and `-x`. These flags precede

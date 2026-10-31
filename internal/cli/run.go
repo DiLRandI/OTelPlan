@@ -46,6 +46,7 @@ type options struct {
 	output                                                  string
 	outputSet, clean                                        bool
 	strict, offline, check, dryRun, allowLargePlan, force   bool
+	locked, lockedSet                                       bool
 	interactive, nonInteractive                             bool
 	configSet                                               bool
 	cacheSet                                                bool

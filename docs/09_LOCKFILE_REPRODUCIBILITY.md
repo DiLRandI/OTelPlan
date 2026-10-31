@@ -138,8 +138,11 @@ Refresh preserves build identity if resolution is unchanged. If resolution
 changes while build identity is present, refresh refuses to write rather than
 erasing or incorrectly retaining it. The owning build phase must regenerate that
 identity. Compile currently publishes a separate verified artifact manifest and
-does not populate the resolution lock. Build likewise does not read or update it.
-Enforce `lock --check` explicitly in production build scripts.
+does not populate the resolution lock. Build never updates it. `build --locked`
+requires valid, current resolution before backend execution; default build mode
+permits an absent lock. Production scripts should use locked builds and may retain
+`lock --check` as an independent gate. The lock must include the same effective
+analysis flags as the build; see [locked-build inputs](CLI.md).
 
 Malformed locks fail check/diff/validate safely. A normal `lock` command can
 regenerate a malformed resolution file. Check and diff never write project files.

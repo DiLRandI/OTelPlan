@@ -76,7 +76,7 @@ Install the verified OTelC v1.1.0 executable on `PATH` using the
 
 ```sh
 otelplan compile --output .otelplan/build
-otelplan build -- -trimpath -o bin/api ./cmd/api
+otelplan build --locked -- -o bin/api ./cmd/api
 ```
 
 Compile publishes verified generated artifacts. Build runs in disposable copies

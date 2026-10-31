@@ -15,6 +15,7 @@ from remaining acceptance gates.
 | Backend | [Compiler architecture](06_COMPILER_BACKEND.md), [pinned OTelC implementation and support matrix](OTELC_BACKEND.md) |
 | Runtime | [Span lifecycle and context semantics](07_RUNTIME_HOOKS.md) |
 | Safety | [Privacy, capture, and cardinality](08_VALIDATION_SAFETY.md) |
+| Security | [Private reporting, support status, and operational boundaries](SECURITY.md) |
 | Reproducibility | [Lockfile and artifact ownership](09_LOCKFILE_REPRODUCIBILITY.md) |
 | Testing | [Local checks, CI, and integration tests](10_TEST_STRATEGY.md) |
 | Performance | [Requirements and benchmark commands](11_PERFORMANCE.md) |

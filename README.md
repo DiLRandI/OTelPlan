@@ -104,6 +104,7 @@ Start with the [documentation index](docs/README.md).
 - [Architecture](docs/02_ARCHITECTURE.md) and [discovery](docs/03_DISCOVERY_ENGINE.md)
 - [Backend compatibility](docs/OTELC_BACKEND.md) and [runtime](docs/07_RUNTIME_HOOKS.md)
 - [Safety](docs/08_VALIDATION_SAFETY.md) and [reproducibility](docs/09_LOCKFILE_REPRODUCIBILITY.md)
+- [Security reporting and operational boundaries](docs/SECURITY.md)
 - [Testing](docs/10_TEST_STRATEGY.md) and [roadmap/status](docs/13_ROADMAP.md)
 
 ## Development

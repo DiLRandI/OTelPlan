@@ -109,6 +109,8 @@ Start with the [documentation index](docs/README.md).
 
 ## Development
 
+See [contributing](docs/CONTRIBUTING.md) for setup, review expectations, and reporting bugs.
+
 ```sh
 make build
 make check GOLANGCI_LINT=/path/to/golangci-lint

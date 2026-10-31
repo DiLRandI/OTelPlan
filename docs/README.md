@@ -23,6 +23,7 @@ from remaining acceptance gates.
 | Acceptance criteria | [Release-blocking requirements](14_ACCEPTANCE_CRITERIA.md) |
 | Architectural decisions | [Decision log](15_DECISIONS.md) |
 | External references | [Upstream sources](REFERENCES.md) |
+| Contributing | [Setup, changes, verification, and pull requests](CONTRIBUTING.md) |
 | Contributor implementation instructions | [Implementation constraints](CODEX_IMPLEMENTATION_PROMPT.md), [agent instructions](../AGENTS.md) |
 
 The [architecture fixture README](../internal/cli/testdata/architectures/README.md)

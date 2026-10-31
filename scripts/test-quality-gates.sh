@@ -30,6 +30,42 @@ if EXPECTED_LINT_VERSION=incorrect make --no-print-directory -s lint GOLANGCI_LI
   exit 1
 fi
 
+cat > "$scratch/govulncheck" <<'TOOL'
+#!/bin/sh
+case "$1" in
+  -version)
+    printf 'Scanner: govulncheck@%s\n' "${FAKE_VULN_VERSION:-v1.9.0}"
+    printf 'DB: fake\n'
+    test "${FAKE_VULN_FAIL:-}" != version
+    ;;
+  -test)
+    test "$*" = '-test ./...' || exit 41
+    test "${FAKE_VULN_FAIL:-}" != symbols
+    ;;
+  -C)
+    test "$*" = '-C cmd/otelplan -scan=module' || exit 42
+    test "${FAKE_VULN_FAIL:-}" != modules
+    ;;
+  *) exit 43 ;;
+esac
+TOOL
+chmod +x "$scratch/govulncheck"
+make --no-print-directory -s vuln GOVULNCHECK="$scratch/govulncheck" > "$scratch/output" 2>&1
+for failure in version symbols modules; do
+  if FAKE_VULN_FAIL="$failure" make --no-print-directory -s vuln GOVULNCHECK="$scratch/govulncheck" > "$scratch/output" 2>&1; then
+    echo "vulnerability gate swallowed $failure failure" >&2
+    exit 1
+  fi
+done
+if FAKE_VULN_VERSION=v1.8.0 make --no-print-directory -s vuln GOVULNCHECK="$scratch/govulncheck" > "$scratch/output" 2>&1; then
+  echo 'vulnerability gate accepted an unexpected tool version' >&2
+  exit 1
+fi
+if make --no-print-directory -s vuln GOVULNCHECK="$scratch/missing" > "$scratch/output" 2>&1; then
+  echo 'vulnerability gate accepted a missing tool' >&2
+  exit 1
+fi
+
 cat > "$scratch/go" <<'TOOL'
 #!/bin/sh
 printf '%s\n' "$*" >> "$FAKE_GO_LOG"

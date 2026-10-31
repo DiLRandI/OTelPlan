@@ -15,7 +15,7 @@ This is a pre-stable implementation, not a completed release.
 | Safety/reproducibility | Static context/error/capture checks, static recursion and manual-span warnings, configurable trace-volume thresholds, canonical policy/build fingerprints, resolution locks and drift implemented. |
 | OTelC backend | Real rules/hooks/attributes and isolated compile/build implemented. Some generic, variadic, main-package, and panic capabilities are limited by the documented pin/scoping constraints. |
 | Hardening | Workspaces, local replacements, tags, isolated vendor builds, advisory call graphs, safe verbose diagnostics, and opt-in engine cache implemented. Opt-in CLI cache controls and read-only cache reuse are implemented. Bounded writable cache retention is implemented. Runtime benchmark/report, security verification, and Linux release confidence remain; the authoritative lint gate is clean. |
-| Initialization | Deterministic scoring/evidence, exact starter policy, interactive review, and no default capture implemented. A pinned full-source Memos starter regression covers API-operation usefulness, determinism, exact resolution, and source safety. Broader representative OSS coverage remains. |
+| Initialization | Deterministic scoring/evidence, exact starter policy, interactive review, and no default capture implemented. Pinned full-source Memos and Task regressions cover web/API and CLI workflow operations, determinism, exact resolution, and source safety. |
 | Stable v1 | Contract stability/migration commitments, release candidate cycle, security review, complete performance report, and release automation remain. |
 
 Documentation consolidation and lint cleanup are complete. Immediate priorities
@@ -78,7 +78,7 @@ Deliver:
 - build tags;
 - generics;
 - diagnostics documentation;
-- multi-platform CI;
+- Linux CI and release verification;
 - compatibility matrix.
 
 Exit gate: beta quality.

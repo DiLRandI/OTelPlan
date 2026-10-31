@@ -81,9 +81,15 @@ For each configured error result index:
 `RecordError` includes application error text in the exception event. The fixed
 status description does not redact that event. See [error-message privacy](08_VALIDATION_SAFETY.md#returned-error-messages).
 
+If the error's `Error()` method panics during recording, a guard around that
+recording call keeps the error status and emits one exception event with the
+constant message `error message unavailable`. It omits the formatting panic value
+and unavailable exception type. Normal formatting runs once; disabled recording
+and noop telemetry do not invoke it. Application-body panics still propagate.
+
 ## 8. Panic semantics
 
-OTelPlan never recovers a panic merely to continue execution.
+OTelPlan never recovers an application-body panic merely to continue execution.
 
 If the backend allows observing panic/defer-equivalent exit safely:
 

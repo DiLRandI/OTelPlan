@@ -121,8 +121,8 @@ otherwise those tests skip locally. See [testing instructions](docs/10_TEST_STRA
 ## Status and compatibility
 
 OTelPlan is implemented and pre-stable. Policy, lockfile, and CLI JSON contracts
-use `v1alpha1`; release acceptance is still pending. CI currently tests Linux.
-macOS and Windows are not yet verified by a CI matrix.
+use `v1alpha1`; release acceptance is still pending. Linux is the supported
+platform and the target for CI and release verification.
 
 Vendor builds are isolated and require prepared dependency caches for offline
 use. Generic root spans and concrete typed attributes have documented limits.

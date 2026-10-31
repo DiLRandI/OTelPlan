@@ -122,8 +122,12 @@ func (renderer *hookRenderer) writeImports() {
 		source.WriteString("\"go.opentelemetry.io/otel/codes\"\n")
 	}
 
+	if renderer.recordErrors || len(renderer.accessors) > 0 {
+		source.WriteString("\"go.opentelemetry.io/otel/attribute\"\n")
+	}
+
 	if len(renderer.accessors) > 0 {
-		source.WriteString("\"go.opentelemetry.io/otel/attribute\"\n_ \"unsafe\"\n")
+		source.WriteString("_ \"unsafe\"\n")
 	}
 
 	source.WriteString(")\n")
@@ -248,8 +252,9 @@ func writeHookErrors(source *bytes.Buffer, symbol *model.Symbol, indexes []int) 
 			value = fmt.Sprintf("returned_%d", index)
 		}
 
-		fmt.Fprintf(source, "if err, ok := %s.(error); ok && err != nil {\nspan.RecordError(err)\n"+
-			"span.SetStatus(codes.Error, \"operation failed\")\n}\n", value)
+		fmt.Fprintf(source, "if err, ok := %s.(error); ok && err != nil {\n", value)
+		source.WriteString(errorRecordingGuardSource)
+		source.WriteString("}\n")
 	}
 }
 

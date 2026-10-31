@@ -65,8 +65,8 @@ go test ./internal/resolve -run '^$' -bench . -benchmem
 for 100 functions importing context. Record the revision, Go version, platform,
 CPU, commands, and samples with any published result. The CLI opts into
 this cache only with `--cache-dir`; these engine benchmark timings are not a
-representative CLI performance report. Generated-hook runtime benchmarks and
-a representative performance report remain pending.
+CLI measurement. The medium-project CLI profile below measures the scan command
+separately. Generated-hook runtime measurements are maintained as separate work.
 
 ## Large-plan regression workload
 
@@ -91,3 +91,37 @@ Intel Core i7-11800H, with `otelc v1.1.0` at source commit
 `449ee08a682586adb177e4402845ed404565879f`. This elapsed time includes fixture
 setup, analysis, compilation, execution, and assertions. It is regression
 evidence, not a build-time SLO or a statistically controlled benchmark report.
+
+## Medium-project CLI scan baseline
+
+```sh
+GOMAXPROCS=1 taskset -c 15 go test ./internal/cli -run '^$' \
+  -bench '^BenchmarkCLIStaticAnalysis$' -benchtime=3x -count=3 -benchmem
+```
+
+Measured on 2026-10-31 at clean revision
+`e37eccfb4cc6580379d4ba614c1526b029e20dcf`, Go 1.27.3, Linux/amd64,
+Intel Core i7-11800H, logical CPU 15, `GOMAXPROCS=1`. No competing Go workloads
+ran during measurement. The fixture contains 100 independent packages, 2,000
+context-aware functions, and standard-library dependencies. Go caches are warmed;
+`CGO_ENABLED=0`, workspace and ambient Go flags are disabled, and scans use
+`--offline --format=json`.
+
+Preflight checks every expected symbol, verifies cache creation and byte-identical
+uncached/cached/repeated JSON, and hashes all inputs to reject added, removed, or
+changed files. The analysis cache is outside the fixture. Timing includes CLI
+argument handling, discovery or cache validation/reuse, Go subprocesses, and JSON
+rendering to a discard writer. It excludes OS process startup and preflight work.
+Each sample averages three scans; the table shows medians of three samples.
+
+| Analysis cache | ms/op | Go B/op | Go allocs/op |
+| --- | ---: | ---: | ---: |
+| uncached | 477.687 | 194595893 | 1829250 |
+| cached | 105.353 | 45030792 | 48303 |
+
+[Raw analysis samples](benchmarks/analysis-go1.27.3-linux-amd64.txt) preserve every
+measurement and its command. Allocations describe the Go process running
+`CLI.Run`, including rendering; they exclude Go subprocess allocations and are
+not peak resident memory. This synthetic fixture measures one medium-project
+shape. CGO, external dependencies, workspaces, call-graph suggestions, and actual
+application complexity need their own profiles before broader latency claims.

@@ -109,9 +109,23 @@ jobs:
           persist-credentials: false
       - run: make test-gates
 
+  vuln:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - name: Install pinned govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+      - run: make vuln GOVULNCHECK=govulncheck
+
   check:
     if: always()
-    needs: [unit, race, vet, lint, otelc-e2e, quality-gates]
+    needs: [unit, race, vet, lint, otelc-e2e, quality-gates, vuln]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -121,9 +135,10 @@ jobs:
       LINT_RESULT: ${{ needs.lint.result }}
       OTELC_RESULT: ${{ needs.otelc-e2e.result }}
       QUALITY_GATES_RESULT: ${{ needs.quality-gates.result }}
+      VULN_RESULT: ${{ needs.vuln.result }}
     steps:
       - name: Require every quality gate
         run: |
-          for result in "$UNIT_RESULT" "$RACE_RESULT" "$VET_RESULT" "$LINT_RESULT" "$OTELC_RESULT" "$QUALITY_GATES_RESULT"; do
+          for result in "$UNIT_RESULT" "$RACE_RESULT" "$VET_RESULT" "$LINT_RESULT" "$OTELC_RESULT" "$QUALITY_GATES_RESULT" "$VULN_RESULT"; do
             test "$result" = success || exit 1
           done

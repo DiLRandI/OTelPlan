@@ -218,3 +218,7 @@ This is distinct from CLI diagnostics and explicit argument/result attributes.
 Use `errors.record: false` for targets whose error messages may contain private
 data, or sanitize errors in the application. There is no runtime error-message
 redaction policy in the current schema.
+
+Formatting panics produce the bounded fallback described in
+[error semantics](07_RUNTIME_HOOKS.md#7-error-semantics). The guard does not redact
+normally returned error messages.

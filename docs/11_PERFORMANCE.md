@@ -65,8 +65,8 @@ go test ./internal/resolve -run '^$' -bench . -benchmem
 for 100 functions importing context. Record the revision, Go version, platform,
 CPU, commands, and samples with any published result. The CLI opts into
 this cache only with `--cache-dir`; these engine benchmark timings are not a
-representative CLI performance report. Generated-hook runtime benchmarks and
-a representative performance report remain pending.
+representative CLI performance report. A representative static-analysis and
+large-workspace performance report remains pending.
 
 ## Large-plan regression workload
 
@@ -91,3 +91,36 @@ Intel Core i7-11800H, with `otelc v1.1.0` at source commit
 `449ee08a682586adb177e4402845ed404565879f`. This elapsed time includes fixture
 setup, analysis, compilation, execution, and assertions. It is regression
 evidence, not a build-time SLO or a statistically controlled benchmark report.
+
+## Generated business-span benchmarks
+
+```sh
+OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/benchmark-runtime.sh 3
+```
+
+The optional argument is a positive sample count, defaulting to three. The
+backend must match the supported `otelc v1.1.0` pin. The harness uses a disposable
+copy of the synthetic fixture, prepares pinned dependencies, and builds the CLI,
+a normal Go baseline, a verified generated bundle, and an instrumented binary
+through `otelplan build`. Preparation may download dependencies. It checks that
+fixture source and module files remain unchanged and removes temporary files on
+exit. Run it without competing local test/build workloads when collecting data.
+
+Before timing, both binaries check original return behavior. The instrumented
+binary also verifies exactly three business spans with the expected scope,
+internal kind, parent/trace relationships, explicit attributes, and returned
+error event/status. The `--instrumented` fixture flag changes verification and
+labels only; the fixture never creates business spans itself.
+
+The six cases combine SDK `NeverSample` and `AlwaysSample` with zero attributes,
+two primitive argument attributes, and a preallocated returned error. Provider
+setup and the parent span are outside timing. No span processor or exporter is
+installed during measurements. Targets use `//go:noinline` so baseline calls
+are retained. Each sample reports iterations, `ns/op`, `B/op`, and `allocs/op` in
+Go benchmark format. The harness prints revision/worktree state, Go/platform/CPU
+identity, and backend version/digest. Compile/build time is excluded.
+
+These are single-threaded synthetic business-operation measurements, not an
+exporter benchmark or an application throughput claim. Record raw samples and
+the full environment before comparing revisions. No regression threshold is
+enforced until a stable baseline and an agreed statistical policy exist.

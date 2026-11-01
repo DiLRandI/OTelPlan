@@ -1,0 +1,28 @@
+{
+  "apiVersion": "otelplan.io/cli/v1alpha1",
+  "command": "inspect",
+  "ok": false,
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "OTP4001",
+      "message": "sensitive attribute requires explicit secret classification and acknowledgment",
+      "rule": "work",
+      "symbol": "example.com/wire.(*Worker).Run"
+    }
+  ],
+  "data": {
+    "apiVersion": "otelplan.io/v1alpha1",
+    "targets": [
+      {
+        "symbol": "example.com/wire.(*Worker).Run",
+        "spanName": "work.operation",
+        "context": {"strategy": "argument", "index": 1},
+        "errors": {"record": true, "indexes": [1]},
+        "attributes": [{"key": "password", "from": {"constant": "[redacted]"}}],
+        "sourceRule": "work",
+        "signature": "func(req example.com/wire.Request, ctx context.Context) (result example.com/wire.Result, err error)"
+      }
+    ]
+  }
+}

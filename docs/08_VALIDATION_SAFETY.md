@@ -29,7 +29,15 @@ Examples:
 - high-cardinality attribute source;
 - broad selector matching hundreds of methods;
 - no returned `error` but `errors.record=true`;
-- source selector includes generated code.
+- source selector includes generated code;
+- a rule's matching symbols are all removed by exclusions.
+
+`OTP1006` identifies a rule whose include selector matches symbols but whose
+local/global exclusions leave no effective match. It is reported once per rule,
+even when several exclusions contribute. Partial exclusions and active identical
+overlaps do not produce this warning. A selector that matches nothing remains
+an `OTP1002` error. Strict policy commands fail before lock/artifact writes or
+backend execution; normal mode retains the warning and existing selection.
 
 ### Info
 

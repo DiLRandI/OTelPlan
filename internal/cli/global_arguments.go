@@ -58,6 +58,8 @@ func (opts *options) recordExplicitFlags(flags *flag.FlagSet) {
 			opts.configSet = true
 		case "cache-dir":
 			opts.cacheSet = true
+		case "locked":
+			opts.lockedSet = true
 		case "warn-targets", "strong-warn-targets":
 			opts.targetLimitsSet = true
 		case "max-targets":
@@ -81,6 +83,7 @@ func globalFlags(opts *options) *flag.FlagSet {
 	flags.BoolVar(&opts.strict, "strict", false, "fail on warnings")
 	flags.BoolVar(&opts.offline, "offline", false, "disable Go network resolution")
 	flags.BoolVar(&opts.check, "check", false, "check without writing")
+	flags.BoolVar(&opts.locked, "locked", false, "require a current resolution lock before building")
 	flags.BoolVar(&opts.dryRun, "dry-run", false, "preview without writing")
 	flags.BoolVar(&opts.allowLargePlan, "allow-large-plan", false, "acknowledge large target count")
 	flags.IntVar(&opts.warningTargets, "warn-targets", validate.DefaultWarningTargets, "target-count warning threshold")

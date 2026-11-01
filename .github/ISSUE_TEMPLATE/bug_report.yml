@@ -1,0 +1,37 @@
+name: Bug report
+description: Report a reproducible problem in OTelPlan.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use a minimal reproduction with dummy values. Do not include credentials,
+        private source, full environment dumps, or captured application data.
+        Report suspected vulnerabilities through [private reporting](https://github.com/DiLRandI/OTelPlan/security/advisories/new).
+  - type: textarea
+    id: environment
+    attributes:
+      label: Versions and environment
+      description: OTelPlan commit/version, Go version, Linux environment, and OTelC version if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Exact command, minimal policy or fixture, and preparation steps. State whether offline mode is used.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Describe the difference, including exit code and diagnostic codes when available.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Sanitized output
+      description: Relevant text or JSON output only. Remove sensitive values before submitting.
+    validations:
+      required: false

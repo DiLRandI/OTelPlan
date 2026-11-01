@@ -154,10 +154,10 @@ Current model:
 - verify generated artifacts and backend executable identity;
 - verify and publish built binaries without dirtying the source checkout.
 
-Compile publishes a standalone artifact bundle and manifest. Build does not
-update or enforce the resolution lock. Use `lock --check` explicitly when CI must
-freeze resolution. Resolution commands cannot erase independently-owned build
-identity. See [reproducibility](09_LOCKFILE_REPRODUCIBILITY.md).
+Compile publishes a standalone artifact bundle and manifest. Build never updates
+the resolution lock; `build --locked` requires a valid current lock before backend
+execution. Default build mode permits an absent lock. Resolution commands cannot
+erase independently-owned build identity. See [reproducibility](09_LOCKFILE_REPRODUCIBILITY.md).
 
 ## 12. Failure behavior
 

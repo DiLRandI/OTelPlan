@@ -192,12 +192,12 @@ ResolvedPlan -> backend capability check -> backend compiler -> generated artifa
 ### `build`
 
 ```text
-validate -> generate -> isolated module/backend verification -> backend build -> verify/publish binary
+validate -> optional locked-resolution check -> generate -> isolated module/backend verification -> backend build -> verify/publish binary
 ```
 
-Build does not check or refresh `otelplan.lock`. Enforce `lock --check` explicitly
-in CI before building. Compile publishes an independently verified artifact
-manifest. See [lock ownership](09_LOCKFILE_REPRODUCIBILITY.md).
+`build --locked` verifies resolution freshness before backend execution. Default
+build mode permits an absent lock; neither mode refreshes it. Compile publishes an
+independently verified artifact manifest. See [lock ownership](09_LOCKFILE_REPRODUCIBILITY.md).
 
 ## 6. No hidden mutation
 

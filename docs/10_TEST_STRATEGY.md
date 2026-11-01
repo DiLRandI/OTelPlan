@@ -18,15 +18,23 @@ Cover:
 
 ### Golden tests
 
-Fixture:
+Inspection and explanation wire contracts use checked-in independent JSON:
 
 ```text
-testdata/projects/<case>
-testdata/policies/<case>.yaml
-testdata/golden/<case>.resolved.json
+internal/cli/testdata/wire-contracts/project/
+internal/cli/testdata/wire-contracts/inspect*.json
+internal/cli/testdata/wire-contracts/explain-*.json
 ```
 
-Any behavior change requires intentional golden update.
+`TestInspectionWireContracts` runs the real CLI pipeline against a disposable copy
+of the fixture with offline resolution, checks source immutability, and compares
+complete responses without decoding through product model types. Object-key order
+and whitespace are ignored; field names, omission, values, numeric representation,
+and array order remain significant. Expected files cover context/error strategies,
+explicit attribute sources and redaction, failure diagnostics, rule provenance,
+and local/global skips.
+Tests never generate or overwrite goldens. Contract changes require an intentional,
+reviewed update to the checked-in expected JSON.
 
 ### Integration tests
 

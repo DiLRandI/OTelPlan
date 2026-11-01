@@ -37,6 +37,11 @@ type buildPreviewSummary struct {
 
 func buildCommand(ctx context.Context, opts options, args buildArguments, policy *model.Policy,
 	code *model.CodeModel, plan model.ResolvedPlan) (any, int, model.DiagnosticErrorList) {
+	data, exit, diagnostics := checkBuildResolution(opts, policy, code, plan)
+	if exit != 0 {
+		return data, exit, diagnostics
+	}
+
 	executable, err := exec.LookPath("otelc")
 	if err != nil {
 		recordFailure(opts, model.CodeBackendUnsupported, "find pinned backend", err)
@@ -86,6 +91,17 @@ func buildCommand(ctx context.Context, opts options, args buildArguments, policy
 	}
 
 	return destination.publishAll(opts, backend, built.Files, destinations)
+}
+
+func checkBuildResolution(opts options, policy *model.Policy, code *model.CodeModel,
+	plan model.ResolvedPlan) (any, int, model.DiagnosticErrorList) {
+	if !opts.locked {
+		return nil, 0, nil
+	}
+
+	opts.check, opts.dryRun = true, false
+
+	return lockCommand(lockCommandName, opts, policy, code, plan)
 }
 
 func selectBuildDestination(opts options, output string, code *model.CodeModel) (buildDestination,

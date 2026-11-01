@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/DiLRandI/OTelPlan/internal/model"
 	"github.com/DiLRandI/OTelPlan/internal/policy"
-	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
 // Decision records whether one rule or exclusion matched at a selection stage.
@@ -78,24 +78,38 @@ func Resolve(instrumentationPolicy *model.Policy, code *model.CodeModel) Result 
 		return result
 	}
 
-	matchedRules := result.resolveSymbols(instrumentationPolicy, code, symbols, rules, exclusions)
-
-	for _, rule := range rules {
-		if !matchedRules[rule.ID] {
-			result.Diagnostics = append(result.Diagnostics, resolutionDiagnostic(
-				model.CodeUnresolvedSymbol,
-				rule.ID,
-				"",
-				"selector matches no symbols",
-			))
-		}
-	}
+	matchedRules, effectiveRules := result.resolveSymbols(instrumentationPolicy, code, symbols, rules, exclusions)
+	result.Diagnostics = append(result.Diagnostics, ruleMatchDiagnostics(rules, matchedRules, effectiveRules)...)
 
 	sort.SliceStable(result.Diagnostics, func(i, j int) bool {
 		return diagnosticLess(result.Diagnostics[i], result.Diagnostics[j])
 	})
 
 	return result
+}
+
+func ruleMatchDiagnostics(rules []model.Rule, matched, effective map[string]bool) model.DiagnosticErrorList {
+	var diagnostics model.DiagnosticErrorList
+
+	for _, rule := range rules {
+		if !matched[rule.ID] {
+			diagnostics = append(diagnostics, resolutionDiagnostic(
+				model.CodeUnresolvedSymbol, rule.ID, "", "selector matches no symbols",
+			))
+
+			continue
+		}
+
+		if !effective[rule.ID] {
+			diagnostics = append(diagnostics, model.DiagnosticError{
+				Severity: model.SeverityWarning, Code: model.CodeRuleFullyExcluded, RuleID: rule.ID,
+				Message: "all matched symbols are excluded; rule selects no targets",
+				Symbol:  "", File: "", Line: 0,
+			})
+		}
+	}
+
+	return diagnostics
 }
 
 func matchReason(matched bool) string {
@@ -384,8 +398,9 @@ func diagnosticLess(first, second model.DiagnosticError) bool {
 func (result *Result) resolveSymbols(
 	instrumentationPolicy *model.Policy, code *model.CodeModel, symbols []model.Symbol,
 	rules []model.Rule, exclusions []model.Exclusion,
-) map[string]bool {
+) (map[string]bool, map[string]bool) {
 	matchedRules := map[string]bool{}
+	effectiveRules := map[string]bool{}
 
 	for _, symbol := range symbols {
 		explanation := Explanation{SymbolID: symbol.ID, Decisions: nil, Selected: false}
@@ -398,6 +413,10 @@ func (result *Result) resolveSymbols(
 			result.Explanations = append(result.Explanations, explanation)
 
 			continue
+		}
+
+		for _, rule := range candidates {
+			effectiveRules[rule.ID] = true
 		}
 
 		chosen, diagnostics := chooseTarget(instrumentationPolicy, symbol, candidates)
@@ -418,7 +437,7 @@ func (result *Result) resolveSymbols(
 		result.Explanations = append(result.Explanations, explanation)
 	}
 
-	return matchedRules
+	return matchedRules, effectiveRules
 }
 
 func (result *Result) applyGlobalExclusions(

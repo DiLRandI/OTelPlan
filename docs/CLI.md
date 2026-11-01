@@ -307,6 +307,7 @@ artifacts may contain explicitly configured constants; protect those files.
 | Diagnostic codes | Category |
 | --- | --- |
 | OTP1001 through OTP1005 | Invalid selector, unresolved symbol, conflicting rules, unknown template variable, invalid policy. |
+| OTP1006 | A rule's include selector matches symbols, but local/global exclusions remove every match. Warning; `--strict` fails. |
 | OTP3001 through OTP3002 | Missing or multiple usable contexts. |
 | OTP4001 through OTP4005 | Secret, PII, cardinality, broad plan, unsupported capture. |
 | OTP4006 | Selected target participates in a static recursive call cycle. |

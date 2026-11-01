@@ -386,6 +386,12 @@ A target matched by multiple rules with conflicting behavior is an error unless 
 
 No "last rule wins" behavior in v1.
 
+A rule with include matches that are all removed by local/global exclusions emits
+warning `OTP1006`. This makes ineffective rules visible without changing selection
+or exclusion precedence. `--strict` rejects that warning. Partially excluded rules
+and active identical overlaps remain valid; an include selector matching no symbols
+still produces `OTP1002`.
+
 ## Environment interpolation
 
 Not supported in v1.

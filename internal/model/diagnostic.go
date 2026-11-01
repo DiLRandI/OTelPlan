@@ -24,6 +24,7 @@ const (
 	CodeConflictingRules       Code = "OTP1003"
 	CodeUnknownTemplateVar     Code = "OTP1004"
 	CodeInvalidPolicy          Code = "OTP1005"
+	CodeRuleFullyExcluded      Code = "OTP1006"
 	CodeMissingContext         Code = "OTP3001"
 	CodeMultipleContexts       Code = "OTP3002"
 	CodeSecretAttribute        Code = "OTP4001"

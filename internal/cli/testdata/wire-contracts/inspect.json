@@ -1,0 +1,44 @@
+{
+  "apiVersion": "otelplan.io/cli/v1alpha1",
+  "command": "inspect",
+  "ok": true,
+  "diagnostics": [],
+  "data": {
+    "apiVersion": "otelplan.io/v1alpha1",
+    "targets": [
+      {
+        "symbol": "example.com/wire.(*Worker).Run",
+        "spanName": "work.operation",
+        "context": {"strategy": "argument", "index": 1},
+        "errors": {"record": true, "indexes": [1]},
+        "attributes": [
+          {"key": "code.operation", "from": {"symbol": "id"}},
+          {
+            "key": "deployment.stage",
+            "from": {"constant": "[redacted]"},
+            "classification": "internal",
+            "allow": true
+          },
+          {"key": "failure.class", "from": {"errorType": "err"}},
+          {"key": "operation.display", "from": {"argument": "req.Kind"}, "stringer": true},
+          {"key": "operation.kind", "from": {"argument": "req.Kind"}},
+          {"key": "operation.ok", "from": {"result": "result.OK"}}
+        ],
+        "sourceRule": "work",
+        "signature": "func(req example.com/wire.Request, ctx context.Context) (result example.com/wire.Result, err error)"
+      },
+      {
+        "symbol": "example.com/wire.Check",
+        "spanName": "wire.Check",
+        "context": {"strategy": "argument"},
+        "errors": {"record": false},
+        "sourceRule": "check",
+        "signature": "func(ctx context.Context) error"
+      }
+    ],
+    "skipped": [
+      {"symbol": "example.com/wire.Skip", "rule": "skip", "reason": "excluded"},
+      {"symbol": "example.com/wire.localSkip", "rule": "work", "reason": "excluded"}
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "apiVersion": "otelplan.io/cli/v1alpha1",
+  "command": "explain",
+  "ok": true,
+  "diagnostics": [],
+  "data": {
+    "symbol": "example.com/wire.localSkip",
+    "decisions": [
+      {"rule": "check", "stage": "include", "matched": false, "reason": "selector did not match"},
+      {"rule": "work", "stage": "include", "matched": true, "reason": "selector matched"},
+      {"rule": "work", "stage": "local-exclusion", "matched": true, "reason": "selector matched"},
+      {"rule": "skip", "stage": "global-exclusion", "matched": false, "reason": "selector did not match"}
+    ],
+    "selected": false
+  }
+}

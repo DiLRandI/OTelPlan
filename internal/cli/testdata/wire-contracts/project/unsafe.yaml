@@ -1,0 +1,11 @@
+apiVersion: otelplan.io/v1alpha1
+kind: InstrumentationPlan
+backend: {name: otelc, version: v1.1.0}
+rules:
+  - id: work
+    match:
+      symbols: [example.com/wire.(*Worker).Run]
+    span: {name: work.operation}
+    attributes:
+      - key: password
+        from: {constant: dummy-contract-constant}

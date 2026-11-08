@@ -41,13 +41,22 @@ func TestGeneratedRulesWithPinnedBackend(t *testing.T) {
 	plan := lifecyclePlan(t, code)
 	writeLifecycleArtifacts(t, root, code, plan)
 	original := lifecycleSources(t, root)
+	buildBaselineLifecycleProbe(t, root)
+
+	for _, mode := range []string{"nil", "nil-preserved", "nil-method", "nil-panic"} {
+		checkGeneratedLifecycle(t, root.Name(), mode)
+	}
+
 	buildLifecycleProbe(t, root, executable)
 
 	if !reflect.DeepEqual(lifecycleSources(t, root), original) {
 		t.Fatal("backend modified fixture Go source")
 	}
 
-	for _, mode := range []string{"nested", "method", "root", "nil", "unrecorded", "panic", "noop", "concurrent"} {
+	for _, mode := range []string{
+		"nested", "method", "root", "nil", "nil-preserved", "nil-method",
+		"nil-panic", "unrecorded", "panic", "noop", "concurrent",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 
@@ -103,7 +112,10 @@ func lifecyclePlan(t *testing.T, code *model.CodeModel) model.ResolvedPlan {
 
 	var plan model.ResolvedPlan
 
-	for _, name := range []string{"Outer", "Inner", "(*Worker).Execute", "Root", "Unrecorded", "Crash"} {
+	for _, name := range []string{
+		"Outer", "Inner", "(*Worker).Execute", "Root", "Unrecorded", "Crash",
+		"PreserveNil", "(*Worker).PreserveNil", "CrashIfNil",
+	} {
 		symbol, exists := code.Symbol(model.SymbolID("example.com/probe/ops." + name))
 		if !exists {
 			t.Fatalf("lifecycle fixture symbol %q missing", name)
@@ -196,6 +208,20 @@ func lifecycleSources(t *testing.T, root *os.Root) map[string][sha256.Size]byte 
 	return sources
 }
 
+func buildBaselineLifecycleProbe(t *testing.T, root *os.Root) {
+	t.Helper()
+
+	build := exec.CommandContext(t.Context(), "go", "build", "-mod=readonly", "-race", "-o", "probe", ".")
+	build.Dir = root.Name()
+
+	build.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
+
+	output, err := build.CombinedOutput()
+	if err != nil {
+		t.Fatalf("baseline lifecycle build failed: %v\n%s", err, output)
+	}
+}
+
 func buildLifecycleProbe(t *testing.T, root *os.Root, executable string) {
 	t.Helper()
 
@@ -277,8 +303,12 @@ func checkLifecycleReturns(t *testing.T, result lifecycleResult, mode string) {
 	}
 
 	wantPanic := ""
-	if mode == "panic" {
+
+	switch mode {
+	case "panic":
 		wantPanic = "application panic"
+	case "nil-panic":
+		wantPanic = "nil context panic"
 	}
 
 	if result.RecoveredPanic != wantPanic {
@@ -311,14 +341,23 @@ func checkLifecycleSpans(t *testing.T, spans []lifecycleSpan, mode string) {
 
 	byName := lifecycleSpansByName(t, spans)
 
+	if isNilLifecycleMode(mode) {
+		checkOnlyManualRootSpan(t, spans, byName, mode)
+
+		return
+	}
+
 	parent, exists := byName["root"]
 	if !exists {
 		t.Fatalf("missing parent span in %q mode", mode)
 	}
 
 	name := map[string]string{
-		"nested": "outer", "method": "execute", "nil": "outer", "root": "root-operation",
-		"unrecorded": "unrecorded", "panic": "crash",
+		"nested":     "outer",
+		"method":     "execute",
+		"root":       "root-operation",
+		"unrecorded": "unrecorded",
+		"panic":      "crash",
 	}[mode]
 
 	operation, exists := byName[name]
@@ -331,7 +370,7 @@ func checkLifecycleSpans(t *testing.T, spans []lifecycleSpan, mode string) {
 	wantSpans := 2
 
 	switch mode {
-	case "nested", "method", "nil":
+	case "nested", "method":
 		wantSpans = 3
 
 		checkNestedLifecycleErrors(t, byName, operation)
@@ -346,10 +385,31 @@ func checkLifecycleSpans(t *testing.T, spans []lifecycleSpan, mode string) {
 	}
 }
 
+func isNilLifecycleMode(mode string) bool {
+	switch mode {
+	case "nil", "nil-preserved", "nil-method", "nil-panic":
+		return true
+	default:
+		return false
+	}
+}
+
+func checkOnlyManualRootSpan(t *testing.T, spans []lifecycleSpan, byName map[string]lifecycleSpan, mode string) {
+	t.Helper()
+
+	root, exists := byName["root"]
+	valid := len(spans) == 1 && exists && root.Name == "root" && root.Scope == "probe" &&
+		root.Version == "" && root.Parent == "0000000000000000"
+
+	if !valid {
+		t.Fatalf("expected only manual root span in %q mode: %+v", mode, spans)
+	}
+}
+
 func checkLifecycleParent(t *testing.T, parent, operation lifecycleSpan, mode string) {
 	t.Helper()
 
-	if mode == "nil" || mode == "root" {
+	if mode == "root" {
 		if operation.Parent != "0000000000000000" || operation.Trace == parent.Trace {
 			t.Fatalf("expected separate root trace in %q mode: %+v", mode, operation)
 		}

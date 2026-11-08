@@ -34,7 +34,7 @@ The CI workflow uses the exact commit rather than a moving upstream branch.
 | Toolchain | OTelPlan requires Go 1.27.x. Generated runtime module declares Go 1.25 with pinned dependencies. |
 | Platforms | Linux is the supported platform, covered by CI and real backend E2E. |
 | Selection | Exact importable-package functions and value/pointer receiver methods with Go bodies. |
-| Context | Unique `context.Context` argument is replaced with the child context for ordinary declarations. Explicit root fallback is supported. |
+| Context | A non-nil unique `context.Context` argument is replaced with the child context. Nil arguments stay nil and skip instrumentation. Explicit root strategies are supported. |
 | Errors | Configured returned-error indexes are recorded with a bounded status description. Return values remain unchanged. |
 | Attributes | Explicit constants, static symbol metadata, and typed scalar argument/result field paths, including private/imported named types. |
 | Generics | Explicit root spans, returned errors, and captures through concrete types. Generic context replacement and unbound capture types are rejected. Some generic receiver methods fail under the pin. |

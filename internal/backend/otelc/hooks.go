@@ -159,7 +159,7 @@ func (renderer *hookRenderer) render(binding HookBinding) error {
 
 	if target.ContextStrategy.Strategy == model.ContextStrategyArgument {
 		fmt.Fprintf(source, "ctx, _ := h.GetParam(%d).(context.Context)\n"+
-			"if ctx == nil { ctx = context.Background() }\n", target.ContextStrategy.Index+offset)
+			"if ctx == nil { return }\n", target.ContextStrategy.Index+offset)
 	} else {
 		source.WriteString("ctx := context.Background()\n")
 	}

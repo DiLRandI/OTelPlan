@@ -1,0 +1,29 @@
+name: Feature proposal
+description: Describe a concrete problem that current policy or commands cannot solve.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep examples free of private source, credentials, and application data.
+        Review the [roadmap](https://github.com/DiLRandI/OTelPlan/blob/main/docs/13_ROADMAP.md) before proposing new scope.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the workflow and why existing policy or commands do not address it.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Give a small example and explain any effect on source immutability, capture safety, or compatibility.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include simpler options or existing tools that address part of the problem.
+    validations:
+      required: false

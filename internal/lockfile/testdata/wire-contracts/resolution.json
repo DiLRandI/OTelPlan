@@ -1,0 +1,42 @@
+{
+  "apiVersion": "otelplan.io/lock/v1alpha1",
+  "policyDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "goVersion": "go1.27.0",
+  "moduleGraphDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "backend": {
+    "name": "otelc",
+    "version": "v1.1.0",
+    "capabilities": {
+      "beforeHook": true,
+      "afterHook": true,
+      "argumentRead": true,
+      "argumentReplace": true,
+      "resultRead": true,
+      "panicObservation": false,
+      "contextReplacement": true,
+      "functionEntrySelection": true,
+      "functionCallSelection": false
+    }
+  },
+  "targets": [
+    {
+      "symbol": "example.com/wire.Another",
+      "signature": "func()",
+      "signatureDigest": "sha256:0105467f2befa106a0483ca9846392a422c7ccb70cdaf93f57d6ba942c4a6b06",
+      "sourceRule": "other",
+      "spanName": "wire.Another",
+      "context": {
+        "strategy": "root",
+        "index": 0
+      },
+      "errors": {
+        "record": false
+      },
+      "location": {
+        "file": "other.go",
+        "line": 3,
+        "column": 0
+      }
+    }
+  ]
+}

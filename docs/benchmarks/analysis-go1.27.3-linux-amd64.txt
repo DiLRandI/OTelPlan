@@ -1,0 +1,17 @@
+# revision: e37eccfb4cc6580379d4ba614c1526b029e20dcf (clean worktree)
+# go: go1.27.3 linux/amd64
+# command: GOMAXPROCS=1 taskset -c 15 go test ./internal/cli -run ^$ -bench ^BenchmarkCLIStaticAnalysis$ -benchtime=3x -count=3 -benchmem
+# workload: 100 packages, 20 functions per package, context-only imports
+# Go caches warmed; CGO_ENABLED=0; analysis cache optional and outside fixture
+goos: linux
+goarch: amd64
+pkg: github.com/DiLRandI/OTelPlan/internal/cli
+cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
+BenchmarkCLIStaticAnalysis/uncached         	       3	 526499628 ns/op	194595893 B/op	 1829239 allocs/op
+BenchmarkCLIStaticAnalysis/uncached         	       3	 477686851 ns/op	194574573 B/op	 1829280 allocs/op
+BenchmarkCLIStaticAnalysis/uncached         	       3	 470748804 ns/op	194598709 B/op	 1829250 allocs/op
+BenchmarkCLIStaticAnalysis/cached           	       3	 102480441 ns/op	45030792 B/op	   48303 allocs/op
+BenchmarkCLIStaticAnalysis/cached           	       3	 107475062 ns/op	45259930 B/op	   48313 allocs/op
+BenchmarkCLIStaticAnalysis/cached           	       3	 105352912 ns/op	44801672 B/op	   48293 allocs/op
+PASS
+ok  	github.com/DiLRandI/OTelPlan/internal/cli	18.159s

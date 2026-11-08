@@ -40,6 +40,71 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 	assertPinnedBuildFixtureUnchanged(t, root, original)
 }
 
+func TestBuildCLILockedWithPinnedBackend(t *testing.T) {
+	executable := os.Getenv("OTELPLAN_OTELC")
+	if executable == "" {
+		t.Skip("OTELPLAN_OTELC is required")
+	}
+
+	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prepareOfflineIntegration(t)
+	t.Setenv("GOFLAGS", "-trimpath -buildvcs=false")
+	root := pinnedBuildFixture(t)
+	runLockedBuildIntegration(t, []string{"lock", "--root", root, "--offline", "--format=json"})
+	original := testenv.SnapshotFiles(t, root)
+	destination := filepath.Join(t.TempDir(), "probe")
+	base := []string{"build", "--locked", "--root", root, "--offline", "--format=json"}
+	previewArgs := append(append([]string{}, base...), "--dry-run", "--", "-trimpath", "-buildvcs=false",
+		"-o", destination, ".")
+
+	var preview buildPreviewSummary
+
+	err := json.Unmarshal(runLockedBuildIntegration(t, previewArgs), &preview)
+	if err != nil || !preview.DryRun || len(preview.Outputs) != 1 || preview.Outputs[0] != destination {
+		t.Fatalf("invalid locked build preview: %+v, %v", preview, err)
+	}
+
+	_, err = os.Stat(destination)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("locked build preview published a binary: %v", err)
+	}
+
+	buildArgs := append(append([]string{}, base...), "--", "-trimpath", "-buildvcs=false", "-o", destination, ".")
+
+	var built buildSummary
+
+	err = json.Unmarshal(runLockedBuildIntegration(t, buildArgs), &built)
+	if err != nil {
+		t.Fatalf("decode locked build: %v", err)
+	}
+
+	assertPinnedArtifact(t, built, destination)
+	assertPinnedTrace(t, destination)
+	testenv.AssertFilesUnchanged(t, original, testenv.SnapshotFiles(t, root))
+}
+
+func runLockedBuildIntegration(t *testing.T, args []string) json.RawMessage {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+
+	if exit := Run(t.Context(), args, &stdout, &stderr); exit != 0 || stderr.Len() != 0 {
+		t.Fatalf("%s failed: exit=%d stdout=%s stderr=%s", args[0], exit, &stdout, &stderr)
+	}
+
+	var reply struct {
+		OK   bool            `json:"ok"`
+		Data json.RawMessage `json:"data"`
+	}
+
+	err := json.Unmarshal(stdout.Bytes(), &reply)
+	if err != nil || !reply.OK {
+		t.Fatalf("invalid locked workflow response: %v, %s", err, &stdout)
+	}
+
+	return reply.Data
+}
+
 func pinnedBuildFixture(t *testing.T) string {
 	t.Helper()
 

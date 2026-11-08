@@ -21,6 +21,7 @@ var (
 	errInteractiveInput    = errors.New("--interactive requires an input stream")
 	errCheckApplicability  = errors.New("--check is supported by lock and diff")
 	errDryRunApplicability = errors.New("--dry-run is supported by init, lock, compile, and build")
+	errLockedApplicability = errors.New("--locked is supported by build")
 )
 
 func validateCommandOptions(command string, opts options, stdin io.Reader) error {
@@ -41,6 +42,10 @@ func validateCommandOptions(command string, opts options, stdin io.Reader) error
 	err = validateInitializationOptions(command, opts, stdin)
 	if err != nil {
 		return err
+	}
+
+	if opts.lockedSet && command != buildCommandName {
+		return errLockedApplicability
 	}
 
 	return validateLockOptions(command, opts)

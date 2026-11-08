@@ -1,0 +1,39 @@
+apiVersion: otelplan.io/v1alpha1
+kind: InstrumentationPlan
+backend: {name: otelc, version: v1.1.0}
+defaults:
+  context: {mode: require}
+  errors: {record: true}
+rules:
+  - id: work
+    match:
+      symbols:
+        - example.com/wire.(*Worker).Run
+        - example.com/wire.Skip
+        - example.com/wire.localSkip
+    exclude:
+      symbols: [example.com/wire.localSkip]
+    span: {name: work.operation}
+    attributes:
+      - key: operation.kind
+        from: {argument: req.Kind}
+      - key: operation.display
+        from: {argument: req.Kind}
+        stringer: true
+      - key: operation.ok
+        from: {result: result.OK}
+      - key: deployment.stage
+        from: {constant: dummy-contract-constant}
+        safety: {classification: internal, allow: true}
+      - key: code.operation
+        from: {symbol: id}
+      - key: failure.class
+        from: {errorType: err}
+  - id: check
+    match:
+      symbols: [example.com/wire.Check]
+    errors: {record: false}
+exclusions:
+  - id: skip
+    match:
+      symbols: [example.com/wire.Skip]

@@ -1,0 +1,119 @@
+{
+  "apiVersion": "otelplan.io/lock/v1alpha1",
+  "policyDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "goVersion": "go1.27.0",
+  "moduleGraphDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "backend": {
+    "name": "otelc",
+    "version": "v1.1.0",
+    "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "capabilities": {
+      "beforeHook": true,
+      "afterHook": true,
+      "argumentRead": true,
+      "argumentReplace": true,
+      "resultRead": true,
+      "panicObservation": false,
+      "contextReplacement": true,
+      "functionEntrySelection": true,
+      "functionCallSelection": false
+    }
+  },
+  "targets": [
+    {
+      "symbol": "example.com/wire.Another",
+      "signature": "func()",
+      "signatureDigest": "sha256:0105467f2befa106a0483ca9846392a422c7ccb70cdaf93f57d6ba942c4a6b06",
+      "sourceRule": "other",
+      "spanName": "wire.Another",
+      "context": {
+        "strategy": "root",
+        "index": 0
+      },
+      "errors": {
+        "record": false
+      },
+      "location": {
+        "file": "other.go",
+        "line": 3,
+        "column": 0
+      }
+    },
+    {
+      "symbol": "example.com/wire.Run",
+      "signature": "func(request example.com/wire.Category, ctx context.Context) (ok bool, err error)",
+      "signatureDigest": "sha256:5f68e85237814e087662b0a9c53de990e1471d54a0943ff2ba7f0ed6bcdae12a",
+      "sourceRule": "work",
+      "spanName": "wire.Run",
+      "context": {
+        "strategy": "argument",
+        "index": 1
+      },
+      "errors": {
+        "record": true,
+        "indexes": [
+          1
+        ]
+      },
+      "attributes": [
+        {
+          "key": "code.operation",
+          "from": {
+            "symbol": "id"
+          },
+          "kind": "string",
+          "classification": "internal",
+          "allow": true,
+          "symbolValue": "example.com/wire.Run"
+        },
+        {
+          "key": "deployment.code",
+          "from": {
+            "constant": 9223372036854775807
+          },
+          "kind": "integer",
+          "classification": "internal",
+          "allow": true
+        },
+        {
+          "key": "failure.class",
+          "from": {
+            "errorType": "err"
+          },
+          "kind": "string"
+        },
+        {
+          "key": "input.text",
+          "from": {
+            "argument": "request"
+          },
+          "kind": "string",
+          "stringer": true
+        },
+        {
+          "key": "output.ok",
+          "from": {
+            "result": "ok"
+          },
+          "kind": "bool",
+          "classification": "public"
+        }
+      ],
+      "location": {
+        "file": "ops/work.go",
+        "line": 17,
+        "column": 1
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "hooks/hooks.go",
+      "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    {
+      "path": "rules/hooks.otelc.yaml",
+      "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  ]
+}

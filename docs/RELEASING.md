@@ -3,6 +3,8 @@
 OTelPlan is pre-stable. This procedure prepares local candidate artifacts from an
 exact committed source revision. Public releases still require the remaining
 [release acceptance](13_ROADMAP.md#phase-6--stable-v1) work and maintainer review.
+Version strings below are examples, not a new release announcement. Check the
+existing tags and agree an unused candidate version before preparing a release.
 
 ## Prerequisites
 
@@ -43,8 +45,9 @@ The archive contains the executable, project license/README, CLI version JSON,
 Go build information, and `release.json` with source revision, toolchain, target,
 and commit epoch. `third_party/` contains the linked modules' original license,
 patent, and notice texts, plus the Go license/patent texts. Tar ordering, modes,
-ownership, timestamps, and gzip headers are normalized. Packaged README documentation links point to that exact source
-revision. Compare archives built from the same revision, version, toolchain,
+ownership, timestamps, and gzip headers are normalized. Packaged README
+documentation links point to that exact source revision. Compare archives built
+from the same revision, version, toolchain,
 and dependency inputs when checking reproducibility.
 
 ## Verify and review
@@ -62,7 +65,7 @@ Checksums detect changed bytes; publisher authenticity requires the release's
 separate provenance and verification procedure.
 
 Build information records embedded Go dependency versions. Standardized
-SBOM/provenance publication, changelog entries, and an actual RC cycle
+SBOM/provenance publication and an actual RC cycle
 remain release-preparation work. The utility creates local files; tagging and
 publishing require a reviewed maintainer action.
 
@@ -93,3 +96,72 @@ the pending standardized SBOM or provenance work.
 fixtures. It checks committed-source isolation, normalized inputs, checksums,
 reproducibility, output collision protection, and failure cleanup. Real toolchain
 archive builds supplement that test before accepting changes to packaging.
+
+## Candidate acceptance record
+
+Keep a reviewable record for one immutable candidate commit. A successful local
+packaging run alone does not satisfy [release acceptance](14_ACCEPTANCE_CRITERIA.md).
+
+- Select a reviewed source revision and unused version. Confirm the intended PRs
+  are merged by a maintainer; never publish an unreviewed stack as a release.
+- Review [compatibility](COMPATIBILITY.md), [backend support](OTELC_BACKEND.md),
+  [security guidance](SECURITY.md), and the [changelog](CHANGELOG.md). Name policy,
+  lock, CLI JSON, diagnostic, Go, and backend compatibility for the candidate.
+  Pre-stable schema identities do not become a stable guarantee through tagging.
+- Record commands, tool versions, backend source/digest, and exit statuses for
+  unit, race, vet, lint, quality-gate, vulnerability, and full real pinned-backend
+  normal/race suites. Skipped E2E tests are not acceptance evidence. Record any
+  external preparation failure separately from an application assertion failure.
+- Review the static-analysis and runtime performance reports, their exact input
+  revisions, raw measurements, and limits. Resolve any pending lint approval
+  before calling a benchmark accepted. Do not derive performance claims from a
+  successful build or export-free timing alone.
+- Build the same candidate twice and compare archive bytes. Verify both checksum
+  inventories, license texts, source revision, embedded version, and normalized
+  metadata. Exercise the extracted CLI, not only a checkout-built executable.
+- In disposable fixtures, run the documented policy/lock/compile/locked-build
+  workflow and inspect actual trace parentage, attributes, and returned errors.
+  Include independent cold-cache online and dependency-prepared offline cases.
+  Confirm source/manifests stay unchanged and check/diff do not write project
+  files. Retain results without application source or sensitive capture values.
+- Review the SBOM and verifiable provenance described below. Complete a real RC
+  feedback/fix/retest cycle before stable publication. Record unresolved upstream
+  limits and maintainer acceptance; no fixed calendar substitutes for these gates.
+
+Local evidence may be collected while hosted Actions are unavailable. It does
+not establish that hosted checks passed or that a release was published.
+
+## SBOM and provenance design
+
+This is the intended publication design. No SBOM generator, signed attestation,
+or release-publishing workflow is implemented by the current packaging script.
+
+Generate an SPDX JSON SBOM for the exact candidate executable and archive using
+a reviewed, pinned generator. Validate its schema and compare module identities
+with `build-info.txt` and `third_party/modules.txt`; include the Go runtime and
+artifact hashes, preserve applicable license identities, and distinguish build
+tools from bundled runtime dependencies. Exclude OTelC from bundled components
+because it is installed separately. Fail publication on missing or inconsistent
+components. Record the generator identity, then checksum the final SBOM alongside
+the archive. A build-info listing or notice inventory is not a standardized SBOM.
+
+Provenance must bind final artifact digests to the source revision, selected Go
+toolchain, build entry point/parameters, dependency identities, and authenticated
+builder. Follow the [SLSA provenance model](https://slsa.dev/spec/v1.1/provenance)
+when defining those fields. Allowlist useful build inputs; do not dump environment
+variables, credentials, private paths, or application metadata. The local
+`release.json` is unsigned metadata and does not prove publisher identity.
+
+Use a manually initiated trusted workflow for eventual publication. Separate
+read-only quality/build jobs from the final protected publishing job, pin actions
+and tools to reviewed identities, and grant publishing/attestation permissions
+only where required. Attest the final unchanged archive and SBOM bytes using
+[GitHub artifact attestations](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations).
+Document consumer verification of digest, repository, workflow identity, and
+source revision, including a negative verification test. Attestation generation
+does not itself establish a SLSA assurance level.
+
+Implement and test this workflow as a separate reviewed change when hosted
+capacity and maintainer publication approval are available. Until then, preserve
+local evidence and leave publication pending. Do not upload artifacts, create
+tags/releases, or request write-capable credentials from PR quality jobs.

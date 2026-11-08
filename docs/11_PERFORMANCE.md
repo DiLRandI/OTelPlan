@@ -66,7 +66,7 @@ for 100 functions importing context. Record the revision, Go version, platform,
 CPU, commands, and samples with any published result. The CLI opts into
 this cache only with `--cache-dir`; these engine benchmark timings are not a
 CLI measurement. The medium-project CLI profile below measures the scan command
-separately. Generated-hook runtime measurements are maintained as separate work.
+separately. Generated-hook runtime measurements are documented below.
 
 ## Large-plan regression workload
 
@@ -125,3 +125,74 @@ measurement and its command. Allocations describe the Go process running
 not peak resident memory. This synthetic fixture measures one medium-project
 shape. CGO, external dependencies, workspaces, call-graph suggestions, and actual
 application complexity need their own profiles before broader latency claims.
+
+## Generated business-span benchmarks
+
+```sh
+OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/benchmark-runtime.sh 3
+```
+
+The optional argument is a positive sample count, defaulting to three. The
+backend must match the supported `otelc v1.1.0` pin. The harness uses a disposable
+copy of the synthetic fixture, prepares pinned dependencies, and builds the CLI,
+a normal Go baseline, a verified generated bundle, and an instrumented binary
+through `otelplan build`. Preparation may download dependencies. It checks that
+fixture source and module files remain unchanged and removes temporary files on
+exit. Run it without competing local test/build workloads when collecting data.
+
+Before timing, both binaries check original return behavior. The instrumented
+binary also verifies exactly three business spans with the expected scope,
+internal kind, parent/trace relationships, explicit attributes, and returned
+error event/status. The `--instrumented` fixture flag changes verification and
+labels only; the fixture never creates business spans itself.
+
+The six cases combine SDK `NeverSample` and `AlwaysSample` with zero attributes,
+two primitive argument attributes, and a preallocated returned error. Provider
+setup and the parent span are outside timing. No span processor or exporter is
+installed during measurements. Targets use `//go:noinline` so baseline calls
+are retained. Each sample reports iterations, `ns/op`, `B/op`, and `allocs/op` in
+Go benchmark format. The harness prints revision/worktree state, Go/platform/CPU
+identity, and backend version/digest. Compile/build time is excluded.
+
+These are single-threaded synthetic business-operation measurements, not an
+exporter benchmark or an application throughput claim. Record raw samples and
+the full environment before comparing revisions. No regression threshold is
+enforced until a stable baseline and an agreed statistical policy exist.
+
+## Initial runtime baseline
+
+Measured on 2026-10-31 at clean revision
+`bc94f3cd84abad178e37a00a0764ed40bea612fe`, based on runtime fix #286.
+Go 1.27.3, Linux/amd64, Intel Core i7-11800H. The process was pinned to logical
+CPU 15 with `GOMAXPROCS=1`; no other Go test/build workload ran concurrently.
+OTelC v1.1.0 was built from `449ee08a682586adb177e4402845ed404565879f`, executable
+SHA-256 `39830dc7c191b2368720061515606e3d21a770b1dd05595168ea60529b2728fa`.
+
+```sh
+GOMAXPROCS=1 OTELPLAN_OTELC=/absolute/path/to/otelc \
+  taskset -c 15 sh scripts/benchmark-runtime.sh 3
+```
+
+Medians of three samples per case follow. Bytes and allocations are for the
+instrumented call; all baseline cases reported zero bytes and allocations.
+Added time is the difference between the corresponding medians.
+
+| Sampling | Operation | Baseline ns/op | Instrumented ns/op | Added ns/op | B/op | Allocs/op |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| nonrecording | zero | 4.910 | 540.5 | 535.6 | 392 | 11 |
+| nonrecording | two | 4.966 | 581.2 | 576.2 | 440 | 12 |
+| nonrecording | error | 7.920 | 597.0 | 589.1 | 424 | 12 |
+| recording | zero | 4.912 | 728.6 | 723.7 | 776 | 11 |
+| recording | two | 4.970 | 1050.0 | 1045.0 | 1144 | 16 |
+| recording | error | 7.770 | 1253.0 | 1245.2 | 1296 | 17 |
+
+[Raw samples](benchmarks/runtime-go1.27.3-linux-amd64.txt) retain every result and
+the measured revision. Provider/parent setup, compilation, and exporter work are
+outside timing. The measured calls include operation dispatch and return checks
+in both binaries. Added time includes the pinned backend trampoline, generated
+lifecycle/context work, and OpenTelemetry SDK work.
+
+Three sequential samples on one developer machine establish an initial workload
+baseline. They do not establish application latency or a regression threshold.
+CPU frequency, scheduling, and background activity can affect comparisons.
+The separate medium-project CLI baseline above measures scan performance.

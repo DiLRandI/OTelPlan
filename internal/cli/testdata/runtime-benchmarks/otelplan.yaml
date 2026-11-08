@@ -1,0 +1,19 @@
+apiVersion: otelplan.io/v1alpha1
+kind: InstrumentationPlan
+backend: {name: otelc, version: v1.1.0}
+project: {packages: [./...]}
+rules:
+  - id: zero
+    match: {symbols: [example.com/runtimebench/internal/operation.Zero]}
+    span: {name: business.zero}
+  - id: two
+    match: {symbols: [example.com/runtimebench/internal/operation.Two]}
+    span: {name: business.two}
+    attributes:
+      - key: operation.enabled
+        from: {argument: enabled}
+      - key: operation.count
+        from: {argument: count}
+  - id: error
+    match: {symbols: [example.com/runtimebench/internal/operation.Fail]}
+    span: {name: business.error}

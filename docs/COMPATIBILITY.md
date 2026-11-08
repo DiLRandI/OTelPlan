@@ -102,17 +102,78 @@ freshness; default builds and compile do not. Generate the lock with matching
 effective Go flags if adding options such as `-trimpath`; see [build inputs](CLI.md).
 See [resolution/build ownership](09_LOCKFILE_REPRODUCIBILITY.md#resolution-and-build-ownership).
 
-## Requirements before stable v1
+## Stable-line commitments
 
-A stable release must name its supported policy, lock, CLI JSON, Go, and backend
-versions. Within a stable schema, preserve accepted field meanings and diagnostic
-code categories; document additive changes and any new validation requirements.
-An incompatible format needs an explicit version decision and migration steps,
-not silent reinterpretation. Older tools are not promised to accept newer fields.
-Security fixes may reject previously accepted unsafe inputs and must explain the
-impact in release notes.
+The following policy takes effect with the first stable CLI release and applies
+through its `1.x` line. It does not retroactively make pre-stable releases stable
+or announce that release acceptance is complete.
 
-Future format migrations must document the source and destination versions,
-available commands or explicit edits, expected drift and exit codes, backup and
-rollback procedure, and before/after regression coverage. These commitments and
-an actual release-candidate cycle remain part of [stable-v1 acceptance](13_ROADMAP.md#phase-6--stable-v1).
+The first stable CLI retains the policy, lock, and CLI JSON identifiers in the
+current-contract table. A tool release does not rename those formats. Existing
+files do not need an `apiVersion` edit solely because the CLI reaches `1.0`.
+Introducing another format identifier requires its implemented reader/writer and
+documented migration path; changing a label alone is never a migration.
+
+### Policy
+
+Newer stable tools continue to accept valid policies using supported fields and
+retain their selector, exclusion, template, context, error, and capture meanings.
+Do not remove fields, change their types, reinterpret defaults, or change rule
+precedence under an existing format identity. Capture remains explicit, policy
+stays backend-independent, and unsupported targets fail validation.
+
+Optional fields and capabilities may be added with documented minimum tool and
+backend versions. Older tools are not promised to accept those additions; their
+strict unknown-field/version rejection remains intentional. A policy using only
+older supported features does not have to opt into a new feature to keep working.
+
+### Locks
+
+Stable tools retain the meaning and types of supported lock fields, exact symbol
+identity, and the distinction between resolution and independently owned build
+metadata. Refresh must not erase another phase's identity. Canonical encoding
+remains deterministic for identical normalized inputs; line/column movement
+remains diagnostic metadata, while source-file movement remains drift.
+
+Read compatibility does not imply freshness after source, policy, Go environment,
+backend, or artifact changes. A necessary digest/resolution correctness fix must
+document expected drift and explicit review/refresh steps. Check/diff stay
+read-only, malformed locks fail safely, and checks do not silently migrate files.
+Unknown fields or versions are rejected rather than guessed at.
+
+### CLI JSON and diagnostics
+
+Keep existing command/flag meanings, process-exit categories, JSON envelope keys
+and types, and supported command-data fields compatible. Additive commands,
+optional flags, and optional JSON fields may be introduced. Consumers must ignore
+unknown response fields and object-key order; optional `data`/`details` remain
+optional. Text formatting and diagnostic prose are not machine contracts.
+
+Existing diagnostic codes retain their category and meaning and are not reused
+for unrelated failures. New codes and warnings may be added. Release notes must
+identify new validation that can change an exit, including warnings that fail
+`--strict`, with actionable remediation. Security/safety fixes may reject inputs
+previously accepted unsafely; explain the affected behavior rather than silently
+weakening checks to preserve it.
+
+### Support boundaries and migrations
+
+Format compatibility does not extend the tested Go/platform/backend matrix or
+promise a public Go SDK. Backend versions remain exact pins; no silent upgrade,
+module-mode fallback, or capability substitution is allowed. Document support
+changes and verify them independently of format compatibility.
+
+Incompatible changes to existing command/flag meanings or exit categories require
+a new major CLI line. An incompatible policy, lock, or JSON format requires a new
+`apiVersion`. Each change needs release notes and a migration guide naming
+source/destination versions, supported
+commands or exact edits, expected drift/exits, backup/rollback, and before/after
+regression coverage. Preserve the old input for review; never rewrite it as a
+side effect of inspect, validate, check, diff, or locked build. The existing
+review/refresh procedure above is the current upgrade workflow, not an automatic
+format converter.
+
+The [release candidate record](RELEASING.md#candidate-acceptance-record) must verify
+these commitments against independent policy/lock/CLI contracts and real backend
+behavior before stable publication. The [remaining roadmap](13_ROADMAP.md#phase-6--stable-v1)
+still requires an actual RC feedback and acceptance cycle.

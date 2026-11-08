@@ -39,6 +39,7 @@ vuln:
 
 test-gates:
 	@sh scripts/test-quality-gates.sh "$(GOLANGCI_LINT_VERSION)"
+	@sh scripts/test-release-linux.sh
 
 check: test test-race vet lint test-gates
 

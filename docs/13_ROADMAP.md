@@ -14,14 +14,17 @@ This is a pre-stable implementation, not a completed release.
 | Foundation | Semantic discovery, policy matching, exact resolution, exclusions, inspect/explain implemented. |
 | Safety/reproducibility | Static context/error/capture checks, static recursion and manual-span warnings, configurable trace-volume thresholds, canonical policy/build fingerprints, resolution locks and drift implemented. |
 | OTelC backend | Real rules/hooks/attributes and isolated compile/build implemented. Some generic, variadic, main-package, and panic capabilities are limited by the documented pin/scoping constraints. |
-| Hardening | Workspaces, local replacements, tags, isolated vendor builds, advisory call graphs, safe verbose diagnostics, and opt-in engine cache implemented. Opt-in CLI cache controls and read-only cache reuse are implemented. Bounded writable cache retention is implemented. Runtime benchmark/report, security verification, and Linux release confidence remain; the authoritative lint gate is clean. |
+| Hardening | Workspaces, local replacements, tags, isolated vendor builds, advisory call graphs, safe verbose diagnostics, and opt-in engine cache implemented. Opt-in CLI cache controls and read-only cache reuse are implemented. Bounded writable cache retention, CLI/runtime benchmark harnesses, and initial synthetic performance reports are implemented. Candidate-specific performance/security review and Linux release acceptance remain. |
 | Initialization | Deterministic scoring/evidence, exact starter policy, interactive review, and no default capture implemented. Pinned full-source Memos and Task regressions cover web/API and CLI workflow operations, determinism, exact resolution, and source safety. |
-| Stable v1 | Contract stability/migration commitments, release candidate cycle, security review, complete performance report, and release automation remain. |
+| Stable v1 | Compatibility/upgrade guidance and stable-line contract commitments are documented. Local Linux archives, checksum/notice verification, initial CLI/runtime performance reports, and a current capability changelog are implemented. Candidate-specific contract/acceptance/performance/security review, standardized SBOM/verifiable provenance publication, and an RC cycle remain. |
 
 Documentation consolidation and lint cleanup are complete. Immediate priorities
 are remaining feature/performance/safety acceptance work. Linux is the current
 support and release-verification target. Lightweight OSS/release hygiene follows. Original phase requirements below remain
 the intended scope; an implemented feature still needs its release evidence.
+Use the [candidate acceptance record](RELEASING.md#candidate-acceptance-record)
+to review one immutable revision. The documented publishing design is not an
+implemented release workflow.
 
 ## Phase 1 — Foundation
 

@@ -19,6 +19,7 @@ from remaining acceptance gates.
 | Reproducibility | [Lockfile and artifact ownership](09_LOCKFILE_REPRODUCIBILITY.md) |
 | Compatibility | [Current contracts, automation, and upgrade workflow](COMPATIBILITY.md) |
 | Testing | [Local checks, CI, and integration tests](10_TEST_STRATEGY.md) |
+| Candidate archives | [Linux packaging, checksums, and review](RELEASING.md) |
 | Performance | [Requirements and benchmark commands](11_PERFORMANCE.md) |
 | Roadmap | [Implementation status and remaining work](13_ROADMAP.md) |
 | Acceptance criteria | [Release-blocking requirements](14_ACCEPTANCE_CRITERIA.md) |

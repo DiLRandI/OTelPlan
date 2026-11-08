@@ -53,11 +53,12 @@ the pinned [hook API](https://github.com/open-telemetry/opentelemetry-go-compile
 and [trampoline implementation](https://github.com/open-telemetry/opentelemetry-go-compile-instrumentation/blob/v1.1.0/tool/internal/instrument/trampoline.go).
 Backend argument indexes include receivers; policy indexes exclude them.
 
-Each invocation owns its span state. Before hooks inherit the selected parent
-context and replace the application context argument. Nil context falls back to
-`context.Background`. Policy `context.mode: root` permits a root only when no
-context argument is available; it does not force a root for declarations that
-already accept context. After hooks record configured errors and end the span.
+Each invocation owns its span state. Before hooks inherit a non-nil selected
+parent context and replace the application context argument. Nil argument-context
+invocations skip instrumentation, leave the argument nil, and do not run attribute
+accessors. Policy `context.mode: root` permits a root only when no context argument
+is available; it does not force a root for declarations that already accept
+context. After hooks record configured errors and end any span that was started.
 
 The instrumentation scope is `otelplan.io/business` with the supplied runtime
 version. Generated hooks install no SDK or exporter. The application must

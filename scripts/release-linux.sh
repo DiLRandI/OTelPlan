@@ -64,6 +64,18 @@ done
 sed -E "s|\]\((docs/[^)]*)\)|](https://github.com/DiLRandI/OTelPlan/blob/$source_revision/\1)|g" \
   "$staging/source/README.md" > "$payload/README.md"
 
+notices="$staging/source/third_party"
+[ -d "$notices" ] && [ ! -L "$notices" ] || fail 'third-party notices are missing'
+[ -z "$(find "$notices" ! -type f ! -type d -print)" ] || fail 'third-party notices must be regular files'
+(
+  cd "$notices"
+  sha256sum --strict -c SHA256SUMS > /dev/null
+) || fail 'third-party notice checksum verification failed'
+go_root=$(GOENV=off GOWORK=off GOFLAGS= GOTOOLCHAIN=local go env GOROOT)
+for document in LICENSE PATENTS; do
+  cmp -s "$notices/go/$document" "$go_root/$document" || fail 'Go license texts differ; review third-party notices'
+done
+
 (
   cd "$staging/source"
   GOENV=off GOWORK=off GOFLAGS= GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 \
@@ -79,6 +91,13 @@ chmod 0755 "$payload/otelplan"
     go version -m ./otelplan > build-info.txt
   PATH= ./otelplan version --format=json > version.json
 )
+awk '$1 == "dep" { print $2 " " $3 } $1 == "=>" { exit 1 }' \
+  "$payload/build-info.txt" > "$staging/modules.unsorted" || fail 'release dependencies must not use replacements'
+sort "$staging/modules.unsorted" > "$staging/modules.txt"
+cmp -s "$notices/modules.txt" "$staging/modules.txt" || fail 'linked dependencies differ; review third-party notices'
+cp -R "$notices" "$payload/third_party"
+find "$payload/third_party" -type d -exec chmod 0755 {} +
+find "$payload/third_party" -type f -exec chmod 0644 {} +
 cat > "$payload/release.json" <<MANIFEST
 {
   "version": "$release_version",

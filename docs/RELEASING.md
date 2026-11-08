@@ -41,8 +41,9 @@ SHA256SUMS
 
 The archive contains the executable, project license/README, CLI version JSON,
 Go build information, and `release.json` with source revision, toolchain, target,
-and commit epoch. Tar ordering, modes, ownership, timestamps, and gzip headers are
-normalized. Packaged README documentation links point to that exact source
+and commit epoch. `third_party/` contains the linked modules' original license,
+patent, and notice texts, plus the Go license/patent texts. Tar ordering, modes,
+ownership, timestamps, and gzip headers are normalized. Packaged README documentation links point to that exact source
 revision. Compare archives built from the same revision, version, toolchain,
 and dependency inputs when checking reproducibility.
 
@@ -60,10 +61,33 @@ version, then run the candidate workflow/trace checks before publication.
 Checksums detect changed bytes; publisher authenticity requires the release's
 separate provenance and verification procedure.
 
-Build information records embedded Go dependency versions. Third-party notices,
-standardized SBOM/provenance publication, changelog entries, and an actual RC cycle
+Build information records embedded Go dependency versions. Standardized
+SBOM/provenance publication, changelog entries, and an actual RC cycle
 remain release-preparation work. The utility creates local files; tagging and
 publishing require a reviewed maintainer action.
+
+## Maintain redistribution notices
+
+The committed [notice inventory](../third_party/README.txt) records the exact
+linked module versions and upstream sources. License files are copied unchanged.
+Packaging verifies their checksums, compares the selected Go installation's
+license/patent texts, and compares embedded binary dependencies with
+`third_party/modules.txt`. It rejects module replacements. A dependency change
+requires reviewing and updating notices, even if the build otherwise succeeds.
+The inventory covers the CLI executable; OTelC is installed separately and is not
+bundled. No online license lookup happens during packaging.
+
+After reviewing updated texts and the linked dependency set, regenerate the
+inventory from the checkout root:
+
+```sh
+(cd third_party && find . -type f ! -name SHA256SUMS -printf '%P\n' |
+  LC_ALL=C sort | while IFS= read -r file; do sha256sum "$file"; done) > third_party/SHA256SUMS
+```
+
+The selected Go 1.27.x patch must have matching license/patent texts. Review any
+changes rather than bypassing the check. This notice inventory does not replace
+the pending standardized SBOM or provenance work.
 
 `make test-gates` runs the fast packaging self-test with isolated Git/fake-tool
 fixtures. It checks committed-source isolation, normalized inputs, checksums,

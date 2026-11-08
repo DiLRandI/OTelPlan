@@ -69,6 +69,35 @@ SBOM/provenance publication and an actual RC cycle
 remain release-preparation work. The utility creates local files; tagging and
 publishing require a reviewed maintainer action.
 
+### Recorded packaged-binary exercise
+
+The [Go 1.27.3 Linux/amd64 evidence](release-evidence/packaged-cli-go1.27.3-linux-amd64.json)
+records six local workflows using the executable extracted from an archive of
+commit `56238b43354c9e65b25b6d9217e01d24cc7c5ebd`, with test version
+`v0.0.0-rc.1`. Package, feature, and hexagonal layouts each passed independently
+in cold-cache online and dependency-prepared offline modes. This records that
+specific input revision, not a public RC or a claim about later changes.
+
+The record includes the archive/backend/application digests, exact selections,
+workflow commands, and assertion scope. The CLI came from the CGO-disabled
+release archive; its instrumented application outputs used `-race`. Source-suite
+race checks remain separate. Both archive builds had identical bytes. The offline
+run rejected discovery before preparation, then made zero requests to the
+rejecting HTTP(S) proxy during actual workflows. This is not an OS network sandbox.
+
+To repeat the exercise, package that revision with the recorded toolchain and
+backend, then copy `common` and each layout from the
+[architecture fixtures](../internal/cli/testdata/architectures/README.md) into
+disposable projects. Use separate fresh module caches for the two modes. Prepare
+offline dependencies with `go mod download all` in a separate seed copy; that
+explicit preparation may update its copied `go.sum`. Actual workflow projects
+retain their original manifests. Execute the record's workflow with the extracted
+CLI, `--format=json`, an external `--cache-dir`, and
+`GOFLAGS='-race -buildvcs=false'`. Retain `--offline` after preparation and apply
+the fixture's rejecting-proxy controls. Compare project bytes, modes, mtimes,
+inodes, and file membership around read-only/build commands. Verify actual trace
+output, not just process success.
+
 ## Maintain redistribution notices
 
 The committed [notice inventory](../third_party/README.txt) records the exact

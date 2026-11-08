@@ -1,0 +1,191 @@
+{
+  "status": "passed_local_packaged_cli_acceptance",
+  "date": "2026-11-08",
+  "source_revision": "56238b43354c9e65b25b6d9217e01d24cc7c5ebd",
+  "version": "v0.0.0-rc.1",
+  "toolchain": "go version go1.27.3 linux/amd64",
+  "target": "linux/amd64",
+  "archive_sha256": "66e12244352540b870b4b1326a875484c8dbfdde082d148a4b630f58c727cb62",
+  "backend": {
+    "version": "v1.1.0",
+    "source_revision": "449ee08a682586adb177e4402845ed404565879f",
+    "sha256": "39830dc7c191b2368720061515606e3d21a770b1dd05595168ea60529b2728fa"
+  },
+  "cli_release_binary_race_instrumented": false,
+  "application_binaries_race_instrumented": true,
+  "offline": {
+    "independent_empty_module_cache": true,
+    "cold_discovery_rejected_missing_dependencies": true,
+    "preparation": "go mod download all in a disposable fixture copy before denial",
+    "preparation_manifest_changes": [
+      "go.sum"
+    ],
+    "module_downloads": "disabled for actual workflows",
+    "rejecting_proxy_requests": 0,
+    "limitation": "Proxy-aware HTTP(S) denial is not an OS network sandbox."
+  },
+  "scenarios": [
+    {
+      "mode": "cold-cache-online",
+      "layout": "package",
+      "status": "passed",
+      "exact_symbols": {
+        "checkout": "example.com/architecture/internal/service.(*Order).Submit",
+        "payment": "example.com/architecture/internal/service.(User).Authorize"
+      },
+      "application_race": true,
+      "trace_parentage": true,
+      "returned_error": true,
+      "no_capture": true,
+      "source_unchanged": true,
+      "deterministic_lock": true,
+      "locked_preview_and_build": true,
+      "build_flag_drift": true,
+      "line_move_no_drift": "passed",
+      "application_digest": "sha256:5b1642de78dfd1657bd52c0f682509402cc565633fab00768cb307ce5475b2dd"
+    },
+    {
+      "mode": "cold-cache-online",
+      "layout": "feature",
+      "status": "passed",
+      "exact_symbols": {
+        "checkout": "example.com/architecture/internal/order.Submit",
+        "payment": "example.com/architecture/internal/payment.Authorize"
+      },
+      "application_race": true,
+      "trace_parentage": true,
+      "returned_error": true,
+      "no_capture": true,
+      "source_unchanged": true,
+      "deterministic_lock": true,
+      "locked_preview_and_build": true,
+      "build_flag_drift": true,
+      "line_move_no_drift": "not_exercised_for_this_layout",
+      "application_digest": "sha256:780d5dc5dc5336c001b521b86543879608a1c9dafe4a6b1102eb93249c179fc8"
+    },
+    {
+      "mode": "cold-cache-online",
+      "layout": "hexagonal",
+      "status": "passed",
+      "exact_symbols": {
+        "payment": "example.com/architecture/internal/adapters.(*Gateway).Authorize",
+        "checkout": "example.com/architecture/internal/application.(Checkout).Submit"
+      },
+      "application_race": true,
+      "trace_parentage": true,
+      "returned_error": true,
+      "no_capture": true,
+      "source_unchanged": true,
+      "deterministic_lock": true,
+      "locked_preview_and_build": true,
+      "build_flag_drift": true,
+      "line_move_no_drift": "not_exercised_for_this_layout",
+      "application_digest": "sha256:5cea33e21bb93fd2a39cee592e90b2f5adb05edb5c892a0080bd9bb37f9964d7"
+    },
+    {
+      "mode": "prepared-cache-offline",
+      "layout": "package",
+      "status": "passed",
+      "exact_symbols": {
+        "checkout": "example.com/architecture/internal/service.(*Order).Submit",
+        "payment": "example.com/architecture/internal/service.(User).Authorize"
+      },
+      "application_race": true,
+      "trace_parentage": true,
+      "returned_error": true,
+      "no_capture": true,
+      "source_unchanged": true,
+      "deterministic_lock": true,
+      "locked_preview_and_build": true,
+      "build_flag_drift": true,
+      "line_move_no_drift": "passed",
+      "application_digest": "sha256:ec8b8afe00adc306eb96d14e87aa9d7899aaee2e0f0dc7e152dacf1618b96466"
+    },
+    {
+      "mode": "prepared-cache-offline",
+      "layout": "feature",
+      "status": "passed",
+      "exact_symbols": {
+        "checkout": "example.com/architecture/internal/order.Submit",
+        "payment": "example.com/architecture/internal/payment.Authorize"
+      },
+      "application_race": true,
+      "trace_parentage": true,
+      "returned_error": true,
+      "no_capture": true,
+      "source_unchanged": true,
+      "deterministic_lock": true,
+      "locked_preview_and_build": true,
+      "build_flag_drift": true,
+      "line_move_no_drift": "not_exercised_for_this_layout",
+      "application_digest": "sha256:42ec82046451711da64ca0d8873dd2a36a41a669bb1dc120bef138ad4f71dd55"
+    },
+    {
+      "mode": "prepared-cache-offline",
+      "layout": "hexagonal",
+      "status": "passed",
+      "exact_symbols": {
+        "payment": "example.com/architecture/internal/adapters.(*Gateway).Authorize",
+        "checkout": "example.com/architecture/internal/application.(Checkout).Submit"
+      },
+      "application_race": true,
+      "trace_parentage": true,
+      "returned_error": true,
+      "no_capture": true,
+      "source_unchanged": true,
+      "deterministic_lock": true,
+      "locked_preview_and_build": true,
+      "build_flag_drift": true,
+      "line_move_no_drift": "not_exercised_for_this_layout",
+      "application_digest": "sha256:e168ecc752beb1690b3e440c93c684d86b8f268cd4a63743d94bd09ef8605b21"
+    }
+  ],
+  "workflow": [
+    "scan ./...",
+    "inspect",
+    "explain <exact checkout symbol>",
+    "lock twice and compare bytes",
+    "validate --strict",
+    "lock --check",
+    "diff --check",
+    "lock --check with changed build tags expects exit 6",
+    "package-layout line-only movement retains lock freshness",
+    "compile --output <external temporary directory>",
+    "build --locked --dry-run -- -race -buildvcs=false -o <external binary> .",
+    "build --locked -- -race -buildvcs=false -o <external binary> .",
+    "run application and validate four exact spans plus returned error",
+    "lock --check and diff --check after build"
+  ],
+  "effective_goflags": "-race -buildvcs=false",
+  "checked_project_state": [
+    "file bytes",
+    "modes",
+    "mtimes",
+    "inodes",
+    "unexpected files"
+  ],
+  "checks": [
+    "exact symbols and policy provenance",
+    "deterministic repeated lock bytes",
+    "meaningful build-tag drift",
+    "line movement without drift in package layout",
+    "locked preview writes no binary",
+    "reported application digest matches actual bytes",
+    "root -> checkout -> payment -> downstream trace/parent continuity",
+    "business span kind/scope/error/event semantics",
+    "no attributes or private argument sentinel in output",
+    "returned error text unchanged",
+    "project state unchanged"
+  ],
+  "limitations": [
+    "No public candidate tag, asset upload or release was created.",
+    "No stable API/schema commitment is implied.",
+    "Trace assertion validates observable returned error text, not original error object identity.",
+    "Full source-suite race/vet/lint/vulnerability and backend evidence are separate from this extracted-binary exercise.",
+    "Fixture application builds omit -trimpath; each recorded digest identifies its own output. Cross-workspace application binary byte equality is not asserted."
+  ],
+  "probe_corrections": [
+    "Initial probe used symbolId instead of the documented symbol field; corrected before online scenarios completed.",
+    "All online scenarios passed before an overstrict offline preparation assertion stopped the first combined probe. An isolated diagnostic established that explicit preparation changes only seed go.sum; offline scenarios then passed independently."
+  ]
+}

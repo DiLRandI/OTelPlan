@@ -71,7 +71,7 @@ and [tags](https://github.com/DiLRandI/OTelPlan/tags) for existing records.
 ### Pending before a stable release
 
 - Standardized SBOM and provenance publication remain release-preparation work.
-- Runtime benchmark evidence and the remaining acceptance checks are pending.
+- Candidate performance review and the remaining acceptance checks are pending.
 - A reviewed release-candidate cycle, maintainer sign-off, and public release
   procedure are still required. The roadmap tracks this work in
   [Phase 6, stable v1](13_ROADMAP.md#phase-6--stable-v1).

@@ -36,6 +36,14 @@ and local/global skips.
 Tests never generate or overwrite goldens. Contract changes require an intentional,
 reviewed update to the checked-in expected JSON.
 
+`TestLockfileWireContracts` checks the fixed JSON under
+`internal/lockfile/testdata/wire-contracts/` against canonical marshaling, parsing,
+and persisted writes. It compares exact bytes, including indentation and the final
+newline. Unsorted typed inputs cover resolution-only and build-metadata sections,
+attribute sources, Stringer/static symbol metadata, source positions, and lossless
+maximum-width integer constants. The expected files are independent of model
+decoding and are never rewritten by the tests.
+
 ### Integration tests
 
 Build real fixture applications through the backend.

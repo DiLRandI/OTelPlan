@@ -342,6 +342,7 @@ func callOperation(ctx context.Context, kind operationKind, failure error) error
 }
 
 func sameFailure(got, want error) bool {
+	//nolint:err113,errorlint // Benchmark verification requires the original error instance; wrapping changes behavior.
 	return got == want
 }
 

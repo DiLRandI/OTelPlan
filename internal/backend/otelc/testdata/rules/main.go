@@ -45,6 +45,12 @@ func main() {
 		err = ops.Root()
 	case "nil":
 		err = ops.Outer(nil)
+	case "nil-preserved":
+		err = ops.PreserveNil(nil)
+	case "nil-method":
+		err = (&ops.Worker{}).PreserveNil(1, nil)
+	case "nil-panic":
+		recovered = catchNilPanic()
 	case "unrecorded":
 		err = ops.Unrecorded(ctx)
 	case "panic":
@@ -67,7 +73,11 @@ func main() {
 		output.ReturnedError = err.Error()
 	}
 	for _, span := range exporter.GetSpans() {
-		output.Spans = append(output.Spans, item{span.Name, span.SpanContext.SpanID().String(), span.Parent.SpanID().String(), span.SpanContext.TraceID().String(), span.InstrumentationScope.Name, span.InstrumentationScope.Version, span.Status.Code.String() == "Error", len(span.Events)})
+		output.Spans = append(output.Spans, item{
+			span.Name, span.SpanContext.SpanID().String(), span.Parent.SpanID().String(),
+			span.SpanContext.TraceID().String(), span.InstrumentationScope.Name,
+			span.InstrumentationScope.Version, span.Status.Code.String() == "Error", len(span.Events),
+		})
 	}
 	if err := json.NewEncoder(os.Stdout).Encode(output); err != nil {
 		panic(err)
@@ -81,5 +91,15 @@ func catchPanic(ctx context.Context) (value string) {
 		}
 	}()
 	ops.Crash(ctx)
+	return ""
+}
+
+func catchNilPanic() (value string) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			value = recovered.(string)
+		}
+	}()
+	ops.CrashIfNil(nil)
 	return ""
 }

@@ -6,7 +6,7 @@ Instrument a selected function/method as one OpenTelemetry span while preserving
 
 ## 2. Span lifecycle
 
-For every invocation:
+For an invocation with a usable context or an explicit root strategy:
 
 ```text
 enter
@@ -22,7 +22,7 @@ enter
 return
 ```
 
-Span end must occur exactly once.
+Each started span must end exactly once.
 
 ## 3. Tracer identity
 
@@ -53,9 +53,15 @@ If multiple context parameters exist:
 - default is validation error;
 - policy may select an index/path in a future schema.
 
-A nil context argument falls back to `context.Background` before starting a span.
-Ordinary targets receive the derived child context. Generic context replacement
-is unsupported by the pin and rejected; see [backend limits](OTELC_BACKEND.md).
+For an argument-context strategy, a nil context skips instrumentation for that
+invocation. Hooks leave the argument unchanged, create no business span, and do
+not evaluate attribute accessors. The original function keeps its nil-sensitive
+return and panic behavior. A nil argument does not opt into a root span.
+
+Non-nil arguments receive the derived child context. Explicit root strategies
+remain supported for targets without a usable context declaration. Generic
+context replacement is unsupported by the pin and rejected; see
+[backend limits](OTELC_BACKEND.md).
 
 ## 6. No context
 

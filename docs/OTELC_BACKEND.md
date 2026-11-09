@@ -34,7 +34,7 @@ The CI workflow uses the exact commit rather than a moving upstream branch.
 | Toolchain | OTelPlan requires Go 1.27.x. Generated runtime module declares Go 1.25 with pinned dependencies. |
 | Platforms | Linux is the supported platform, covered by CI and real backend E2E. |
 | Selection | Exact importable-package functions and value/pointer receiver methods with Go bodies. |
-| Context | Unique `context.Context` argument is replaced with the child context for ordinary declarations. Explicit root fallback is supported. |
+| Context | A non-nil unique `context.Context` argument is replaced with the child context. Nil arguments stay nil and skip instrumentation. Explicit root strategies are supported. |
 | Errors | Configured returned-error indexes are recorded with a bounded status description. Return values remain unchanged. |
 | Attributes | Explicit constants, static symbol metadata, and typed scalar argument/result field paths, including private/imported named types. |
 | Generics | Explicit root spans, returned errors, and captures through concrete types. Generic context replacement and unbound capture types are rejected. Some generic receiver methods fail under the pin. |
@@ -53,11 +53,12 @@ the pinned [hook API](https://github.com/open-telemetry/opentelemetry-go-compile
 and [trampoline implementation](https://github.com/open-telemetry/opentelemetry-go-compile-instrumentation/blob/v1.1.0/tool/internal/instrument/trampoline.go).
 Backend argument indexes include receivers; policy indexes exclude them.
 
-Each invocation owns its span state. Before hooks inherit the selected parent
-context and replace the application context argument. Nil context falls back to
-`context.Background`. Policy `context.mode: root` permits a root only when no
-context argument is available; it does not force a root for declarations that
-already accept context. After hooks record configured errors and end the span.
+Each invocation owns its span state. Before hooks inherit a non-nil selected
+parent context and replace the application context argument. Nil argument-context
+invocations skip instrumentation, leave the argument nil, and do not run attribute
+accessors. Policy `context.mode: root` permits a root only when no context argument
+is available; it does not force a root for declarations that already accept
+context. After hooks record configured errors and end any span that was started.
 
 The instrumentation scope is `otelplan.io/business` with the supplied runtime
 version. Generated hooks install no SDK or exporter. The application must

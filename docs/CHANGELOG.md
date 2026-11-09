@@ -6,6 +6,14 @@ OTelPlan is pre-stable. This entry records the current capability baseline; it
 does not reconstruct historical release entries. See the [GitHub releases](https://github.com/DiLRandI/OTelPlan/releases)
 and [tags](https://github.com/DiLRandI/OTelPlan/tags) for existing records.
 
+### Fixes
+
+- Preserve nil context arguments, nil-sensitive returns, and application panics.
+  Argument-context hooks now skip those invocations instead of creating an
+  implicit root span and replacing the argument. Existing generated bundles and
+  binaries need explicit regeneration to receive this fix; resolution locks keep
+  their existing meaning. See [runtime context semantics](07_RUNTIME_HOOKS.md#5-parent-context).
+
 ### Current baseline
 
 - `scan` and `init` discover Go declarations and produce policy starting points.

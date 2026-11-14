@@ -12,9 +12,10 @@ Use Linux/amd64, Go 1.27.x, Git, GNU tar/mv, gzip, and sha256sum. Select the tes
 Go toolchain before packaging. Prepare the committed module's dependencies with
 `go mod download`; the packaging build disables dependency and toolchain downloads.
 
-Run the [authoritative quality gates](10_TEST_STRATEGY.md), including real pinned
-backend tests and vulnerability checks, for the candidate source. Review the
-[compatibility contracts](COMPATIBILITY.md) and backend support matrix.
+Run the explicit [Release validation workflow](10_TEST_STRATEGY.md#6-authoritative-quality-gates),
+including real pinned backend tests and vulnerability checks, for the exact
+candidate source. Ordinary PR Check success is insufficient for release acceptance.
+Review the [compatibility contracts](COMPATIBILITY.md) and backend support matrix.
 
 ## Prepare artifacts
 

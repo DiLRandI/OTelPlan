@@ -178,10 +178,33 @@ with the export data emitted by Go 1.27.3. Tool absence, version mismatch,
 and real lint failures return nonzero. No broad suppression is an acceptable
 substitute for fixing a finding.
 
-GitHub Actions runs unit, race, vet, lint, pinned OTelC integration/E2E,
-dependency-vulnerability scans, and quality-gate tests as separate Linux jobs.
-The aggregate check requires every
-job to pass. Linux is the current support and release-verification target.
+GitHub Actions separates everyday development from release acceptance:
+
+- `Check` runs one Linux job for `go test ./...`, `go vet ./...`, and
+  `go build ./cmd/otelplan` on PRs and pushes to main. It leaves
+  `OTELPLAN_OTELC` empty, so optional real-backend, cold-cache architecture, and
+  OSS compatibility tests report skips through their existing test guards.
+  New commits cancel superseded Check runs for the same ref. The job has a
+  10-minute limit; aim for about five minutes.
+- `Release validation` is explicitly started with `workflow_dispatch` on the
+  intended committed ref. It retains full unit/race, vet, pinned lint,
+  vulnerability, quality-gate, and real pinned-backend normal/race checks.
+  Its `release-validation` aggregate requires every job and backend shard to
+  succeed. There are no publishing permissions or tag/release operations.
+
+After the workflow is merged into the default branch, select the candidate ref
+in Actions, or invoke and inspect it with:
+
+```sh
+gh workflow run release-validation.yml --ref CANDIDATE_BRANCH_OR_TAG
+gh run list --workflow release-validation.yml
+```
+
+Record the run's exact head SHA and every result in the candidate acceptance
+record. A green Check is development feedback and cannot authorize publication.
+Release acceptance also requires the documented performance review, reproducible
+packaging, extracted-binary exercise, SBOM/provenance, and RC review in
+[releasing](RELEASING.md). Linux is the support and release-verification target.
 
 The network-dependent vulnerability gate is explicit:
 
@@ -194,8 +217,8 @@ make vuln
 the pinned scanner version, scans source including tests, then checks all modules
 used by the CLI without filtering by reachability. Text mode returns nonzero for
 findings; JSON mode is not used as a pass/fail gate. Missing tools, scanner errors,
-and version mismatches also fail. CI requires this separate gate; `make check`
-keeps its existing local checks without adding a vulnerability-database lookup.
+and version mismatches also fail. Release validation requires this separate gate.
+`make check` keeps its existing local checks without adding a vulnerability-database lookup.
 Results depend on the current Go vulnerability database and supplement, rather
 than replace, source review and other security verification.
 
@@ -216,15 +239,40 @@ the workload into complementary shards, each running normal and race tests:
 ```sh
 OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh a-m
 OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh remaining
+OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh architecture
 ```
 
-The first selects top-level tests matching `^Test[A-M]`; the second skips exactly
-that pattern and retains every other test, example, and fuzz seed. Together they
-retain the full suite, including future test names. Each shard keeps the
-20-minute package timeout and 45-minute job limit. Matrix failures do not cancel
-the other shard, and the aggregate check requires both to pass. Quality-gate
-tests verify selection arguments, backend requirements, and failure propagation
-for both normal and race commands.
+The A-M shard selects top-level tests matching `^Test[A-M]` except
+`TestArchitectureTracesWithPinnedBackend`, which runs in its own CLI shard. The
+remaining shard skips `^Test[A-M]` and retains every other test, example, and fuzz
+seed. Together the three shards retain the full suite, including future names.
+Each uses verbose output to expose executed/skipped tests, disables result caching
+with `-count=1`, and keeps the 20-minute package timeout and 45-minute job limit.
+Matrix failures do not cancel another shard; the aggregate requires all three.
+Quality-gate tests verify arguments, backend requirements, and normal/race failure
+propagation for every shard.
+
+### Hosted timeout investigation and CI measurements
+
+The baseline is [main run 42559538581](https://github.com/DiLRandI/OTelPlan/actions/runs/42559538581)
+on revision `36e5cc2e61fb32d816b2bafe79f7a2fc3b023ab3`, Go 1.27.3,
+Linux GitHub-hosted runners. Its nine jobs took 33m42s from run creation to
+completion. Unit took 2m47s, race 6m18s, and the failing OTelC A-M job 33m33s.
+These are observed wall times, including setup and cleanup, not performance SLOs.
+
+The A-M normal CLI package passed in 738.260s. Its subsequent race run hit Go's
+cumulative 20-minute package timeout. At the alarm, active analysis/inspection
+tests had been running only 2-4 seconds; the architecture test had already
+finished. The stack dump shows Go package loading and subprocess waits, not a
+failed trace assertion or evidence of a stuck architecture build. The serial
+cold-cache architecture workload and later parallel tests shared one package
+budget. Isolating that workload gives each invocation its own unchanged budget.
+No product resource leak is established by this log. Retain further run evidence
+before treating the timeout correction as verified on hosted runners.
+
+The replacement Check run and its measured duration must be recorded after the
+PR executes. Local test timing is useful feedback but cannot establish hosted
+CI duration.
 
 Without `OTELPLAN_OTELC`, backend integration tests skip locally. A configured
 missing or incompatible executable fails. Do not treat skipped tests as trace

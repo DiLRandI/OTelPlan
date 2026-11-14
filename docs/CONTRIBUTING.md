@@ -63,8 +63,14 @@ behavior changes, also run the real pinned OTelC path and vulnerability gate:
 ```sh
 OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh a-m
 OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh remaining
+OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh architecture
 make vuln GOVULNCHECK=/absolute/path/to/govulncheck
 ```
+
+PR CI runs only tests without the optional backend, vet, and CLI build. Full
+[release validation](10_TEST_STRATEGY.md#6-authoritative-quality-gates) is a
+separate manual workflow; its success is required alongside the candidate's
+remaining release evidence before publication.
 
 Without `OTELPLAN_OTELC`, backend integration tests skip. Report that explicitly;
 ordinary unit-test success does not prove trace E2E behavior. Dependency preparation

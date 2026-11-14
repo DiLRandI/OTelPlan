@@ -270,9 +270,12 @@ budget. Isolating that workload gives each invocation its own unchanged budget.
 No product resource leak is established by this log. Retain further run evidence
 before treating the timeout correction as verified on hosted runners.
 
-The replacement Check run and its measured duration must be recorded after the
-PR executes. Local test timing is useful feedback but cannot establish hosted
-CI duration.
+The replacement [PR run 43648581990](https://github.com/DiLRandI/OTelPlan/actions/runs/43648581990)
+passed on `1f9af1428f38ab0a491fd1750c12724dcb849f70`. It took 2m57s from
+creation to completion, with one job running for 2m54s. Tests, vet, and CLI build
+all passed. This single hosted sample meets the five-minute development target;
+it excludes the deliberately separate release gates and does not prove their
+success. The local non-backend suite took 65.79s on Go 1.27.3.
 
 Without `OTELPLAN_OTELC`, backend integration tests skip locally. A configured
 missing or incompatible executable fails. Do not treat skipped tests as trace

@@ -272,10 +272,25 @@ before treating the timeout correction as verified on hosted runners.
 
 The replacement [PR run 43648581990](https://github.com/DiLRandI/OTelPlan/actions/runs/43648581990)
 passed on `1f9af1428f38ab0a491fd1750c12724dcb849f70`. It took 2m57s from
-creation to completion, with one job running for 2m54s. Tests, vet, and CLI build
+creation to completion, with one job running for 2m54s on Go 1.27.4. Tests, vet, and CLI build
 all passed. This single hosted sample meets the five-minute development target;
 it excludes the deliberately separate release gates and does not prove their
 success. The local non-backend suite took 65.79s on Go 1.27.3.
+
+Local real-backend verification of the CI slice passed all three shards in both
+normal and race modes with Go 1.27.3, `GOMAXPROCS=4`, and OTelC v1.1.0 built
+from the pinned source. Architecture took 309.44s, A-M 1640.08s, and remaining
+385.82s, each including both modes. The A-M CLI package took 636.046s normally
+and 1001.021s under race, within its unchanged 1200s budget. Other local Go
+checks ran concurrently, so these are compatibility and timeout-budget evidence,
+not hosted duration or benchmark claims. The Go source and runner were unchanged
+by the documentation-only `29d4942` update during this run.
+
+Go 1.27.3 now fails the vulnerability gate; the patched-toolchain baseline and
+separate Go 1.27.4 architecture evidence are in
+[PR #306](https://github.com/DiLRandI/OTelPlan/pull/306). Full hosted manual
+release validation remains unverified until the workflow is available on main.
+
 
 Without `OTELPLAN_OTELC`, backend integration tests skip locally. A configured
 missing or incompatible executable fails. Do not treat skipped tests as trace

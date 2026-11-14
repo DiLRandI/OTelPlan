@@ -25,16 +25,18 @@ Current readiness work, in priority order:
 
 | Work | Status and next evidence |
 | --- | --- |
-| Everyday CI | [PR #305](https://github.com/DiLRandI/OTelPlan/pull/305) awaits review. One job runs tests, vet, and CLI build; full validation moves to a manual workflow. Hosted Check passed in 2m57s versus the 33m42s failing baseline. Three-shard real-backend results are still being collected; manual hosted release validation awaits workflow availability on main. |
+| Everyday CI | [PR #305](https://github.com/DiLRandI/OTelPlan/pull/305) awaits review. One job runs tests, vet, and CLI build; full validation moves to a manual workflow. Hosted Check passed in 2m57s versus the 33m42s failing baseline. All three local real-backend normal/race shards passed with unchanged timeouts. Manual hosted release validation awaits workflow availability on main. |
 | Go review | Pending a structured package-by-package review of the current revision. Existing focused refactors do not establish whole-codebase completion. |
 | Documentation | Reassess navigation, overlapping specifications, and historical instructions after CI and Go review. |
 | Release | Candidate-specific acceptance/security/performance review, SBOM/provenance, protected publishing implementation, and a complete v1.0 RC cycle remain. No tag, release, or merge is authorized. |
 
-Next executable task is to finish the focused CI verification and address the
-fresh Go 1.27.3 vulnerability-gate failure, then begin the Go review. Scanner
-v1.9.0 reported `GO-2026-6859`; the official advisory fixes the supported line in
-Go 1.27.4. Do not suppress this finding. Expensive tests remain required release
-evidence. See [CI execution and timeout evidence](10_TEST_STRATEGY.md#6-authoritative-quality-gates).
+CI simplification is ready for maintainer review. The patched Go baseline is
+[PR #306](https://github.com/DiLRandI/OTelPlan/pull/306); focused policy and
+resolver review changes are [#307](https://github.com/DiLRandI/OTelPlan/pull/307)
+and [#308](https://github.com/DiLRandI/OTelPlan/pull/308), each based on #305.
+Continue the structured Go review without merging these PRs. Expensive tests
+remain required release evidence. See
+[CI execution and timeout evidence](10_TEST_STRATEGY.md#6-authoritative-quality-gates).
 
 Remaining feature/performance/safety acceptance work follows. Linux is the current
 support and release-verification target. Lightweight OSS/release hygiene follows. Original phase requirements below remain

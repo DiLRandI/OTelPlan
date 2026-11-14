@@ -8,7 +8,7 @@ existing tags and agree an unused candidate version before preparing a release.
 
 ## Prerequisites
 
-Use Linux/amd64, Go 1.27.x, Git, GNU tar/mv, gzip, and sha256sum. Select the tested
+Use Linux/amd64, Go 1.27.4 or a later 1.27.x patch, Git, GNU tar/mv, gzip, and sha256sum. Select the tested
 Go toolchain before packaging. Prepare the committed module's dependencies with
 `go mod download`; the packaging build disables dependency and toolchain downloads.
 

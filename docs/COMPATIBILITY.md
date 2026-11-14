@@ -14,7 +14,7 @@ versions are separate identities.
 | CLI JSON | `apiVersion: otelplan.io/cli/v1alpha1`. Common envelope with command-specific data; see [CLI contracts](CLI.md#json-and-diagnostics). |
 | Diagnostics | Stable `OTP` category codes and process exits. Message wording is for humans; codes and exits have different purposes. |
 | Backend | Exact OTelC v1.1.0 and its documented capability limits. Compile/build verify the selected executable. |
-| Go/platform | Go 1.27.x on Linux. See the [tested support matrix](OTELC_BACKEND.md#support-matrix). |
+| Go/platform | Go 1.27.4 or a later 1.27.x patch on Linux. See the [tested support matrix](OTELC_BACKEND.md#support-matrix). |
 
 Unknown policy fields and unsupported policy/lock versions fail validation rather
 than being silently interpreted. Changing only an `apiVersion` string does not

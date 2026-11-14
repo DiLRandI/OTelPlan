@@ -30,7 +30,7 @@ which operations become spans. Inspect and explain show the exact decisions.
 
 ## Quick start
 
-Build with Go 1.27.x:
+Build with Go 1.27.4 or a later 1.27.x patch:
 
 ```sh
 git clone https://github.com/DiLRandI/OTelPlan.git

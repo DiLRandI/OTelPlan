@@ -6,6 +6,13 @@ OTelPlan is pre-stable. This entry records the current capability baseline; it
 does not reconstruct historical release entries. See the [GitHub releases](https://github.com/DiLRandI/OTelPlan/releases)
 and [tags](https://github.com/DiLRandI/OTelPlan/tags) for existing records.
 
+### Toolchain security baseline
+
+Builds now require Go 1.27.4 or a later 1.27.x patch. Go 1.27.3 fails the current
+vulnerability gate for `GO-2026-6859`. Rebuild the CLI and separately installed
+backend with the patched toolchain, and review toolchain-related lock drift using
+the [upgrade procedure](COMPATIBILITY.md#reviewing-an-upgrade).
+
 ### Fixes
 
 - Preserve nil context arguments, nil-sensitive returns, and application panics.

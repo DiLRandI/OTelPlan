@@ -25,18 +25,19 @@ Current readiness work, in priority order:
 
 | Work | Status and next evidence |
 | --- | --- |
-| Everyday CI | [PR #305](https://github.com/DiLRandI/OTelPlan/pull/305) awaits review. One job runs tests, vet, and CLI build; full validation moves to a manual workflow. Hosted Check passed in 2m57s versus the 33m42s failing baseline. All three local real-backend normal/race shards passed with unchanged timeouts. Manual hosted release validation awaits workflow availability on main. |
-| Toolchain security | [PR #306](https://github.com/DiLRandI/OTelPlan/pull/306), based on #305, requires Go 1.27.4 and awaits review. Hosted Check passed in 2m23s. Full local checks, both vulnerability scans, patched-toolchain architecture normal/race tests, and two identical real Linux archive builds passed. Candidate-wide final acceptance remains. |
-| Go review | Pending a structured package-by-package review of the current revision. Existing focused refactors do not establish whole-codebase completion. |
+| Everyday CI | [PR #305](https://github.com/DiLRandI/OTelPlan/pull/305) is merged. One job runs tests, vet, and CLI build; full validation moves to a manual workflow. Hosted Check passed in 2m57s versus the 33m42s failing baseline. All three local real-backend normal/race shards passed with unchanged timeouts. Manual hosted release validation is now available on main; a candidate-specific run remains required. |
+| Toolchain security | [PR #306](https://github.com/DiLRandI/OTelPlan/pull/306), based on #305, requires Go 1.27.4 and is merged. Hosted Check passed in 2m23s. Full local checks, both vulnerability scans, patched-toolchain architecture normal/race tests, and two identical real Linux archive builds passed. Candidate-wide final acceptance remains. |
+| Go review | [PR #307](https://github.com/DiLRandI/OTelPlan/pull/307) contains policy cleanup and awaits review; hosted Check passed in 2m22s. [PR #308](https://github.com/DiLRandI/OTelPlan/pull/308) contains glob cache cleanup with full local checks passed. Coverage and remaining packages are listed below; neither PR establishes whole-codebase completion. |
 | Documentation | Reassess navigation, overlapping specifications, and historical instructions after CI and Go review. |
 | Release | Candidate-specific acceptance/security/performance review, SBOM/provenance, protected publishing implementation, and a complete v1.0 RC cycle remain. No tag, release, or merge is authorized. |
 
-CI simplification is ready for maintainer review. The patched Go baseline is
-[PR #306](https://github.com/DiLRandI/OTelPlan/pull/306); focused policy and
-resolver review changes are [#307](https://github.com/DiLRandI/OTelPlan/pull/307)
-and [#308](https://github.com/DiLRandI/OTelPlan/pull/308), each based on #305.
-Continue the structured Go review without merging these PRs. Expensive tests
-remain required release evidence. See
+The CI split and Go 1.27.4 baseline are merged. Open PRs #307 through #314
+form a linear review stack, each based on its immediate predecessor; #307 is
+based on main. All three
+local backend normal/race shards passed. Next, finish the validator test/code
+review and continue through the remaining packages without merging these PRs.
+Candidate-wide acceptance, security/performance review, SBOM/provenance, and the
+actual RC cycle remain. See
 [CI execution and timeout evidence](10_TEST_STRATEGY.md#6-authoritative-quality-gates).
 
 Remaining feature/performance/safety acceptance work follows. Linux is the current
@@ -45,6 +46,26 @@ the intended scope; an implemented feature still needs its release evidence.
 Use the [candidate acceptance record](RELEASING.md#candidate-acceptance-record)
 to review one immutable revision. The documented publishing design is not an
 implemented release workflow.
+
+## Go readiness review
+
+Review against [Effective Go](https://go.dev/doc/effective_go),
+[Go Code Review Comments](https://go.dev/wiki/CodeReviewComments), and the owning
+standard-library contracts. Cover boundaries, error identity, cancellation and
+cleanup, deterministic output, allocations, and behavior-focused tests. Record
+review coverage here instead of opening a second tracker. Production and test
+sources count toward this review; fixture and generated-source checks remain
+with their owning runtime/discovery/compiler packages.
+
+| Scope | Review result and remaining work |
+| --- | --- |
+| `cmd/otelplan` | Signal cancellation and deferred signal cleanup reviewed. No change needed. Integration behavior is covered by CLI cancellation tests; the CLI package review remains. |
+| `internal/model`, `pkg/model` | Definitions, tags, compatibility aliases, canonical symbol helpers, and public compatibility tests inspected. Keep existing alias/interface contracts. Diagnostic predicate allocation is a possible focused follow-up; no whole-model completion claimed yet. |
+| `internal/policy` | All production and test files reviewed. Remove the production dependency on compatibility aliases and initialize safe defaults through the policy zero value. Retain exhaustive keyed literals required by the current linter without adding exceptions. Existing defaults/explicit-false, no-capture, unknown-field/document-count, diagnostic JSON/order, schema, and non-mutation regressions protect behavior. Focused and full unit/race/vet/lint/gate checks pass on Go 1.27.4. Optional backend tests skipped in these local checks; no assertions or fixture inputs changed. |
+| `internal/suggest` | All four production/test files reviewed. Eligibility, scoring, BFS root ordering, duplicate-edge handling, conservative-call evidence, and caller immutability need no behavioral change. Retain canonical parser usage through the existing compatibility boundary. Existing deterministic ranking and entrypoint tests cover these decisions; candidate-wide backend/OSS checks remain separate. |
+| `internal/resolve` | All production and test files reviewed. Preserve selector validation even after earlier mismatches, exclusion-before-conflict behavior, deterministic provenance/diagnostics, context/error strategies, and input ownership. The one-map glob cache cleanup is implemented and locally verified in [PR #308](https://github.com/DiLRandI/OTelPlan/pull/308). No matcher behavior change is intended. |
+| `internal/testenv` | Both source files reviewed. Cache cleanup has an independent bounded context; proxy counters, server/root cleanup, manifest isolation, and byte snapshots support the owning integration tests. No change needed. Snapshots check membership and bytes, not all filesystem metadata. |
+| Remaining | `internal/cli`, `internal/compiler`, `internal/discovery`, `internal/lockfile`, `internal/validate`, and `internal/backend/otelc` still need their structured review, including owned fixtures and generated code. |
 
 ## Phase 1 — Foundation
 

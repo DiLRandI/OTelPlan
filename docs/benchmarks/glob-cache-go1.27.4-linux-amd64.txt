@@ -1,0 +1,53 @@
+Glob cache allocation comparison, 2026-11-14 UTC
+
+Go 1.27.4, Linux/amd64, Intel Core i7-11800H, GOMAXPROCS=1.
+Base revision: 29d49427219db6cd56e3ce4001892102d57dc0d2
+Before match.go SHA-256: fc24ffa2a5fb6ce358565323dcf5ef980272af3d1baacaf4743d330624efceef
+After match.go SHA-256: fd1c9f1ba66ad519c3f88964c39f67ba9384e1cbebcda8b6f7c8f3abb0db3b45
+Shared benchmark_test.go SHA-256: 58cbabbe6c5e4dc05d3e46efa4f9b62ed310b6bc5b37f0a90b8de54db5385853
+
+Both runs used the new checked-in BenchmarkGlob definition. The before run
+retained the base match.go implementation; the after run changed only its
+memoization state. Each case checks the expected match before and during timing.
+
+Command, with PATH and GOROOT selecting the official Go 1.27.4 installation:
+GOTOOLCHAIN=local GOMAXPROCS=1 go test ./internal/resolve -run '^$' -bench '^BenchmarkGlob$' -benchtime=100x -count=3 -benchmem
+
+Other Go tests ran concurrently. Use B/op and allocs/op for this comparison;
+these ns/op samples do not establish a latency baseline or speedup claim.
+
+Before
+------
+goos: linux
+goarch: amd64
+pkg: github.com/DiLRandI/OTelPlan/internal/resolve
+cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
+BenchmarkGlob/literal         	     100	       441.1 ns/op	      64 B/op	       2 allocs/op
+BenchmarkGlob/literal         	     100	       443.7 ns/op	      64 B/op	       2 allocs/op
+BenchmarkGlob/literal         	     100	       441.6 ns/op	      64 B/op	       2 allocs/op
+BenchmarkGlob/recursive_match 	     100	     20086 ns/op	   13536 B/op	      20 allocs/op
+BenchmarkGlob/recursive_match 	     100	     15711 ns/op	   13536 B/op	      20 allocs/op
+BenchmarkGlob/recursive_match 	     100	     15000 ns/op	   13536 B/op	      20 allocs/op
+BenchmarkGlob/recursive_miss  	     100	     41160 ns/op	   26656 B/op	      24 allocs/op
+BenchmarkGlob/recursive_miss  	     100	     47152 ns/op	   26656 B/op	      24 allocs/op
+BenchmarkGlob/recursive_miss  	     100	     37023 ns/op	   26656 B/op	      24 allocs/op
+PASS
+ok  	github.com/DiLRandI/OTelPlan/internal/resolve	0.027s
+
+After
+-----
+goos: linux
+goarch: amd64
+pkg: github.com/DiLRandI/OTelPlan/internal/resolve
+cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
+BenchmarkGlob/literal         	     100	       336.6 ns/op	      64 B/op	       2 allocs/op
+BenchmarkGlob/literal         	     100	       332.6 ns/op	      64 B/op	       2 allocs/op
+BenchmarkGlob/literal         	     100	       330.6 ns/op	      64 B/op	       2 allocs/op
+BenchmarkGlob/recursive_match 	     100	     10758 ns/op	    7096 B/op	      11 allocs/op
+BenchmarkGlob/recursive_match 	     100	      8172 ns/op	    7096 B/op	      11 allocs/op
+BenchmarkGlob/recursive_match 	     100	      8153 ns/op	    7096 B/op	      11 allocs/op
+BenchmarkGlob/recursive_miss  	     100	     22185 ns/op	   13656 B/op	      13 allocs/op
+BenchmarkGlob/recursive_miss  	     100	     21531 ns/op	   13656 B/op	      13 allocs/op
+BenchmarkGlob/recursive_miss  	     100	     19849 ns/op	   13656 B/op	      13 allocs/op
+PASS
+ok  	github.com/DiLRandI/OTelPlan/internal/resolve	0.017s

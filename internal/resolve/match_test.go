@@ -22,6 +22,10 @@ func TestGlob(t *testing.T) {
 		{pattern: "[AB]?", value: "Ax", want: true},
 		{pattern: "Run", value: "RunMore", want: false},
 		{pattern: "**/mock_*.go", value: "mock_x.go", want: true},
+		{pattern: "**/**/work.go", value: "work.go", want: true},
+		{pattern: "**/a/**/a/end", value: "a/a/a/end", want: true},
+		{pattern: "**/a/**/a/end", value: "a/a/a/other", want: false},
+		{pattern: "**/a/**/a/end", value: "a/end", want: false},
 	} {
 		t.Run(testCase.pattern+testCase.value, func(t *testing.T) {
 			t.Parallel()

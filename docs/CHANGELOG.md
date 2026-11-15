@@ -15,6 +15,10 @@ the [upgrade procedure](COMPATIBILITY.md#reviewing-an-upgrade).
 
 ### Fixes
 
+- Reject nonregular lockfile inputs before reading or refreshing them. FIFO
+  entries return the existing stale-lock diagnostic without blocking or being
+  replaced; valid symlinked locks remain readable.
+
 - Preserve external compiler and CGO path identities when their names share a
   checkout prefix. Fingerprints retain opaque literal values and respect quoted
   path arguments. Affected locks need an explicit reviewed refresh; see

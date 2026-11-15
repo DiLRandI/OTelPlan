@@ -95,7 +95,7 @@ Fails when meaningful resolution differs. Source file moves produce `SOURCE`
 drift; line/column changes are retained as diagnostic metadata and ignored for
 drift. Go toolchain, target platform, tags, effective module mode, alternate
 manifests, workspace/vendor inputs, and relevant cgo/compiler configuration are
-fingerprinted. Absolute checkout locations are normalized.
+fingerprinted. Absolute checkout locations are normalized. See the [CGO fingerprint rules and upgrade impact](COMPATIBILITY.md#cgo-fingerprint-correction) for compiler paths and opaque flag values.
 
 The lock records selection and signatures, not arbitrary source-body content. It
 is not a byte-for-byte application source snapshot.

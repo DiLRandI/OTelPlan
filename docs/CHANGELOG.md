@@ -15,6 +15,11 @@ the [upgrade procedure](COMPATIBILITY.md#reviewing-an-upgrade).
 
 ### Fixes
 
+- Preserve external compiler and CGO path identities when their names share a
+  checkout prefix. Fingerprints retain opaque literal values and respect quoted
+  path arguments. Affected locks need an explicit reviewed refresh; see
+  [CGO fingerprint correction](COMPATIBILITY.md#cgo-fingerprint-correction).
+
 - Preserve nil context arguments, nil-sensitive returns, and application panics.
   Argument-context hooks now skip those invocations instead of creating an
   implicit root span and replacing the argument. Existing generated bundles and

@@ -102,6 +102,29 @@ freshness; default builds and compile do not. Generate the lock with matching
 effective Go flags if adding options such as `-trimpath`; see [build inputs](CLI.md).
 See [resolution/build ownership](09_LOCKFILE_REPRODUCIBILITY.md#resolution-and-build-ownership).
 
+## CGO fingerprint correction
+
+Active compiler commands and CGO flags contribute to `BUILD` identity. The
+fingerprint now normalizes complete project path prefixes in standalone path
+arguments and common compiler path options, including `-I`, `-L`, include-path,
+and sysroot forms. An external tool or include directory that merely shares the
+checkout's name retains its full identity. Go's quoted-word boundaries,
+whitespace, and quote spelling are preserved. Compilation uses the original
+commands and flags.
+
+Macro definitions and opaque compound options retain their literal values.
+For example, changing `-DVALUE` or a compound prefix-map expression is a build
+input change even when its text contains the checkout path. Use relative paths
+where the compiler permits them if those values should survive relocation.
+Disabled CGO continues to exclude inactive compiler settings.
+
+Existing locks whose active CGO settings contain the checkout path may now
+report `BUILD` drift, including locks whose distinct external compiler paths
+were previously collapsed. Review the intended compiler/configuration and use
+the [upgrade review and explicit refresh procedure](#reviewing-an-upgrade).
+The policy/lock/JSON identifiers stay unchanged; do not edit the stored digest
+by hand or bypass `lock --check`.
+
 ## Stable-line commitments
 
 The following policy takes effect with the first stable CLI release and applies

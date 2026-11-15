@@ -15,6 +15,10 @@ the [upgrade procedure](COMPATIBILITY.md#reviewing-an-upgrade).
 
 ### Fixes
 
+- Protect selected policy, lock, alternate manifest, and workspace paths from
+  build-output replacement through directory aliases or metadata symlink targets.
+  Ordinary output through symlinked directories remains supported.
+
 - Reject nonregular lockfile inputs before reading or refreshing them. FIFO
   entries return the existing stale-lock diagnostic without blocking or being
   replaced; valid symlinked locks remain readable.

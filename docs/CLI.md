@@ -218,7 +218,9 @@ otelplan build -- -o bin/ ./cmd/...
 Directory-output JSON reports `data.files` with paths and digests. Single-file
 output uses `data.path` and `data.digest`. Publication occurs individually; an
 I/O failure can leave earlier files published. Output cannot replace source,
-project metadata, directories, or symlinks.
+project metadata, directories, or symlinks. Ownership checks compare declared and
+resolved paths, including parent-directory aliases and selected metadata symlink
+targets. Ordinary output through a symlinked directory remains allowed.
 
 Build from an application module or pass explicit targets from a workspace root,
 for example `otelplan build -- ./app`. Workspace-root builds require a package

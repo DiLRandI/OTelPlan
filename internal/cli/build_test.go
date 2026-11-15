@@ -1337,3 +1337,64 @@ func openIntegrationDirectory(t *testing.T, directory string) *os.Root {
 
 	return root
 }
+
+func TestBuildCLIRejectsAliasedPolicyOutputWithPinnedBackend(t *testing.T) {
+	executable := os.Getenv("OTELPLAN_OTELC")
+	if executable == "" {
+		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
+	}
+
+	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prepareOfflineIntegration(t)
+
+	for _, mode := range []string{"build", "preview"} {
+		assertAliasedPolicyBuildRejected(t, mode)
+	}
+}
+
+func assertAliasedPolicyBuildRejected(t *testing.T, mode string) {
+	t.Helper()
+
+	root := pinnedBuildFixture(t)
+	original := testenv.SnapshotFiles(t, root)
+	alias := filepath.Join(t.TempDir(), "project-alias")
+
+	err := os.Symlink(root, alias)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	args := []string{"build", "--root", root, "--offline", "--format=json"}
+	if mode == "preview" {
+		args = append(args, "--dry-run")
+	}
+
+	args = append(args, "--", "-buildvcs=false", "-o", filepath.Join(alias, "otelplan.yaml"), ".")
+
+	var stdout, stderr bytes.Buffer
+
+	exit := Run(t.Context(), args, &stdout, &stderr)
+	if exit != 2 || stderr.Len() != 0 {
+		t.Errorf("%s aliased policy output exit=%d stdout=%s stderr=%s", mode, exit, &stdout, &stderr)
+	}
+
+	assertAliasedBuildDiagnostic(t, stdout.Bytes())
+	testenv.AssertFilesUnchanged(t, original, testenv.SnapshotFiles(t, root))
+}
+
+func assertAliasedBuildDiagnostic(t *testing.T, output []byte) {
+	t.Helper()
+
+	var reply response
+
+	err := json.Unmarshal(output, &reply)
+	found := false
+
+	for _, diagnostic := range reply.Diagnostics {
+		found = found || string(diagnostic.Code) == "OTP1005"
+	}
+
+	if err != nil || reply.OK || !found {
+		t.Errorf("missing output-ownership diagnostic: error=%v stdout=%s", err, output)
+	}
+}

@@ -247,8 +247,9 @@ Offline is a dependency-resolution guarantee, not an operating-system network
 sandbox for arbitrary application code. The CLI installs no exporter or SDK.
 
 SIGINT/SIGTERM cancels discovery, backend verification, generated-source
-compilation, and isolated builds. The Go embedding entry points accept a caller
-context; cancellation does not use a separate shell exit-code contract.
+compilation, and isolated builds. On Linux, cancelling a backend build also stops
+its compiler children before temporary-workspace cleanup. The Go embedding entry
+points accept a caller context; cancellation does not use a separate shell exit-code contract.
 
 ## Lock ownership
 

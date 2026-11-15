@@ -180,6 +180,7 @@ func runPreparedBuildBackend(ctx context.Context, executable string, request Pre
 
 	args = append(args, request.GoArgs...)
 	command := exec.CommandContext(ctx, executable, args...)
+	configureBackendCancellation(command)
 	command.Dir, command.Env = request.ModuleDir, env
 
 	err := command.Run()

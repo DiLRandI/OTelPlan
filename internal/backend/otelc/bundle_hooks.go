@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 // The pin reparses the complete hook file for each before/after hook lookup.

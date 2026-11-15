@@ -1,6 +1,6 @@
 package cli
 
-import "github.com/DiLRandI/OTelPlan/pkg/model"
+import "github.com/DiLRandI/OTelPlan/internal/model"
 
 // Free-form commands and flags can contain secrets. Redact an output copy so
 // lock fingerprints and build validation retain the original inputs.

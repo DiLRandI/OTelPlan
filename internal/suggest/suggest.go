@@ -6,7 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
+	compatmodel "github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
 const (
@@ -227,7 +228,7 @@ func isMainEntrypoint(symbol model.Symbol) bool {
 }
 
 func infrastructureCall(id model.SymbolID) bool {
-	parsed, err := model.ParseSymbolID(id)
+	parsed, err := compatmodel.ParseSymbolID(id)
 	if err != nil {
 		return false
 	}

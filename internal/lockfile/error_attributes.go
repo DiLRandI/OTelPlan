@@ -5,7 +5,7 @@ import (
 	"go/token"
 	"strconv"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 var errInvalidErrorTypeAttribute = errors.New("invalid error-type attribute")

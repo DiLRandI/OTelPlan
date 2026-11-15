@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/DiLRandI/OTelPlan/internal/backend/otelc"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 	"github.com/DiLRandI/OTelPlan/internal/policy"
-	"github.com/DiLRandI/OTelPlan/pkg/model"
 	"golang.org/x/mod/semver"
 )
 

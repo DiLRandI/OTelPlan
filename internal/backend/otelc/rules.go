@@ -9,7 +9,8 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
+	compatmodel "github.com/DiLRandI/OTelPlan/pkg/model"
 	"golang.org/x/mod/module"
 	"gopkg.in/yaml.v3"
 )
@@ -119,7 +120,7 @@ func validateRulePlan(version string, code *model.CodeModel, plan model.Resolved
 }
 
 func exactRuleReceiver(id model.SymbolID, symbol *model.Symbol, hookImportPath string) (string, error) {
-	parsed, err := model.ParseSymbolID(id)
+	parsed, err := compatmodel.ParseSymbolID(id)
 	if err != nil || parsed.ImportPath != symbol.PackageImportPath || parsed.Name != symbol.Name {
 		return "", errRuleCanonicalIdentity
 	}

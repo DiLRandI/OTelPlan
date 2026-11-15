@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 // SupportedVersion pins the verified OTelC backend release.

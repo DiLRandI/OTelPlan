@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 // Glob treats ** as zero or more path segments; * and ? never cross a slash.

@@ -8,7 +8,7 @@ import (
 	"io"
 
 	"github.com/DiLRandI/OTelPlan/internal/discovery"
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 // APIVersion identifies the versioned JSON response contract.

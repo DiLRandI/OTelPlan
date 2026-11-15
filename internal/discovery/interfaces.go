@@ -4,7 +4,7 @@ import (
 	"go/types"
 	"sort"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 type interfaceInfo struct {

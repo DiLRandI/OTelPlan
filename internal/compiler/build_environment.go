@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 var (

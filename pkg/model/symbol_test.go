@@ -1,6 +1,7 @@
 package model_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
@@ -141,6 +142,31 @@ func TestParseSymbolIDErrorMessages(t *testing.T) {
 
 			if parsed != empty {
 				t.Fatalf("parsed = %+v, want zero value", parsed)
+			}
+		})
+	}
+}
+
+func TestParseSymbolIDPreservesErrorIdentity(t *testing.T) {
+	t.Parallel()
+
+	for _, symbolID := range []model.SymbolID{"", "pkg.(*Worker", "pkg.().Run", "no-separator"} {
+		t.Run(string(symbolID), func(t *testing.T) {
+			t.Parallel()
+
+			_, first := model.ParseSymbolID(symbolID)
+			if first == nil {
+				t.Fatal("invalid symbol returned no error")
+			}
+
+			cause := first
+			for errors.Unwrap(cause) != nil {
+				cause = errors.Unwrap(cause)
+			}
+
+			_, second := model.ParseSymbolID(symbolID)
+			if !errors.Is(second, cause) {
+				t.Fatalf("symbol parse lost stable error cause: first=%v second=%v", first, second)
 			}
 		})
 	}

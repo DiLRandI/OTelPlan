@@ -8,7 +8,7 @@ import (
 
 	"github.com/DiLRandI/OTelPlan/internal/backend/otelc"
 	"github.com/DiLRandI/OTelPlan/internal/compiler"
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 type compileSummary struct {

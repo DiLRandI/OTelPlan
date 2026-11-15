@@ -4,7 +4,7 @@ import (
 	"cmp"
 	"slices"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 // canonicalPolicy copies only collections whose order is irrelevant to discovery

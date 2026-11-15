@@ -3,7 +3,7 @@ package lockfile
 import (
 	"errors"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 var errInvalidStringerAttribute = errors.New("invalid stringer attribute")

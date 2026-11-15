@@ -68,8 +68,10 @@ demonstrated consumer need; the model package is not a stable SDK commitment.
 Primary compatibility contracts are policy YAML, lockfiles, CLI JSON, and
 diagnostic codes.
 
-Canonical symbol-ID helpers retain their existing public implementation and
-error identities; model types and their methods are owned internally.
+Symbol-ID constructors belong to the internal model; public constructor names
+forward to them. The canonical parser retains its compatibility implementation
+and error identities, with explicit parser-only bridges in the engine. Model
+types and their methods are owned internally.
 
 Field tags, serialized formats, helper behavior, and error identities remain the
 same. Reflection reports the defining package as `internal/model`, so callers

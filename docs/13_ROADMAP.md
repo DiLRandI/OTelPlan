@@ -34,8 +34,8 @@ Current readiness work, in priority order:
 The CI split and Go 1.27.4 baseline are merged. Open PRs #307 through #314
 form a linear review stack, each based on its immediate predecessor; #307 is
 based on main. All three
-local backend normal/race shards passed. Next, finish the validator test/code
-review and continue through the remaining packages without merging these PRs.
+local backend normal/race shards passed. Next, verify and publish the validator domain-model import cleanup, then review
+lockfile canonicalization, parsing, drift, and write ownership without merging these PRs.
 Candidate-wide acceptance, security/performance review, SBOM/provenance, and the
 actual RC cycle remain. See
 [CI execution and timeout evidence](10_TEST_STRATEGY.md#6-authoritative-quality-gates).
@@ -65,7 +65,8 @@ with their owning runtime/discovery/compiler packages.
 | `internal/suggest` | All four production/test files reviewed. Eligibility, scoring, BFS root ordering, duplicate-edge handling, conservative-call evidence, and caller immutability need no behavioral change. Retain canonical parser usage through the existing compatibility boundary. Existing deterministic ranking and entrypoint tests cover these decisions; candidate-wide backend/OSS checks remain separate. |
 | `internal/resolve` | All production and test files reviewed. Preserve selector validation even after earlier mismatches, exclusion-before-conflict behavior, deterministic provenance/diagnostics, context/error strategies, and input ownership. The glob memo cache now uses one map and comma-ok lookup instead of a second visited map on [PR #308](https://github.com/DiLRandI/OTelPlan/pull/308). Added repeated-** backtracking cases pass; focused race/vet/lint checks pass. In three 100-iteration Go 1.27.4 allocation samples, recursive match fell from 13,536 to 7,096 B/op and miss from 26,656 to 13,656 B/op. Literal matching remains 64 B/op. [Raw allocation samples](benchmarks/glob-cache-go1.27.4-linux-amd64.txt) retain source hashes and environment. Ignore concurrent-load timing; full unit/race/vet/lint/gate checks pass on Go 1.27.4, with optional backend tests skipped in these checks. No matcher behavior change is intended. |
 | `internal/testenv` | Both source files reviewed. Cache cleanup has an independent bounded context; proxy counters, server/root cleanup, manifest isolation, and byte snapshots support the owning integration tests. No change needed. Snapshots check membership and bytes, not all filesystem metadata. |
-| Remaining | `internal/cli`, `internal/compiler`, `internal/discovery`, `internal/lockfile`, `internal/validate`, and `internal/backend/otelc` still need their structured review, including owned fixtures and generated code. |
+| `internal/validate` | All five production and thirteen test files reviewed. Promoted-field ambiguity/cycles, scalar bounds, explicit Stringer conversion, error-result aliases/indexes, privacy acknowledgment, ordered/redacted diagnostics, and plan-size limits retain their contracts. Production imports now name internal models directly on `refactor/validator-domain-models`, avoiding accidental SDK expansion when internal models grow. Existing tests still exercise public aliases. Focused checks before/after the import change and full unit/race/vet/lint/gate checks pass on Go 1.27.4. Optional backend tests skipped in the full local checks; candidate-wide acceptance remains separate. |
+| Remaining | `internal/cli`, `internal/compiler`, `internal/discovery`, `internal/lockfile`, and `internal/backend/otelc` still need their structured review, including owned fixtures and generated code. |
 
 ## Phase 1 — Foundation
 

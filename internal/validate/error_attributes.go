@@ -4,7 +4,7 @@ import (
 	"errors"
 	"slices"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 var errErrorTypeResult = errors.New("error-type attribute must select an entire error result by name or index")

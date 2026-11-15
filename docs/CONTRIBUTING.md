@@ -20,7 +20,7 @@ implementing them. Avoid adding speculative extension points or dependencies.
 
 ## Development setup
 
-Use Go 1.27.x and Linux, the current support and verification target:
+Use Go 1.27.4 or a later 1.27.x patch and Linux, the current support and verification target:
 
 ```sh
 go version

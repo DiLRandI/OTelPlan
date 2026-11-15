@@ -26,6 +26,7 @@ Current readiness work, in priority order:
 | Work | Status and next evidence |
 | --- | --- |
 | Everyday CI | [PR #305](https://github.com/DiLRandI/OTelPlan/pull/305) awaits review. One job runs tests, vet, and CLI build; full validation moves to a manual workflow. Hosted Check passed in 2m57s versus the 33m42s failing baseline. All three local real-backend normal/race shards passed with unchanged timeouts. Manual hosted release validation awaits workflow availability on main. |
+| Toolchain security | [PR #306](https://github.com/DiLRandI/OTelPlan/pull/306), based on #305, requires Go 1.27.4 and awaits review. Hosted Check passed in 2m23s. Full local checks, both vulnerability scans, patched-toolchain architecture normal/race tests, and two identical real Linux archive builds passed. Candidate-wide final acceptance remains. |
 | Go review | Pending a structured package-by-package review of the current revision. Existing focused refactors do not establish whole-codebase completion. |
 | Documentation | Reassess navigation, overlapping specifications, and historical instructions after CI and Go review. |
 | Release | Candidate-specific acceptance/security/performance review, SBOM/provenance, protected publishing implementation, and a complete v1.0 RC cycle remain. No tag, release, or merge is authorized. |

@@ -1,6 +1,6 @@
 # CLI reference
 
-Build `otelplan` with `go build -o bin/otelplan ./cmd/otelplan` using Go 1.27.x.
+Build `otelplan` with `go build -o bin/otelplan ./cmd/otelplan` using Go 1.27.4 or a later 1.27.x patch.
 This document describes the implemented CLI. All commands support text and JSON
 output. Flags may appear before or after the command, except arguments following
 `--`, which are positional and are used for Go build arguments.

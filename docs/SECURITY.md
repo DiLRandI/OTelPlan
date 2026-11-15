@@ -26,6 +26,23 @@ there is no supported stable release or older release maintenance window yet.
 Linux is the supported platform. Use the toolchain and pinned backend documented
 in the [support matrix](OTELC_BACKEND.md#support-matrix).
 
+## Toolchain security baseline
+
+Build and validate with Go 1.27.4 or a later patched 1.27.x toolchain. The module
+requires at least 1.27.4 so an older local toolchain cannot silently build the CLI.
+The [Go vulnerability database advisory](https://pkg.go.dev/vuln/GO-2026-6859)
+identifies a `net/http` HTTP/1 server race fixed in 1.27.4. The full test scan on
+1.27.3 reported it; both source/test and CLI module scans passed on 1.27.4 with
+scanner v1.9.0 in a 2026-11-14 scan. This is scanner evidence, not a claim
+that the CLI exposes the advisory's HTTP server attack path.
+
+Rebuild existing executables and the separately installed OTelC backend with the
+patched toolchain. A toolchain patch can make resolution locks stale because Go
+version participates in build identity. Use the [reviewed upgrade procedure](COMPATIBILITY.md#reviewing-an-upgrade)
+rather than suppressing drift or disabling vulnerability checks. Historical
+performance and release records retain their original toolchain identity and do
+not establish acceptance of a newly built candidate.
+
 ## Using OTelPlan safely
 
 OTelPlan analyzes local Go projects and builds instrumentation in disposable

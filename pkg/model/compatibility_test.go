@@ -30,7 +30,7 @@ func TestPublicModelExternalModuleCompatibility(t *testing.T) {
 		}
 	})
 
-	goMod := "module example.com/model-compatibility\n\ngo 1.27\n\nrequire github.com/DiLRandI/OTelPlan v0.0.0\n\n" +
+	goMod := "module example.com/model-compatibility\n\ngo 1.27.4\n\nrequire github.com/DiLRandI/OTelPlan v0.0.0\n\n" +
 		"replace github.com/DiLRandI/OTelPlan v0.0.0 => " + strconv.Quote(filepath.ToSlash(repository)) + "\n"
 	writeExternalFile(t, directory, "go.mod", goMod)
 	writeExternalFile(t, directory, "client_test.go", externalClient)

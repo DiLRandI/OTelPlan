@@ -73,12 +73,7 @@ func TestCompileDryRunRequiresBackend(t *testing.T) {
 }
 
 func TestCompileDryRunPreviewsArtifactsWithoutPublishing(t *testing.T) {
-	executable := os.Getenv("OTELPLAN_OTELC")
-	if executable == "" {
-		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
-	}
-
-	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", testenv.PathWithOTelC(t))
 	root, analysisCache, cacheBefore, original := prepareCompileDryRunFixture(t)
 
 	args := []string{"compile", "--root", root, "--dry-run", "--offline", "--format=json",

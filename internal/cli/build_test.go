@@ -18,12 +18,7 @@ import (
 )
 
 func TestBuildCLIWithPinnedBackend(t *testing.T) {
-	executable := os.Getenv("OTELPLAN_OTELC")
-	if executable == "" {
-		t.Skip("OTELPLAN_OTELC is required")
-	}
-
-	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", testenv.PathWithOTelC(t))
 	prepareOfflineIntegration(t)
 	root := pinnedBuildFixture(t)
 	original := snapshotPinnedBuildFixture(t, root)
@@ -41,12 +36,7 @@ func TestBuildCLIWithPinnedBackend(t *testing.T) {
 }
 
 func TestBuildCLILockedWithPinnedBackend(t *testing.T) {
-	executable := os.Getenv("OTELPLAN_OTELC")
-	if executable == "" {
-		t.Skip("OTELPLAN_OTELC is required")
-	}
-
-	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", testenv.PathWithOTelC(t))
 	prepareOfflineIntegration(t)
 	t.Setenv("GOFLAGS", "-trimpath -buildvcs=false")
 	root := pinnedBuildFixture(t)
@@ -455,12 +445,7 @@ func assertPinnedBuildFixtureUnchanged(t *testing.T, root string, original map[s
 }
 
 func TestBuildCLILibraryWithoutOutput(t *testing.T) {
-	executable := os.Getenv("OTELPLAN_OTELC")
-	if executable == "" {
-		t.Skip("OTELPLAN_OTELC is required")
-	}
-
-	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", testenv.PathWithOTelC(t))
 	prepareOfflineIntegration(t)
 	runLibraryBuildContract(t)
 }
@@ -542,12 +527,7 @@ func assertLibraryFixtureUnchanged(t *testing.T, root string, original map[strin
 }
 
 func TestBuildCLIFromWorkspaceRoot(t *testing.T) {
-	executable := os.Getenv("OTELPLAN_OTELC")
-	if executable == "" {
-		t.Skip("OTELPLAN_OTELC is required")
-	}
-
-	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", testenv.PathWithOTelC(t))
 	prepareOfflineIntegration(t)
 	t.Setenv("GOWORK", "")
 
@@ -746,12 +726,7 @@ func TestBuildSummaryText(t *testing.T) {
 }
 
 func TestVariadicBuiltinWithPinnedBackend(t *testing.T) {
-	executable := os.Getenv("OTELPLAN_OTELC")
-	if executable == "" {
-		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
-	}
-
-	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", testenv.PathWithOTelC(t))
 	prepareOfflineIntegration(t)
 
 	fixture, err := filepath.Abs("../backend/otelc/testdata/accessors")
@@ -797,12 +772,7 @@ func TestVariadicBuiltinWithPinnedBackend(t *testing.T) {
 }
 
 func TestGenericRootSpansWithPinnedBackend(t *testing.T) {
-	executable := os.Getenv("OTELPLAN_OTELC")
-	if executable == "" {
-		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
-	}
-
-	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", testenv.PathWithOTelC(t))
 	prepareOfflineIntegration(t)
 
 	fixture, err := filepath.Abs("../backend/otelc/testdata/generics")
@@ -838,12 +808,7 @@ func TestGenericRootSpansWithPinnedBackend(t *testing.T) {
 }
 
 func TestGenericTypedCapturesWithPinnedBackend(t *testing.T) {
-	executable := os.Getenv("OTELPLAN_OTELC")
-	if executable == "" {
-		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
-	}
-
-	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", testenv.PathWithOTelC(t))
 	prepareOfflineIntegration(t)
 
 	fixture, err := filepath.Abs("../backend/otelc/testdata/generics")
@@ -1339,12 +1304,7 @@ func openIntegrationDirectory(t *testing.T, directory string) *os.Root {
 }
 
 func TestBuildCLIRejectsAliasedPolicyOutputWithPinnedBackend(t *testing.T) {
-	executable := os.Getenv("OTELPLAN_OTELC")
-	if executable == "" {
-		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
-	}
-
-	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", testenv.PathWithOTelC(t))
 	prepareOfflineIntegration(t)
 
 	for _, mode := range []string{"build", "preview"} {

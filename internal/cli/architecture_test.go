@@ -15,12 +15,7 @@ import (
 )
 
 func TestArchitectureTracesWithPinnedBackend(t *testing.T) {
-	executable := os.Getenv("OTELPLAN_OTELC")
-	if executable == "" {
-		t.Skip("OTELPLAN_OTELC is required")
-	}
-
-	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", testenv.PathWithOTelC(t))
 
 	for _, mode := range []struct {
 		name    string

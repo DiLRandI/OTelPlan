@@ -11,6 +11,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
@@ -162,7 +163,7 @@ func analysisCacheFileKey(name string) (string, bool) {
 }
 
 func ownsAnalysisCacheEntry(root *os.Root, name, key string) (bool, error) {
-	file, err := root.Open(name)
+	file, err := root.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil
 	}
@@ -172,6 +173,15 @@ func ownsAnalysisCacheEntry(root *os.Root, name, key string) (bool, error) {
 	}
 
 	defer func() { _ = file.Close() }()
+
+	info, err := file.Stat()
+	if err != nil {
+		return false, fmt.Errorf("inspect opened retained analysis cache entry: %w", err)
+	}
+
+	if !info.Mode().IsRegular() {
+		return false, nil
+	}
 
 	contents, err := io.ReadAll(io.LimitReader(file, maximumCacheEntryBytes+1))
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"syscall"
 
 	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
@@ -20,6 +21,8 @@ const (
 
 // ErrCacheStorage identifies failures accessing explicitly requested cache storage.
 var ErrCacheStorage = errors.New("analysis cache storage failure")
+
+var errNonregularAnalysisCacheEntry = errors.New("analysis cache entry is not a regular file")
 
 type cacheLookup struct {
 	code *model.CodeModel
@@ -66,7 +69,7 @@ func openAnalysisCache(path string) (*os.Root, error) {
 }
 
 func readAnalysisCache(root *os.Root, key string, opts Options) (cacheLookup, error) {
-	file, err := root.Open(key + ".json")
+	file, err := root.OpenFile(key+".json", os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if os.IsNotExist(err) {
 		return cacheLookup{code: nil}, nil
 	}
@@ -76,6 +79,15 @@ func readAnalysisCache(root *os.Root, key string, opts Options) (cacheLookup, er
 	}
 
 	defer func() { _ = file.Close() }()
+
+	info, err := file.Stat()
+	if err != nil {
+		return cacheLookup{code: nil}, fmt.Errorf("inspect analysis cache entry: %w", err)
+	}
+
+	if !info.Mode().IsRegular() {
+		return cacheLookup{code: nil}, errNonregularAnalysisCacheEntry
+	}
 
 	contents, err := io.ReadAll(io.LimitReader(file, maximumCacheEntryBytes+1))
 	if err != nil {

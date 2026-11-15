@@ -20,6 +20,10 @@ the [upgrade procedure](COMPATIBILITY.md#reviewing-an-upgrade).
   path arguments. Affected locks need an explicit reviewed refresh; see
   [CGO fingerprint correction](COMPATIBILITY.md#cgo-fingerprint-correction).
 
+- Reject nonregular objects at an analysis-cache entry without blocking on a
+  FIFO or overwriting it. Read-only and writable lookups retain the cache
+  storage error category; corrupt regular JSON still triggers fresh analysis.
+
 - Preserve nil context arguments, nil-sensitive returns, and application panics.
   Argument-context hooks now skip those invocations instead of creating an
   implicit root span and replacing the argument. Existing generated bundles and

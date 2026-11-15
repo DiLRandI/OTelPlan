@@ -18,8 +18,27 @@ This is a pre-stable implementation, not a completed release.
 | Initialization | Deterministic scoring/evidence, exact starter policy, interactive review, and no default capture implemented. Pinned full-source Memos and Task regressions cover web/API and CLI workflow operations, determinism, exact resolution, and source safety. |
 | Stable v1 | Compatibility/upgrade guidance and stable-line contract commitments are documented. Local Linux archives, checksum/notice verification, initial CLI/runtime performance reports, and a current capability changelog are implemented. Candidate-specific contract/acceptance/performance/security review, standardized SBOM/verifiable provenance publication, and an RC cycle remain. |
 
-Documentation consolidation and lint cleanup are complete. Immediate priorities
-are remaining feature/performance/safety acceptance work. Linux is the current
+Earlier documentation consolidation and lint cleanup are implemented. The v1.0
+readiness review must reassess the active documents and the entire Go codebase.
+
+Current readiness work, in priority order:
+
+| Work | Status and next evidence |
+| --- | --- |
+| Everyday CI | [PR #305](https://github.com/DiLRandI/OTelPlan/pull/305) awaits review. One job runs tests, vet, and CLI build; full validation moves to a manual workflow. Hosted Check passed in 2m57s versus the 33m42s failing baseline. All three local real-backend normal/race shards passed with unchanged timeouts. Manual hosted release validation awaits workflow availability on main. |
+| Go review | Pending a structured package-by-package review of the current revision. Existing focused refactors do not establish whole-codebase completion. |
+| Documentation | Reassess navigation, overlapping specifications, and historical instructions after CI and Go review. |
+| Release | Candidate-specific acceptance/security/performance review, SBOM/provenance, protected publishing implementation, and a complete v1.0 RC cycle remain. No tag, release, or merge is authorized. |
+
+CI simplification is ready for maintainer review. The patched Go baseline is
+[PR #306](https://github.com/DiLRandI/OTelPlan/pull/306); focused policy and
+resolver review changes are [#307](https://github.com/DiLRandI/OTelPlan/pull/307)
+and [#308](https://github.com/DiLRandI/OTelPlan/pull/308), each based on #305.
+Continue the structured Go review without merging these PRs. Expensive tests
+remain required release evidence. See
+[CI execution and timeout evidence](10_TEST_STRATEGY.md#6-authoritative-quality-gates).
+
+Remaining feature/performance/safety acceptance work follows. Linux is the current
 support and release-verification target. Lightweight OSS/release hygiene follows. Original phase requirements below remain
 the intended scope; an implemented feature still needs its release evidence.
 Use the [candidate acceptance record](RELEASING.md#candidate-acceptance-record)

@@ -3,7 +3,7 @@ package validate
 import (
 	"errors"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 var errSymbolMetadataField = errors.New("unsupported symbol metadata field")

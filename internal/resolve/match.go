@@ -22,17 +22,14 @@ func Glob(pattern, value string) (bool, error) {
 	type position struct{ pattern, value int }
 
 	memo := map[position]bool{}
-	visited := map[position]bool{}
 
 	var match func(int, int) bool
 
 	match = func(patternIndex, valueIndex int) bool {
 		key := position{patternIndex, valueIndex}
-		if visited[key] {
-			return memo[key]
+		if result, cached := memo[key]; cached {
+			return result
 		}
-
-		visited[key] = true
 
 		result := false
 

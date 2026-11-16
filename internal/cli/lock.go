@@ -3,9 +3,11 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/DiLRandI/OTelPlan/internal/backend/otelc"
 	"github.com/DiLRandI/OTelPlan/internal/lockfile"
@@ -18,6 +20,8 @@ const (
 	validateCommandName = "validate"
 	exitStaleLock       = 6
 )
+
+var errNonregularResolutionLock = errors.New("lockfile must be a regular file")
 
 type lockSummary struct {
 	Path    string `json:"path"`
@@ -143,7 +147,7 @@ func readResolutionLock(filename string) ([]byte, error) {
 		return nil, fmt.Errorf("open lockfile directory: %w", err)
 	}
 
-	contents, readErr := directory.ReadFile(filepath.Base(resolved))
+	contents, readErr := readResolutionLockFile(directory, filepath.Base(resolved))
 	closeErr := directory.Close()
 
 	if readErr != nil {
@@ -152,6 +156,31 @@ func readResolutionLock(filename string) ([]byte, error) {
 
 	if closeErr != nil {
 		return nil, fmt.Errorf("close lockfile directory: %w", closeErr)
+	}
+
+	return contents, nil
+}
+
+func readResolutionLockFile(directory *os.Root, name string) ([]byte, error) {
+	file, err := directory.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, fmt.Errorf("open lockfile: %w", err)
+	}
+
+	defer func() { _ = file.Close() }()
+
+	info, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("inspect opened lockfile: %w", err)
+	}
+
+	if !info.Mode().IsRegular() {
+		return nil, errNonregularResolutionLock
+	}
+
+	contents, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("read opened lockfile: %w", err)
 	}
 
 	return contents, nil

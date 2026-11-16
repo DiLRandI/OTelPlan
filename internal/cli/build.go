@@ -248,6 +248,8 @@ func protectedBuildOutput(destination string, opts options, code *model.CodeMode
 		return true
 	}
 
+	resolvedDestination := resolvedBuildOutputPath(destination)
+
 	originals := []string{
 		config, filepath.Join(opts.root, "otelplan.lock"), code.EffectiveBuild.ModFile, code.WorkspaceFile,
 	}
@@ -258,12 +260,26 @@ func protectedBuildOutput(destination string, opts options, code *model.CodeMode
 		}
 
 		absolute, err := filepath.Abs(original)
-		if err == nil && absolute == destination {
+		if err == nil && (absolute == destination || resolvedBuildOutputPath(absolute) == resolvedDestination) {
 			return true
 		}
 	}
 
 	return false
+}
+
+func resolvedBuildOutputPath(path string) string {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err == nil {
+		return resolved
+	}
+
+	parent, err := filepath.EvalSymlinks(filepath.Dir(path))
+	if err != nil {
+		return path
+	}
+
+	return filepath.Join(parent, filepath.Base(path))
 }
 
 func reservedBuildOutputName(name string) bool {

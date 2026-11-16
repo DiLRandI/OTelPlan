@@ -95,5 +95,11 @@ func (l DiagnosticErrorList) Warnings() DiagnosticErrorList {
 
 // HasErrors reports whether the list contains at least one error diagnostic.
 func (l DiagnosticErrorList) HasErrors() bool {
-	return len(l.Errors()) > 0
+	for _, d := range l {
+		if d.Severity == SeverityError {
+			return true
+		}
+	}
+
+	return false
 }

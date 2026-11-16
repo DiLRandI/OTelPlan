@@ -2,6 +2,7 @@ package resolve_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/DiLRandI/OTelPlan/internal/resolve"
@@ -89,5 +90,33 @@ func BenchmarkResolveExactApplicationFunctions(b *testing.B) {
 
 	for range b.N {
 		resolve.Resolve(policy, code)
+	}
+}
+
+func BenchmarkGlob(b *testing.B) {
+	for _, scenario := range []struct {
+		name, pattern, value string
+		want                 bool
+	}{
+		{name: "literal", pattern: "internal/work.go", value: "internal/work.go", want: true},
+		{name: "recursive match", pattern: "**/**/**/**/work.go", value: strings.Repeat("app/", 32) + "work.go", want: true},
+		{name: "recursive miss", pattern: "**/**/**/**/work.go", value: strings.Repeat("app/", 32) + "other.go", want: false},
+	} {
+		b.Run(scenario.name, func(b *testing.B) {
+			matched, err := resolve.Glob(scenario.pattern, scenario.value)
+			if err != nil || matched != scenario.want {
+				b.Fatalf("Glob(%q, %q) = %v, %v; want %v", scenario.pattern, scenario.value, matched, err, scenario.want)
+			}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+
+			for range b.N {
+				matched, err := resolve.Glob(scenario.pattern, scenario.value)
+				if err != nil || matched != scenario.want {
+					b.Fatalf("unexpected glob result: %v, %v", matched, err)
+				}
+			}
+		})
 	}
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -60,5 +61,84 @@ func TestProtectedBuildOutput(t *testing.T) {
 
 	if !protectedBuildOutput(config, absoluteConfigOptions, code) {
 		t.Error("protectedBuildOutput did not protect the absolute configured policy path")
+	}
+}
+
+func TestProtectedBuildOutputThroughDirectoryAliases(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	alias := filepath.Join(t.TempDir(), "project-alias")
+
+	err := os.Symlink(root, alias)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var opts options
+
+	opts.root, opts.config = root, "policy.yaml"
+	code := new(model.CodeModel)
+	code.EffectiveBuild.ModFile = filepath.Join(root, "selected.mod")
+	code.WorkspaceFile = filepath.Join(root, "selected.work")
+
+	for _, name := range []string{"policy.yaml", "selected.mod", "selected.work"} {
+		err := os.WriteFile(filepath.Join(root, name), []byte("owned metadata"), 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, test := range []struct {
+		name string
+		want bool
+	}{
+		{name: "policy.yaml", want: true},
+		{name: "selected.mod", want: true},
+		{name: "selected.work", want: true},
+		{name: "otelplan.lock", want: true},
+		{name: "ordinary-output", want: false},
+		{name: "new/ordinary-output", want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := protectedBuildOutput(filepath.Join(alias, test.name), opts, code); got != test.want {
+				t.Fatalf("aliased output %s protection=%t; want %t", test.name, got, test.want)
+			}
+
+			aliasOptions := opts
+			aliasOptions.root = alias
+
+			if got := protectedBuildOutput(filepath.Join(root, test.name), aliasOptions, code); got != test.want {
+				t.Fatalf("aliased root output %s protection=%t; want %t", test.name, got, test.want)
+			}
+		})
+	}
+}
+
+func TestProtectedBuildOutputFollowsSelectedPolicySymlink(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	target := filepath.Join(t.TempDir(), "actual-policy.yaml")
+
+	err := os.WriteFile(target, []byte("owned policy"), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = os.Symlink(target, filepath.Join(root, "selected.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var opts options
+
+	opts.root, opts.config = root, "selected.yaml"
+	code := new(model.CodeModel)
+
+	if !protectedBuildOutput(target, opts, code) {
+		t.Fatal("build output can replace the selected policy symlink target")
 	}
 }

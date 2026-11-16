@@ -9,7 +9,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 	"gopkg.in/yaml.v3"
 )
 
@@ -33,18 +33,10 @@ func Parse(data []byte) (*model.Policy, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 
-	parsed := model.Policy{
-		APIVersion: "", Kind: "",
-		Project: model.ProjectConfig{Packages: nil, IncludeTests: false, IncludeDependencies: false, BuildTags: nil},
-		Backend: model.BackendConfig{Name: "", Version: ""},
-		Defaults: model.Defaults{
-			SpanName:   "",
-			Context:    model.ContextDefaults{Mode: model.ContextModeRequire},
-			Errors:     model.ErrorDefaults{Record: true},
-			Attributes: model.CaptureDefaults{Arguments: false, Results: false},
-		},
-		Rules: nil, Exclusions: nil, DenyPatterns: nil,
-	}
+	var parsed model.Policy
+
+	parsed.Defaults.Context.Mode = model.ContextModeRequire
+	parsed.Defaults.Errors.Record = true
 
 	err := dec.Decode(&parsed)
 	if err != nil {

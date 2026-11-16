@@ -26,6 +26,7 @@ var (
 		"resolution changed while the lock contains build-owned identity; " +
 			"refresh requires regenerated build metadata",
 	)
+	errInvalidCGOEnvironment       = errors.New("cgo configuration contains an invalid null byte")
 	errMissingModuleMetadata       = errors.New("module metadata is required")
 	errMissingLocalModuleDirectory = errors.New("local module directory is unavailable")
 	errInvalidWorkspaceModule      = errors.New("workspace module has invalid manifest")

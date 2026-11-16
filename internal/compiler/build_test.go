@@ -68,13 +68,23 @@ func preparedBuildExecutable(t *testing.T) string {
 	defer func() { _ = root.Close() }()
 
 	source := fmt.Sprintf(`package main
-import ("fmt"; "os"; "time")
+import ("fmt"; "os"; "os/exec"; "strconv"; "time")
 func main() {
  if len(os.Args) > 1 && os.Args[1] == "version" {
   if err := os.WriteFile(%q, nil, 0600); err != nil { os.Exit(1) }
   fmt.Print("otelc version v1.1.0"); return
  }
+ if len(os.Args) > 1 && os.Args[1] == "child" {
+  marker := os.Getenv("OTELPLAN_TEST_CHILD")
+  if err := os.WriteFile(marker+".tmp", []byte(strconv.Itoa(os.Getpid())), 0600); err != nil { os.Exit(1) }
+  if err := os.Rename(marker+".tmp", marker); err != nil { os.Exit(1) }
+  time.Sleep(time.Hour); return
+ }
  if os.Getenv("OTELPLAN_TEST_MODE") == "fail" { os.Exit(%d) }
+ if os.Getenv("OTELPLAN_TEST_MODE") == "child" {
+  child := exec.Command(os.Args[0], "child")
+  if err := child.Start(); err != nil { os.Exit(1) }
+ }
  if err := os.WriteFile(os.Getenv("OTELPLAN_TEST_READY"), nil, 0600); err != nil { os.Exit(1) }
  time.Sleep(time.Hour)
 }

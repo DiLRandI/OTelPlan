@@ -240,26 +240,37 @@ func graphEnvironment(code *model.CodeModel) (graphBuildEnvironment, error) {
 	}
 
 	normalizeGraphArchitecture(&environment)
-	normalizeGraphCGO(&environment, code.ModuleRoot)
+
+	err := normalizeGraphCGO(&environment, code.ModuleRoot)
+	if err != nil {
+		return environment, err
+	}
 
 	sort.Strings(environment.BuildTags)
 	sort.Strings(environment.SemanticFlags)
 
-	if build.ModFile != "" {
-		manifest, err := moduleManifest(build.ModFile)
-		if err != nil {
-			return environment, err
-		}
-
-		environment.ModFile = manifest
-
-		environment.ModFileSums, err = optionalLines(companionSum(build.ModFile))
-		if err != nil {
-			return environment, err
-		}
+	err = fingerprintAlternateManifest(&environment, build.ModFile)
+	if err != nil {
+		return environment, err
 	}
 
 	return environment, nil
+}
+
+func fingerprintAlternateManifest(environment *graphBuildEnvironment, filename string) error {
+	if filename == "" {
+		return nil
+	}
+
+	manifest, err := moduleManifest(filename)
+	if err != nil {
+		return err
+	}
+
+	environment.ModFile = manifest
+	environment.ModFileSums, err = optionalLines(companionSum(filename))
+
+	return err
 }
 
 func normalizeGraphArchitecture(effective *graphBuildEnvironment) {
@@ -285,7 +296,7 @@ func normalizeGraphArchitecture(effective *graphBuildEnvironment) {
 	}
 }
 
-func normalizeGraphCGO(effective *graphBuildEnvironment, root string) {
+func normalizeGraphCGO(effective *graphBuildEnvironment, root string) error {
 	for _, value := range []*string{
 		&effective.CC, &effective.CXX, &effective.CGOCFLAGS, &effective.CGOCPPFLAGS,
 		&effective.CGOCXXFLAGS, &effective.CGOLDFLAGS, &effective.CGOFFLAGS,
@@ -296,10 +307,16 @@ func normalizeGraphCGO(effective *graphBuildEnvironment, root string) {
 			continue
 		}
 
+		if strings.ContainsRune(*value, 0) || strings.ContainsRune(root, 0) {
+			return errInvalidCGOEnvironment
+		}
+
 		if root != "" {
-			*value = strings.ReplaceAll(*value, filepath.Clean(root), "${PROJECT}")
+			*value = normalizeCGOPaths(*value, filepath.Clean(root))
 		}
 	}
+
+	return nil
 }
 
 func fingerprintModule(module model.ModuleInfo, alternateManifest string) (graphModule, error) {

@@ -221,7 +221,8 @@ func TestDiffClassifications(t *testing.T) {
 		{"backend", model.DiffBackend, func(l *model.Lockfile) { l.Backend.Version = "v1.2.0" }},
 		{"build", model.DiffBuild, func(l *model.Lockfile) { l.GoVersion = "go1.27.1" }},
 		{"signature", model.DiffSignature, func(l *model.Lockfile) {
-			l.Targets[0].SignatureDigest = lockfile.Digest([]byte("other"))
+			l.Targets[0].Signature = "func(int)"
+			l.Targets[0].SignatureDigest = lockfile.Digest([]byte(l.Targets[0].Signature))
 		}},
 		{"span", model.DiffSpanName, func(l *model.Lockfile) { l.Targets[0].SpanName = "other" }},
 		{"context", model.DiffContext, func(l *model.Lockfile) { l.Targets[0].Context.Strategy = "argument" }},
@@ -243,6 +244,13 @@ func TestDiffClassifications(t *testing.T) {
 
 			before, after := fixtureLock(t), fixtureLock(t)
 			testCase.change(&after)
+
+			for index, candidate := range []model.Lockfile{before, after} {
+				_, err := lockfile.Marshal(candidate)
+				if err != nil {
+					t.Fatalf("Diff fixture %d is invalid: %v", index, err)
+				}
+			}
 
 			diff := lockfile.Diff(before, after)
 			if len(diff.Entries) != 1 || diff.Entries[0].Classification != testCase.kind {

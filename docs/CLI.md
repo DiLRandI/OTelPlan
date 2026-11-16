@@ -107,7 +107,9 @@ not alter resolution fingerprints or skip validation/backend verification.
 Cache storage failures return analysis exit code 4 with a diagnostic that omits
 the cache path. Go module/build caches remain separate. After writable
 publication, verified OTelPlan cache entries are bounded to 64 files and 256 MiB.
-Oldest published entries are removed first, with filenames breaking timestamp
+Requested cache entries must open as regular files. Directories and FIFOs fail
+with a storage diagnostic and remain unchanged. Corrupt regular JSON still
+triggers fresh analysis. Oldest published entries are removed first, with filenames breaking timestamp
 ties; the current entry is protected. Unknown, malformed, mismatched, or
 non-regular files are preserved and do not count toward these managed-entry
 limits. Read-only commands perform no retention writes. Cache data is disposable;
@@ -216,7 +218,9 @@ otelplan build -- -o bin/ ./cmd/...
 Directory-output JSON reports `data.files` with paths and digests. Single-file
 output uses `data.path` and `data.digest`. Publication occurs individually; an
 I/O failure can leave earlier files published. Output cannot replace source,
-project metadata, directories, or symlinks.
+project metadata, directories, or symlinks. Ownership checks compare declared and
+resolved paths, including parent-directory aliases and selected metadata symlink
+targets. Ordinary output through a symlinked directory remains allowed.
 
 Build from an application module or pass explicit targets from a workspace root,
 for example `otelplan build -- ./app`. Workspace-root builds require a package
@@ -247,14 +251,19 @@ Offline is a dependency-resolution guarantee, not an operating-system network
 sandbox for arbitrary application code. The CLI installs no exporter or SDK.
 
 SIGINT/SIGTERM cancels discovery, backend verification, generated-source
-compilation, and isolated builds. The Go embedding entry points accept a caller
-context; cancellation does not use a separate shell exit-code contract.
+compilation, and isolated builds. On Linux, cancelling a backend build also stops
+its compiler children before temporary-workspace cleanup. The Go embedding entry
+points accept a caller context; cancellation does not use a separate shell exit-code contract.
 
 ## Lock ownership
 
 Lock, check, diff, and validate compare resolution state. They do not verify a
 backend executable or generated artifact files. Executable digests and artifact
 hashes belong to the build phase; the full lockfile comparison API compares them.
+
+Existing locks must open as regular files. Reads follow valid symlinks, including
+external targets, without changing them. A directory or FIFO returns the existing
+`OTP6001` diagnostic and exit code 6 instead of blocking or replacing the entry.
 
 Refresh preserves independently-owned build identity when resolution is unchanged.
 A resolution change with existing build identity fails refresh without writing;

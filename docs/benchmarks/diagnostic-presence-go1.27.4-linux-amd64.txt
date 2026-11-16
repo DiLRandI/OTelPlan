@@ -1,0 +1,43 @@
+Diagnostic presence-query allocation comparison, Go 1.27.4, Linux/amd64
+
+Base revision: 91c70b22f2a578dbdaf2d14c8bd03ae78e18edf0
+Before diagnostic.go SHA-256: 280f0a2795e4ca7ae3a43585166138ded749325ed794d375335a47aee9f4c908
+After diagnostic.go SHA-256: d329e4dda6926bc81844a4a594de125bd58913b8fd9b277378d7e888874a1f80
+Shared diagnostic_test.go SHA-256: 59baaf83ce50f0d2a368b1d0298db34dccec9b9300fdc33ae87f459dfbd485bb
+
+Command, with PATH/GOROOT selecting Go 1.27.4:
+GOMAXPROCS=1 GOTOOLCHAIN=local go test ./internal/model -run '^$' -bench '^BenchmarkDiagnosticHasErrors$' -benchmem -benchtime=100x -count=3
+
+Each case contains 1,000 diagnostics. Preflight and the final timed result must
+match the expected presence value. These small method-level samples establish
+allocation behavior, not an application latency baseline or speedup claim.
+
+Before
+------
+goos: linux
+goarch: amd64
+pkg: github.com/DiLRandI/OTelPlan/internal/model
+cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
+BenchmarkDiagnosticHasErrors/all-warnings         	     100	      2389 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDiagnosticHasErrors/all-warnings         	     100	      2394 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDiagnosticHasErrors/all-warnings         	     100	      2434 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDiagnosticHasErrors/all-errors           	     100	     42346 ns/op	  236896 B/op	      11 allocs/op
+BenchmarkDiagnosticHasErrors/all-errors           	     100	     38441 ns/op	  236896 B/op	      11 allocs/op
+BenchmarkDiagnosticHasErrors/all-errors           	     100	     40072 ns/op	  236896 B/op	      11 allocs/op
+PASS
+ok  	github.com/DiLRandI/OTelPlan/internal/model	0.017s
+
+After
+-----
+goos: linux
+goarch: amd64
+pkg: github.com/DiLRandI/OTelPlan/internal/model
+cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
+BenchmarkDiagnosticHasErrors/all-warnings         	     100	       430.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDiagnosticHasErrors/all-warnings         	     100	       427.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDiagnosticHasErrors/all-warnings         	     100	       440.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDiagnosticHasErrors/all-errors           	     100	         1.980 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDiagnosticHasErrors/all-errors           	     100	         1.540 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDiagnosticHasErrors/all-errors           	     100	         2.140 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/DiLRandI/OTelPlan/internal/model	0.003s

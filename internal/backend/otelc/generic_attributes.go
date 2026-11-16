@@ -4,8 +4,8 @@ import (
 	"go/ast"
 	"go/parser"
 
+	"github.com/DiLRandI/OTelPlan/internal/model"
 	"github.com/DiLRandI/OTelPlan/internal/validate"
-	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
 const (

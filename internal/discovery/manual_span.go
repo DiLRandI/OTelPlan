@@ -6,7 +6,7 @@ import (
 	"go/ast"
 	"go/types"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/go/types/typeutil"
 )

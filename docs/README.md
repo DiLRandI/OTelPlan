@@ -1,14 +1,13 @@
 # Documentation
 
 OTelPlan is implemented and pre-stable. The CLI and backend references describe
-current behavior. Product and component specifications retain the intended
-architecture and release requirements; the roadmap separates implemented work
-from remaining acceptance gates.
+current behavior. The component references describe the architecture and product contracts;
+the roadmap separates implemented work from remaining acceptance gates.
+The [acceptance criteria](14_ACCEPTANCE_CRITERIA.md) remain release-blocking.
 
 | Area | Reference |
 | --- | --- |
-| Product | [Vision](00_PRODUCT_VISION.md), [requirements](01_PRD.md), [competitive gap](12_COMPETITIVE_GAP.md) |
-| Architecture | [Components and data flow](02_ARCHITECTURE.md) |
+| Architecture | [Components, data flow, design invariants, and scope](02_ARCHITECTURE.md) |
 | Policy | [Policy reference](04_POLICY_SPEC.md), [JSON Schema](../schemas/otelplan.schema.json), [example](../examples/otelplan.yaml) |
 | CLI | [Commands, flags, JSON, diagnostics, and exit codes](CLI.md) |
 | Discovery | [Semantic analysis and effective build inputs](03_DISCOVERY_ENGINE.md) |
@@ -24,10 +23,7 @@ from remaining acceptance gates.
 | Performance | [Requirements and benchmark commands](11_PERFORMANCE.md) |
 | Roadmap | [Implementation status and remaining work](13_ROADMAP.md) |
 | Acceptance criteria | [Release-blocking requirements](14_ACCEPTANCE_CRITERIA.md) |
-| Architectural decisions | [Decision log](15_DECISIONS.md) |
-| External references | [Upstream sources](REFERENCES.md) |
-| Contributing | [Setup, changes, verification, and pull requests](CONTRIBUTING.md) |
-| Contributor implementation instructions | [Implementation constraints](CODEX_IMPLEMENTATION_PROMPT.md), [agent instructions](../AGENTS.md) |
+| Contributing | [Setup, changes, verification, and pull requests](CONTRIBUTING.md), [agent instructions](../AGENTS.md) |
 
 The [architecture fixture README](../internal/cli/testdata/architectures/README.md)
 stays beside its test inputs because it explains their independent online/offline

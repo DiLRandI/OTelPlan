@@ -9,7 +9,7 @@ These fixtures exercise the same policy intent across package-oriented, feature-
 
 The offline scenario can run independently; it does not depend on the online scenario or the developer's module cache. Preparation requires network access. The subsequent offline workflow does not. Module caches and retained backend work directories belong to the test and are cleaned up.
 
-Build the pinned backend as described in `.github/workflows/check.yml`, then run either scenario:
+Build the pinned backend using the [backend build instructions](../../../../docs/OTELC_BACKEND.md#build-the-pinned-backend), then run either scenario:
 
 ```sh
 OTELPLAN_OTELC=/absolute/path/to/otelc go test ./internal/cli \

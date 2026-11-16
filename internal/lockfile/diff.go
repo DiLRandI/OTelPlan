@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"sort"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 // Diff reports changes in resolution and build-owned identity in deterministic order.

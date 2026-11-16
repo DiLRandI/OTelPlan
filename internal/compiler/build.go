@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/DiLRandI/OTelPlan/internal/backend/otelc"
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 var (

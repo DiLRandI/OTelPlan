@@ -14,8 +14,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/DiLRandI/OTelPlan/internal/model"
 	"github.com/DiLRandI/OTelPlan/internal/validate"
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	compatmodel "github.com/DiLRandI/OTelPlan/pkg/model"
 	"golang.org/x/mod/module"
 	"golang.org/x/tools/go/ast/astutil"
 )
@@ -113,7 +114,7 @@ func validateAccessorTarget(code *model.CodeModel, target model.ResolvedTarget) 
 	}
 
 	symbol, _ := code.Symbol(target.SymbolID)
-	parsed, err := model.ParseSymbolID(symbol.ID)
+	parsed, err := compatmodel.ParseSymbolID(symbol.ID)
 
 	if err != nil || parsed.ImportPath != symbol.PackageImportPath || parsed.Name != symbol.Name ||
 		!token.IsIdentifier(symbol.PackageName) || symbol.PackageName == "_" {

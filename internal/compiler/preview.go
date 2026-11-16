@@ -8,7 +8,7 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 var errArtifactOutputParentNotDirectory = errors.New("artifact output parent must be a directory")

@@ -6,8 +6,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/DiLRandI/OTelPlan/internal/model"
 	"github.com/DiLRandI/OTelPlan/internal/resolve"
-	"github.com/DiLRandI/OTelPlan/pkg/model"
 )
 
 func usageError(opts options, command, message string, stdout, stderr io.Writer) int {

@@ -3,7 +3,7 @@ package otelc
 import (
 	"fmt"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 func (renderer *accessorRenderer) renderErrorTypeAccessor(binding AccessorBinding) error {

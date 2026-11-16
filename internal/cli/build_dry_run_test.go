@@ -25,12 +25,7 @@ type buildDryRunReply struct {
 }
 
 func TestBuildDryRunPreflightsWithoutExecutingOrPublishing(t *testing.T) {
-	executable := os.Getenv("OTELPLAN_OTELC")
-	if executable == "" {
-		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
-	}
-
-	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", testenv.PathWithOTelC(t))
 	testenv.PrepareOffline(t, "../..", filepath.Join("testdata", "architectures", "common"))
 	root := buildDryRunFixture(t)
 	warmCache := filepath.Join(root, "analysis-cache")

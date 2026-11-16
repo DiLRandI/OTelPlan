@@ -232,6 +232,11 @@ OTELPLAN_OTELC=/absolute/path/to/otelc go test -timeout=20m ./...
 OTELPLAN_OTELC=/absolute/path/to/otelc go test -race -timeout=20m ./...
 ```
 
+`OTELPLAN_OTELC` selects the exact executable, including a custom filename.
+CLI integration tests expose that file as `otelc` in a private temporary PATH
+directory; adjacent executables are not selected. Check `go version -m` for both
+the CLI and selected backend when recording patched-toolchain evidence.
+
 Both runs use an explicit per-package timeout because cold-cache instrumented
 builds can exceed Go's default 10-minute package budget on CI runners. CI divides
 the workload into complementary shards, each running normal and race tests:

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 	"golang.org/x/mod/modfile"
 )
 

@@ -10,7 +10,7 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 const (

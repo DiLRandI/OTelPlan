@@ -13,8 +13,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/DiLRandI/OTelPlan/internal/model"
 	"github.com/DiLRandI/OTelPlan/internal/validate"
-	"github.com/DiLRandI/OTelPlan/pkg/model"
 	"golang.org/x/mod/semver"
 )
 

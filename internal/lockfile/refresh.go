@@ -3,7 +3,7 @@ package lockfile
 import (
 	"slices"
 
-	"github.com/DiLRandI/OTelPlan/pkg/model"
+	"github.com/DiLRandI/OTelPlan/internal/model"
 )
 
 // ResolutionDiff compares analysis-owned state without asserting that an

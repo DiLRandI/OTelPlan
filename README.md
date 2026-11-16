@@ -98,15 +98,8 @@ code, offline requirements, and lock/build ownership contract.
 
 ## Documentation
 
-Start with the [documentation index](docs/README.md).
-
-- [CLI](docs/CLI.md) and [policy](docs/04_POLICY_SPEC.md)
-- [Architecture](docs/02_ARCHITECTURE.md) and [discovery](docs/03_DISCOVERY_ENGINE.md)
-- [Backend compatibility](docs/OTELC_BACKEND.md) and [runtime](docs/07_RUNTIME_HOOKS.md)
-- [Safety](docs/08_VALIDATION_SAFETY.md) and [reproducibility](docs/09_LOCKFILE_REPRODUCIBILITY.md)
-- [Security reporting and operational boundaries](docs/SECURITY.md)
-- [Compatibility and upgrades](docs/COMPATIBILITY.md)
-- [Testing](docs/10_TEST_STRATEGY.md) and [roadmap/status](docs/13_ROADMAP.md)
+Start with the [documentation index](docs/README.md) for policy, CLI, architecture,
+backend support, security, compatibility, and release references.
 
 ## Development
 

@@ -16,12 +16,7 @@ import (
 )
 
 func TestCompileCLI(t *testing.T) {
-	executable := os.Getenv("OTELPLAN_OTELC")
-	if executable == "" {
-		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
-	}
-
-	t.Setenv("PATH", filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", testenv.PathWithOTelC(t))
 	testenv.PrepareOffline(t, "../..", filepath.Join("testdata", "architectures", "common"))
 	root, originals := lockContractFixture(t)
 
@@ -208,10 +203,7 @@ func TestCompileCLIUsage(t *testing.T) {
 }
 
 func TestCompileOfflineDisablesProxyBypass(t *testing.T) {
-	executable := os.Getenv("OTELPLAN_OTELC")
-	if executable == "" {
-		t.Skip("OTELPLAN_OTELC is required for pinned backend integration")
-	}
+	t.Setenv("PATH", testenv.PathWithOTelC(t))
 
 	testenv.PrepareOffline(t, "../..", filepath.Join("testdata", "architectures", "common"))
 
@@ -257,7 +249,7 @@ func TestCompileOfflineDisablesProxyBypass(t *testing.T) {
 		t.Fatalf("make Go wrapper executable: %v", err)
 	}
 
-	path := strings.Join([]string{wrapperDir, filepath.Dir(executable), os.Getenv("PATH")}, string(os.PathListSeparator))
+	path := strings.Join([]string{wrapperDir, os.Getenv("PATH")}, string(os.PathListSeparator))
 	t.Setenv("PATH", path)
 	t.Setenv("GONOPROXY", "*")
 	root, _ := lockContractFixture(t)

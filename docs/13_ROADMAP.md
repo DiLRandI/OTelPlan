@@ -27,11 +27,11 @@ Current readiness work, in priority order:
 | --- | --- |
 | Everyday CI | [PR #305](https://github.com/DiLRandI/OTelPlan/pull/305) is merged. One job runs tests, vet, and CLI build; full validation moves to a manual workflow. Hosted Check passed in 2m57s versus the 33m42s failing baseline. All three local real-backend normal/race shards passed with unchanged timeouts. Manual hosted release validation is now available on main; a candidate-specific run remains required. |
 | Toolchain security | [PR #306](https://github.com/DiLRandI/OTelPlan/pull/306), based on #305, requires Go 1.27.4 and is merged. Hosted Check passed in 2m23s. Full local checks, both vulnerability scans, patched-toolchain architecture normal/race tests, and two identical real Linux archive builds passed. Candidate-wide final acceptance remains. |
-| Go review | [PR #307](https://github.com/DiLRandI/OTelPlan/pull/307) contains policy cleanup and awaits review; hosted Check passed in 2m22s. [PR #308](https://github.com/DiLRandI/OTelPlan/pull/308) contains glob cache cleanup with full local checks passed. Coverage and remaining packages are listed below; neither PR establishes whole-codebase completion. |
-| Documentation | Reassess navigation, overlapping specifications, and historical instructions after CI and Go review. |
+| Go review | Structured review of all production/test sources and owned fixtures is complete. Focused fixes/refactors are in #307 through #319. Full local quality checks and the real adapter normal/race suite pass on the combined tip. Hosted full validation of `3c313b5` is in progress; final candidate security/performance and release acceptance remain separate. |
+| Documentation | `docs/remove-superseded-plans`, based on #319, removes six superseded planning/market/implementation documents. Current component contracts and release-blocking acceptance remain; essential invariants move into architecture and agent guidance. Next, merge overlapping technical references, update paths/anchors, and verify navigation. |
 | Release | Candidate-specific acceptance/security/performance review, SBOM/provenance, protected publishing implementation, and a complete v1.0 RC cycle remain. No tag, release, or merge is authorized. |
 
-The CI split and Go 1.27.4 baseline are merged. Open PRs #307 through #318
+The CI split and Go 1.27.4 baseline are merged. Open PRs #307 through #319
 form a linear review stack, each based on its immediate predecessor; #307 is
 based on main. The cache correction in [PR #315](https://github.com/DiLRandI/OTelPlan/pull/315) is based
 on #314. Earlier CI/backend slices passed all three local backend normal/race
@@ -39,9 +39,12 @@ shards; final combined-candidate validation remains required. The FIFO lockfile 
 based directly on #315. The build-output alias correction is [PR #317](https://github.com/DiLRandI/OTelPlan/pull/317),
 based directly on #316. Exact backend selection is [PR #318](https://github.com/DiLRandI/OTelPlan/pull/318),
 based directly on #317. The remaining engine model-type dependency cleanup is on
-`refactor/engine-internal-models`, based directly on #318. Backend source, test,
-and shared/generated-fixture review is complete. Cleanup verification is complete. Next, publish it, consolidate documentation,
-and complete candidate release work.
+[PR #319](https://github.com/DiLRandI/OTelPlan/pull/319), based directly on #318. Backend source, test,
+and shared/generated-fixture review is complete. Cleanup verification is complete. Full hosted validation of commit `3c313b5`
+is [run 43776667254](https://github.com/DiLRandI/OTelPlan/actions/runs/43776667254).
+The first documentation cleanup removes six superseded product/implementation/
+market-reference documents while retaining current contracts and design invariants.
+Next, consolidate the technical references and complete candidate release work.
 Candidate-wide acceptance, security/performance review, SBOM/provenance, and the
 actual RC cycle remain. See
 [CI execution and timeout evidence](10_TEST_STRATEGY.md#6-authoritative-quality-gates).

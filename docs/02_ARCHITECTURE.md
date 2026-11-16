@@ -216,3 +216,41 @@ If a backend operation needs module changes, OTelPlan must either:
 2. require an explicit flag and show the exact changes.
 
 The default should favor an isolated, reproducible build workspace.
+
+## Design invariants and scope
+
+- Policy is authoritative. Discovery and initializer scores provide deterministic,
+  explained suggestions; they do not silently choose production instrumentation.
+- Selection uses Go symbols, types, method sets, interfaces, source metadata, and
+  explicit policy. Service/Repository names and directory layouts are not required.
+- Broad selectors resolve to exact declarations before backend generation.
+  Inspect, explain, diff, and locks make selection and drift reviewable.
+- Application Go files and module/workspace state remain unchanged. Backend
+  execution uses disposable copies; explicit policy, lock, and artifact outputs
+  retain their documented ownership and replacement checks.
+- Argument/result capture requires explicit mappings. Sensitive-name defaults
+  cannot be removed by custom patterns, and capture cannot be enabled wholesale.
+- Required context propagation fails validation when it cannot be represented.
+  Explicit root strategies and nil-context behavior follow the runtime contract;
+  there is no inferred ambient continuation.
+- The pinned adapter validates capabilities and exact identities before rendering.
+  Unsupported targets fail without partial artifacts or silent uninstrumented fallback.
+- Generated spans use OpenTelemetry APIs. Applications own their SDK, exporter,
+  transport, and Collector configuration. OTelPlan analysis stays local and the
+  CLI installs no telemetry exporter or analytics.
+- Policy, lock, CLI JSON, diagnostic codes, and exit categories are the primary
+  compatibility contracts. Generation, canonicalization, and diagnostics remain
+  deterministic for equivalent inputs. Public Go types require a demonstrated
+  consumer need; speculative interfaces and extension points are not release work.
+
+The stable scope excludes arbitrary code-block capture, source-patch generation,
+a replacement compiler-weaving engine, vendor-specific transaction APIs, GUI/SaaS
+or IDE products, LLM-based inference, and additional backends. Verified limitations
+of the current pin belong in the [backend reference](OTELC_BACKEND.md), not in
+unimplemented interface proposals. Compatibility and migration commitments belong
+in [COMPATIBILITY.md](COMPATIBILITY.md). The [acceptance criteria](14_ACCEPTANCE_CRITERIA.md)
+remain mandatory; a green development check does not establish release readiness.
+
+Backend updates must be checked against the exact upstream source, rule schema,
+hook API, and real trace tests. Upstream main, design proposals, competitor
+comparisons, or issue closure do not establish capabilities of the pinned binary.

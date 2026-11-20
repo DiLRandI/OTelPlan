@@ -184,17 +184,15 @@ the workload into complementary shards, each running normal and race tests:
 OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh a-m
 OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh remaining
 OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh architecture
+OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh cli-build
 ```
 
-The A-M shard selects top-level tests matching `^Test[A-M]` except
-`TestArchitectureTracesWithPinnedBackend`, which runs in its own CLI shard. The
-remaining shard skips `^Test[A-M]` and retains every other test, example, and fuzz
-seed. Together the three shards retain the full suite, including future names.
-Each uses verbose output to expose executed/skipped tests, disables result caching
-with `-count=1`, and keeps the 20-minute package timeout and 45-minute job limit.
-Matrix failures do not cancel another shard; the aggregate requires all three.
-Quality-gate tests verify arguments, backend requirements, and normal/race failure
-propagation for every shard.
+The A–M shard selects top-level tests matching `^Test[A-M]`, except the four
+long pinned CLI build tests and the architecture trace test. The `cli-build`
+and `architecture` shards run those tests. The `remaining` shard keeps every
+other test, example, and fuzz seed. Each shard uses verbose output, disables
+result caching with `-count=1`, and keeps the 20-minute per-package timeout and
+45-minute job limit. The release gate requires all four shards to pass.
 
 Without `OTELPLAN_OTELC`, backend integration tests skip locally. A configured
 missing or incompatible executable fails. Do not treat skipped tests as trace
@@ -260,6 +258,17 @@ no Taskfile, shell task, or Task application code runs. Both OSS regressions use
 the expensive integration profile enabled by `OTELPLAN_OTELC`. They provide
 complementary web/API and CLI workflow evidence; performance measurements belong
 in the [performance report](PERFORMANCE.md).
+
+## Hosted release timeout on the combined Go changes
+
+In [run 43776667254](https://github.com/DiLRandI/OTelPlan/actions/runs/43776667254)
+on commit `3c313b5` with Go 1.27.4, the A–M normal CLI suite passed in 695.971
+seconds. The race suite reached 1200.277 seconds. The four pinned CLI build
+tests had already passed and accounted for about 499 seconds in the race run.
+Memos also passed. At the alarm, the listed deny-pattern tests were only two
+to five seconds into execution. The logs support a cumulative timeout and show
+no failed assertion before the alarm. Unit, race, vet, lint, vulnerability,
+quality gates, architecture, and remaining-backend jobs passed.
 
 ## Historical CI timing evidence
 

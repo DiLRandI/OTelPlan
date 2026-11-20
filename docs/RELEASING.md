@@ -99,6 +99,26 @@ the fixture's rejecting-proxy controls. Compare project bytes, modes, mtimes,
 inodes, and file membership around read-only/build commands. Verify actual trace
 output, not just process success.
 
+### Exercise the packaged CLI locally
+
+After verifying the candidate checksums, extract the archive into a disposable
+directory. Run the packaged CLI exercise with the extracted binary and the
+exact pinned backend.
+
+```sh
+python3 -I scripts/test-packaged-linux.py \
+  /absolute/path/to/extracted/otelplan /absolute/path/to/pinned/otelc v1.0.0-rc.1
+```
+
+Each layout runs scan, inspect, explain, lock, strict validation, compile,
+locked build, lock check, and diff check. It compares repeated lock and compile
+outputs. The exercise verifies exact targets, preserved
+application returns, span parentage and trace continuity, exception events,
+and privacy. It also compares project file membership, hashes, modes, inodes,
+and modification times. The offline run first checks that a cold lookup fails,
+then prepares dependencies in a disposable project and runs with Go lookup
+disabled and a rejecting HTTP(S) proxy.
+
 ## Maintain redistribution notices
 
 The committed [notice inventory](../third_party/README.txt) records the exact
@@ -194,7 +214,9 @@ gh workflow run release-validation.yml --ref main -f prepare_version=v1.0.0-rc.1
 
 The candidate job depends on the full release gate. It packages the exact
 tested commit twice, compares the outputs, and validates the SBOM against a
-checksum-pinned copy of the official schema. It signs the unchanged archive,
+checksum-pinned copy of the official schema. The job runs the packaged architecture exercise
+with the extracted CLI and pinned OTelC, covering independent online and
+prepared-offline runs. It then signs the unchanged archive,
 SBOM, and checksum list with GitHub artifact attestations. The workflow verifies
 the Sigstore bundle and checks that verification rejects a modified archive
 before retaining the assets as a workflow artifact for review.

@@ -21,10 +21,12 @@ Go modules linked into the executable:
   https://github.com/go-yaml/yaml/tree/v3.0.1
 
 modules.txt records the sorted module/version pairs verified against the built
-executable. SHA256SUMS protects this directory against incomplete notice edits.
+executable. spdx-licenses.txt maps each linked module and the Go standard library
+to the license expression described by its unmodified notice. SHA256SUMS protects
+this directory against incomplete notice edits.
 Dependency updates require reviewing the linked source's licenses/notices,
-updating these files and modules.txt, then regenerating SHA256SUMS. Packaging
+updating these files, modules.txt, and spdx-licenses.txt, then regenerating SHA256SUMS. Packaging
 fails for changed module identities, replacements, missing/tampered notice files,
 or different Go license/patent texts. Test-only dependencies are not bundled.
 
-This inventory is not a standardized SBOM or a signed provenance statement.
+The release script uses this inventory to create an SPDX SBOM beside the archive.

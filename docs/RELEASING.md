@@ -183,25 +183,46 @@ Compare the SPDX hashes to the archive and extracted executable. Compare the
 module and standard library versions with `go version -m` on that executable,
 and check the license expressions against the archived notice inventory.
 
-## Provenance and protected publishing design
+## Stage a candidate with provenance
 
-Provenance must bind final artifact digests to the source revision, selected Go
-toolchain, build entry point/parameters, dependency identities, and authenticated
-builder. Follow the [SLSA provenance model](https://slsa.dev/spec/v1.1/provenance)
-when defining those fields. Allowlist useful build inputs; do not dump environment
-variables, credentials, private paths, or application metadata. The local
-`release.json` is unsigned metadata and does not prove publisher identity.
+Run Release validation on `main` with an unused candidate version in
+`prepare_version`. Leave the input empty for a validation-only run.
 
-Use a manually initiated trusted workflow for eventual publication. Separate
-read-only quality/build jobs from the final protected publishing job, pin actions
-and tools to reviewed identities, and grant publishing/attestation permissions
-only where required. Attest the final unchanged archive and SBOM bytes using
-[GitHub artifact attestations](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations).
-Document consumer verification of digest, repository, workflow identity, and
-source revision, including a negative verification test. Attestation generation
-does not itself establish a SLSA assurance level.
+```sh
+gh workflow run release-validation.yml --ref main -f prepare_version=v1.0.0-rc.1
+```
 
-Implement and test this workflow as a separate reviewed change when hosted
-capacity and maintainer publication approval are available. Until then, preserve
-local evidence and leave publication pending. Do not upload artifacts, create
-tags/releases, or request write-capable credentials from PR quality jobs.
+The candidate job depends on the full release gate. It packages the exact
+tested commit twice, compares the outputs, and validates the SBOM against a
+checksum-pinned copy of the official schema. It signs the unchanged archive,
+SBOM, and checksum list with GitHub artifact attestations. The workflow verifies
+the Sigstore bundle and checks that verification rejects a modified archive
+before retaining the assets as a workflow artifact for review.
+
+Use a current GitHub CLI with `gh attestation verify`. Download the artifact from
+the specific successful run and attempt. Obtain the expected full source SHA
+from the reviewed candidate record. The verifier checks the checksum list, all
+three signatures, the source SHA and ref, the signer workflow, and the hosted
+runner requirement.
+
+```sh
+sh scripts/verify-release-provenance.sh /absolute/path/to/candidate \
+  v1.0.0-rc.1 "$REVIEWED_SOURCE_SHA" /absolute/path/to/candidate/provenance.jsonl
+```
+
+The signed payload uses the [SLSA v1 provenance format](https://slsa.dev/spec/v1.1/provenance).
+The workflow artifact is for candidate review. The protected release publishing
+job and maintainer approval are separate.
+
+### Linux release build type
+
+The workflow dispatch accepts `prepare_version` and runs on the selected
+`refs/heads/main` commit. These inputs and the repository and workflow path are
+recorded in `externalParameters`. The archive recipe is
+`scripts/release-linux.sh VERSION OUTPUT_DIRECTORY` at that commit.
+`internalParameters` records the entry point, target and selected Go version.
+`resolvedDependencies` records the Git commit, Go toolchain version, and linked
+modules with Go's normalized `h1:` checksums. The archive ships `release.json`
+and `build-info.txt` alongside the binary for independent comparison. The
+attestation authenticates the workflow and subjects with GitHub OIDC and
+Sigstore. The run ID and attempt identify the build invocation.

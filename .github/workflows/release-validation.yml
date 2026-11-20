@@ -2,6 +2,11 @@ name: Release validation
 
 on:
   workflow_dispatch:
+    inputs:
+      prepare_version:
+        description: 'Version to package and attest from main after validation. Leave empty for tests only.'
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -140,3 +145,80 @@ jobs:
           for result in "$UNIT_RESULT" "$RACE_RESULT" "$VET_RESULT" "$LINT_RESULT" "$OTELC_RESULT" "$QUALITY_GATES_RESULT" "$VULN_RESULT"; do
             test "$result" = success || exit 1
           done
+
+  prepare-linux-candidate:
+    if: github.repository == 'DiLRandI/OTelPlan' && github.ref == 'refs/heads/main' && inputs.prepare_version != ''
+    needs: release-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      RELEASE_VERSION: ${{ inputs.prepare_version }}
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Build twice from the validated commit
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          go mod download
+          sh scripts/release-linux.sh "$RELEASE_VERSION" "$RUNNER_TEMP/candidate"
+          sh scripts/release-linux.sh "$RELEASE_VERSION" "$RUNNER_TEMP/repeated"
+          diff -qr "$RUNNER_TEMP/candidate" "$RUNNER_TEMP/repeated"
+          cd "$RUNNER_TEMP/candidate"
+          sha256sum --strict -c SHA256SUMS
+      - name: Validate SPDX against the official schema
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP"
+          gh release download v6.0.3 --repo santhosh-tekuri/jsonschema --pattern jv-v6.0.3-linux-amd64.tar.gz
+          printf '%s  %s\n' 36e9ab8481cc8e2cb27c8336decc9abdcbd606b05792ca88d6188e01ec28766b jv-v6.0.3-linux-amd64.tar.gz | sha256sum -c -
+          tar -xzf jv-v6.0.3-linux-amd64.tar.gz jv
+          curl -fsSL --retry 3 https://raw.githubusercontent.com/spdx/spdx-spec/6f2cb47d13db19b12c23885573b22ef32ec1ada5/schemas/spdx-schema.json -o spdx-schema.json
+          printf '%s  %s\n' 4126dc29f15e92feec92e9622f4939131ad58b125d6f578aa93e980a6e6f3212 spdx-schema.json | sha256sum -c -
+          ./jv spdx-schema.json candidate/otelplan_"${RELEASE_VERSION}"_linux_amd64.spdx.json
+      - name: Record build inputs
+        run: |
+          python3 -I scripts/release-provenance.py \
+            "$RUNNER_TEMP/candidate/otelplan_${RELEASE_VERSION}_linux_amd64.tar.gz" \
+            "$GITHUB_SHA" "$RELEASE_VERSION" \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT" \
+            > "$RUNNER_TEMP/provenance-predicate.json"
+      - name: Attest candidate bytes
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/candidate/*
+          predicate-type: https://slsa.dev/provenance/v1
+          predicate-path: ${{ runner.temp }}/provenance-predicate.json
+      - name: Verify the bundle and reject changed bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: |
+          sh scripts/verify-release-provenance.sh "$RUNNER_TEMP/candidate" "$RELEASE_VERSION" "$GITHUB_SHA" "$BUNDLE"
+          changed="$RUNNER_TEMP/changed.tar.gz"
+          cp "$RUNNER_TEMP/candidate/otelplan_${RELEASE_VERSION}_linux_amd64.tar.gz" "$changed"
+          printf 'modified\n' >> "$changed"
+          if gh attestation verify "$changed" --repo "$GITHUB_REPOSITORY" --bundle "$BUNDLE"; then
+            echo 'Attestation accepted a modified archive' >&2
+            exit 1
+          fi
+          cp "$BUNDLE" "$RUNNER_TEMP/candidate/provenance.jsonl"
+      - name: Store candidate for maintainer review
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: otelplan-linux-candidate-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/candidate/
+          if-no-files-found: error
+          retention-days: 30

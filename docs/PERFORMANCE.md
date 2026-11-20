@@ -1,4 +1,4 @@
-# Performance Requirements
+# Performance and benchmark evidence
 
 ## 1. CLI analysis
 
@@ -159,7 +159,7 @@ exporter benchmark or an application throughput claim. Record raw samples and
 the full environment before comparing revisions. No regression threshold is
 enforced until a stable baseline and an agreed statistical policy exist.
 
-## Initial runtime baseline
+## Historical runtime baseline
 
 Measured on 2026-10-31 at clean revision
 `bc94f3cd84abad178e37a00a0764ed40bea612fe`, based on runtime fix #286.

@@ -79,7 +79,7 @@ The following boundaries matter when operating the tool:
   compile do not enforce resolution-lock freshness. Artifact hashes establish
   consistency with the supplied manifest, not its origin.
 
-See [capture and privacy](08_VALIDATION_SAFETY.md),
-[CLI behavior](CLI.md), and [reproducibility](09_LOCKFILE_REPRODUCIBILITY.md)
+See [capture and privacy](POLICY.md),
+[CLI behavior](CLI.md), and [reproducibility](COMPATIBILITY.md)
 for the detailed controls and limitations. Please report a suspected bypass even
 when its particular scenario is not described here.

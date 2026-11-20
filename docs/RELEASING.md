@@ -2,7 +2,7 @@
 
 OTelPlan is pre-stable. This procedure prepares local candidate artifacts from an
 exact committed source revision. Public releases still require the remaining
-[release acceptance](13_ROADMAP.md#phase-6--stable-v1) work and maintainer review.
+[release acceptance](ROADMAP.md#phase-6--stable-v1) work and maintainer review.
 Version strings below are examples, not a new release announcement. Check the
 existing tags and agree an unused candidate version before preparing a release.
 
@@ -12,7 +12,7 @@ Use Linux/amd64, Go 1.27.4 or a later 1.27.x patch, Git, GNU tar/mv, gzip, and s
 Go toolchain before packaging. Prepare the committed module's dependencies with
 `go mod download`; the packaging build disables dependency and toolchain downloads.
 
-Run the explicit [Release validation workflow](10_TEST_STRATEGY.md#6-authoritative-quality-gates),
+Run the explicit [Release validation workflow](DEVELOPMENT.md#authoritative-quality-gates),
 including real pinned backend tests and vulnerability checks, for the exact
 candidate source. Ordinary PR Check success is insufficient for release acceptance.
 Review the [compatibility contracts](COMPATIBILITY.md) and backend support matrix.

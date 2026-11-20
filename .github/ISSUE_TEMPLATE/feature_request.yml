@@ -5,7 +5,7 @@ body:
     attributes:
       value: |
         Keep examples free of private source, credentials, and application data.
-        Review the [roadmap](https://github.com/DiLRandI/OTelPlan/blob/main/docs/13_ROADMAP.md) before proposing new scope.
+        Review the [roadmap](https://github.com/DiLRandI/OTelPlan/blob/main/docs/ROADMAP.md) before proposing new scope.
   - type: textarea
     id: problem
     attributes:

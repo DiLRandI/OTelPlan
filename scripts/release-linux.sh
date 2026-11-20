@@ -111,11 +111,13 @@ chmod 0644 "$payload/build-info.txt" "$payload/version.json" "$payload/release.j
 tar --sort=name --format=ustar --mtime="@$source_epoch" --owner=0 --group=0 --numeric-owner \
   -C "$staging/payload" -cf "$staging/package.tar" "$stem"
 gzip -n -9 -c "$staging/package.tar" > "$staging/publish/$stem.tar.gz"
+python3 -I "$staging/source/scripts/release-sbom.py" "$payload" "$staging/publish/$stem.tar.gz" \
+  > "$staging/publish/$stem.spdx.json"
 (
   cd "$staging/publish"
-  sha256sum "$stem.tar.gz" > SHA256SUMS
+  sha256sum "$stem.tar.gz" "$stem.spdx.json" > SHA256SUMS
 )
-chmod 0644 "$staging/publish/$stem.tar.gz" "$staging/publish/SHA256SUMS"
+chmod 0644 "$staging/publish/$stem.tar.gz" "$staging/publish/$stem.spdx.json" "$staging/publish/SHA256SUMS"
 mv -T --no-clobber "$staging/publish" "$output_directory"
 [ ! -d "$staging/publish" ] || fail 'output appeared during publication'
 printf 'prepared %s\n' "$output_directory/$stem.tar.gz"

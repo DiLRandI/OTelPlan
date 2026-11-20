@@ -8,7 +8,7 @@ existing tags and agree an unused candidate version before preparing a release.
 
 ## Prerequisites
 
-Use Linux/amd64, Go 1.27.4 or a later 1.27.x patch, Git, GNU tar/mv, gzip, and sha256sum. Select the tested
+Use Linux/amd64, Go 1.27.4 or a later 1.27.x patch, Git, GNU tar/mv, gzip, sha256sum, and Python 3.11 or newer. Select the tested
 Go toolchain before packaging. Prepare the committed module's dependencies with
 `go mod download`; the packaging build disables dependency and toolchain downloads.
 
@@ -39,6 +39,7 @@ The output contains:
 
 ```text
 otelplan_v0.1.0-rc.1_linux_amd64.tar.gz
+otelplan_v0.1.0-rc.1_linux_amd64.spdx.json
 SHA256SUMS
 ```
 
@@ -47,9 +48,8 @@ Go build information, and `release.json` with source revision, toolchain, target
 and commit epoch. `third_party/` contains the linked modules' original license,
 patent, and notice texts, plus the Go license/patent texts. Tar ordering, modes,
 ownership, timestamps, and gzip headers are normalized. Packaged README
-documentation links point to that exact source revision. Compare archives built
-from the same revision, version, toolchain,
-and dependency inputs when checking reproducibility.
+documentation links point to that exact source revision. Compare the archive, SPDX SBOM, and checksum list across two builds with the
+same revision, version, Go toolchain, and dependencies.
 
 ## Verify and review
 
@@ -65,10 +65,10 @@ version, then run the candidate workflow/trace checks before publication.
 Checksums detect changed bytes; publisher authenticity requires the release's
 separate provenance and verification procedure.
 
-Build information records embedded Go dependency versions. Standardized
-SBOM/provenance publication and an actual RC cycle
-remain release-preparation work. The utility creates local files; tagging and
-publishing require a reviewed maintainer action.
+The local SPDX file covers the archive, CLI, Go standard library, and linked Go
+modules. Authenticate the release assets using the provenance verification
+procedure before trusting their checksums. Tagging and publication require
+maintainer approval.
 
 ### Recorded packaged-binary exercise
 
@@ -119,8 +119,8 @@ inventory from the checkout root:
 ```
 
 The selected Go 1.27.x patch must have matching license/patent texts. Review any
-changes rather than bypassing the check. This notice inventory does not replace
-the pending standardized SBOM or provenance work.
+changes and update `third_party/spdx-licenses.txt` alongside its corresponding
+notice files and module versions.
 
 `make test-gates` runs the fast packaging self-test with isolated Git/fake-tool
 fixtures. It checks committed-source isolation, normalized inputs, checksums,
@@ -161,19 +161,29 @@ packaging run alone does not satisfy [release acceptance](14_ACCEPTANCE_CRITERIA
 Local evidence may be collected while hosted Actions are unavailable. It does
 not establish that hosted checks passed or that a release was published.
 
-## SBOM and provenance design
+## SPDX SBOM verification
 
-This is the intended publication design. No SBOM generator, signed attestation,
-or release-publishing workflow is implemented by the current packaging script.
+The archive build uses the generator from the committed source revision.
+It records SHA-256 checksums for the archive and executable, the Go standard
+library version, and exactly the modules in the executable's build information.
+The generator requires those modules to agree with `third_party/modules.txt`
+and their SPDX license entries to match the linked module set. The OTelC
+executable and other build tools are installed separately.
 
-Generate an SPDX JSON SBOM for the exact candidate executable and archive using
-a reviewed, pinned generator. Validate its schema and compare module identities
-with `build-info.txt` and `third_party/modules.txt`; include the Go runtime and
-artifact hashes, preserve applicable license identities, and distinguish build
-tools from bundled runtime dependencies. Exclude OTelC from bundled components
-because it is installed separately. Fail publication on missing or inconsistent
-components. Record the generator identity, then checksum the final SBOM alongside
-the archive. A build-info listing or notice inventory is not a standardized SBOM.
+Validate the JSON with the [official SPDX 2.3 schema](https://github.com/spdx/spdx-spec/blob/6f2cb47d13db19b12c23885573b22ef32ec1ada5/schemas/spdx-schema.json).
+From the output directory with Python's `jsonschema` installed:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/spdx/spdx-spec/6f2cb47d13db19b12c23885573b22ef32ec1ada5/schemas/spdx-schema.json -o spdx-schema.json
+printf '%s  %s\n' 4126dc29f15e92feec92e9622f4939131ad58b125d6f578aa93e980a6e6f3212 spdx-schema.json | sha256sum -c -
+python3 -m jsonschema -i otelplan_v0.1.0-rc.1_linux_amd64.spdx.json spdx-schema.json
+```
+
+Compare the SPDX hashes to the archive and extracted executable. Compare the
+module and standard library versions with `go version -m` on that executable,
+and check the license expressions against the archived notice inventory.
+
+## Provenance and protected publishing design
 
 Provenance must bind final artifact digests to the source revision, selected Go
 toolchain, build entry point/parameters, dependency identities, and authenticated

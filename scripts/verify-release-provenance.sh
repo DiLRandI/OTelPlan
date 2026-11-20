@@ -12,10 +12,14 @@ source_sha=$3
 bundle=$4
 stem="otelplan_${version}_linux_amd64"
 
-(
+expected=$(
   cd "$directory"
-  sha256sum --strict -c SHA256SUMS
+  sha256sum -- "$stem.tar.gz" "$stem.spdx.json"
 )
+if [ "$(cat -- "$directory/SHA256SUMS")" != "$expected" ]; then
+  echo 'release asset checksums disagree with SHA256SUMS' >&2
+  exit 1
+fi
 for filename in "$stem.tar.gz" "$stem.spdx.json" SHA256SUMS; do
   gh attestation verify "$directory/$filename" \
     --bundle "$bundle" \

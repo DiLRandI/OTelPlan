@@ -211,8 +211,7 @@ sh scripts/verify-release-provenance.sh /absolute/path/to/candidate \
 ```
 
 The signed payload uses the [SLSA v1 provenance format](https://slsa.dev/spec/v1.1/provenance).
-The workflow artifact is for candidate review. The protected release publishing
-job and maintainer approval are separate.
+The workflow artifact is for candidate review. Use the separate publishing workflow after candidate review and maintainer approval.
 
 ### Linux release build type
 
@@ -226,3 +225,32 @@ modules with Go's normalized `h1:` checksums. The archive ships `release.json`
 and `build-info.txt` alongside the binary for independent comparison. The
 attestation authenticates the workflow and subjects with GitHub OIDC and
 Sigstore. The run ID and attempt identify the build invocation.
+
+## Publish a reviewed Linux release
+
+Before enabling publication, protect `main` and create the GitHub Actions
+environment `release`. Allow deployments from the `main` branch only. Set at
+least one required reviewer, prevent self-review, and disable administrator
+bypass. Enable immutable releases in repository settings to protect published
+tags and assets. This workflow uses the built-in job token for publication.
+See [GitHub environment protection](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
+
+First run **Publish Linux release** on `main` with the candidate run ID and
+version. Leave `publish` false to exercise download and cryptographic
+verification with read permissions. The run must be a successful manual
+**Release validation** run at the exact commit and include the signed candidate
+job. Fast PR checks alone cannot satisfy this gate.
+
+After candidate acceptance and release approval, the maintainer creates the
+reviewed tag at that source commit. Use an annotated tag with the reviewed
+release notes. Dispatch **Publish Linux release** with `publish=true` and
+have the independent reviewer approve the `release` environment. The workflow
+checks branch and environment protection, tag identity, and the candidate run
+before approval. The publishing job repeats the checks and verifies every
+attested subject. It uploads the archive, SPDX SBOM, checksums, and Sigstore
+bundle to a draft, then compares every uploaded SHA-256 with the staged file
+before publishing. Release candidate versions are GitHub prereleases.
+
+A failed upload or digest comparison can leave a draft for inspection.
+Resolve the draft explicitly before retrying. A publication attempt never
+reuses an existing draft or creates a missing tag.

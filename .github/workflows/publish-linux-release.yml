@@ -1,0 +1,72 @@
+name: Publish Linux release
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run:
+        description: Successful Release validation run ID from main with a staged candidate
+        required: true
+        type: string
+      release_version:
+        description: Reviewed release version and pre-existing tag
+        required: true
+        type: string
+      publish:
+        description: Request protected publication after verification
+        required: false
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: linux-release-publication
+  cancel-in-progress: false
+
+env:
+  CANDIDATE_RUN: ${{ inputs.candidate_run }}
+  RELEASE_VERSION: ${{ inputs.release_version }}
+
+jobs:
+  verify:
+    if: github.repository == 'DiLRandI/OTelPlan' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      attestations: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify staged candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          mode=verify
+          if [ "$PUBLISH" = true ]; then mode=check; fi
+          sh scripts/release-publication.sh "$mode" "$CANDIDATE_RUN" "$RELEASE_VERSION" "$GITHUB_SHA" "$RUNNER_TEMP/candidate"
+
+  publish:
+    if: github.repository == 'DiLRandI/OTelPlan' && github.ref == 'refs/heads/main' && inputs.publish
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      actions: read
+      contents: write
+      attestations: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Publish verified assets after environment approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sh scripts/release-publication.sh publish "$CANDIDATE_RUN" "$RELEASE_VERSION" "$GITHUB_SHA" "$RUNNER_TEMP/candidate"

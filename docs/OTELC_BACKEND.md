@@ -7,7 +7,7 @@ version, and compute a SHA-256 digest. Lock/validate use the configured identity
 and known capabilities without running the executable.
 
 Backend-specific rule syntax remains inside the adapter. User policies resolve
-to exact backend-neutral plans. See [compiler architecture](06_COMPILER_BACKEND.md).
+to exact backend-neutral plans. See [compiler architecture](ARCHITECTURE.md#build-isolation-and-publication).
 
 ## Build the pinned backend
 
@@ -58,7 +58,7 @@ parent context and replace the application context argument. Nil argument-contex
 invocations skip instrumentation, leave the argument nil, and do not run attribute
 accessors. Policy `context.mode: root` permits a root only when no context argument
 is available; it does not force a root for declarations that already accept
-context. After hooks record configured errors and end any span that was started.
+context. After hooks record configured errors and end each started span exactly once.
 
 The instrumentation scope is `otelplan.io/business` with the supplied runtime
 version. Generated hooks install no SDK or exporter. The application must
@@ -70,7 +70,7 @@ Argument/constant/symbol attributes bind at entry; result and error-type
 attributes bind at exit.
 Explicit symbol fields compile to string literals without application reads or
 method calls. Their source selector remains backend-independent; see
-[policy metadata fields](04_POLICY_SPEC.md#symbol-metadata-attributes).
+[policy metadata fields](POLICY.md#symbol-metadata-attributes).
 Extraction is guarded by `span.IsRecording()`. Typed package-local helpers avoid
 importing application packages into the generated runtime and avoid triggering
 otherwise unused package initializers. Explicit `errorType` accessors use runtime
@@ -78,7 +78,7 @@ type metadata to classify an error without calling application methods or
 reflecting over values/fields. Other scalar capture uses typed readers. Opt-in `stringer: true` calls are
 protected in the generated runtime rather than injecting recovery into application
 packages; formatting panics omit that attribute. Application panic propagation
-is preserved. No automatic object serialization is performed. See [error classification](04_POLICY_SPEC.md#error-type-classification-attributes).
+is preserved. No automatic object serialization is performed. See [error classification](POLICY.md#error-type-classification-attributes).
 
 Helpers return a primitive value and availability flag. Wrong types, nil paths,
 unsigned overflow above `math.MaxInt64`, and non-finite floats are omitted. Zero,
@@ -166,7 +166,7 @@ imported types, exact targets, parentage, returned errors, nil omission, no-op
 telemetry, panic propagation, variadics, generic root captures, concurrent calls,
 module/vendor isolation, artifact checks, and source immutability. Architecture
 E2E tests independently cover cold-cache online and prepared-cache offline paths.
-See [testing](10_TEST_STRATEGY.md) and the
+See [testing](DEVELOPMENT.md) and the
 [fixture README](../internal/cli/testdata/architectures/README.md).
 
 ## Shadowed recovery builtin
@@ -184,3 +184,21 @@ rejects selected targets in those scopes with `OTP5001` before lock, compile, or
 build publication. Local variables and receiver methods named `recover` do not
 hide the builtin in a package-level trampoline and remain supported. Unselected
 packages and unaffected files remain usable.
+
+## Returned errors and formatting panics
+
+For each configured error result index:
+
+- non-nil error -> `RecordError`;
+- set error status with a bounded description strategy;
+- do not emit unbounded error strings as attributes;
+- do not alter returned error.
+
+`RecordError` includes application error text in the exception event. The fixed
+status description does not redact that event. See [error-message privacy](POLICY.md#returned-error-messages).
+
+If the error's `Error()` method panics during recording, a guard around that
+recording call keeps the error status and emits one exception event with the
+constant message `error message unavailable`. It omits the formatting panic value
+and unavailable exception type. Normal formatting runs once; disabled recording
+and noop telemetry do not invoke it. Application-body panics still propagate.

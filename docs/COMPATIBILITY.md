@@ -25,7 +25,85 @@ rather than migrating existing intent.
 The primary integration contracts are policy YAML, locks, CLI JSON, and diagnostic
 codes. `pkg/model` preserves existing Go compatibility names, but is not a stable
 public SDK commitment. Domain definitions belong to `internal/model`; see
-[package ownership and reflection behavior](02_ARCHITECTURE.md#2-package-boundaries).
+[package ownership and reflection behavior](ARCHITECTURE.md#package-boundaries).
+
+## Lock format and fingerprints
+
+`otelplan.lock` is machine-generated canonical JSON using
+`otelplan.io/lock/v1alpha1`. It records policy/build fingerprints, Go/backend
+identity, exact targets/signatures, strategies and provenance. Supported wire
+examples are the independent [lock goldens](../internal/lockfile/testdata/wire-contracts).
+Do not hand-edit digests or format identities.
+
+Go toolchain, target, tags, module mode, alternate manifests, workspace/vendor
+inputs and relevant CGO/compiler settings contribute to build identity. File
+moves produce SOURCE drift; line/column changes remain diagnostic metadata.
+The lock records selection/signatures, not arbitrary source-body bytes. It is
+not an application-source snapshot. Compiler/opaque-flag relocation rules are
+specified under [CGO correction](#cgo-fingerprint-correction).
+
+## Canonicalization
+
+Attributes with `from.symbol` retain the metadata selector and freeze the
+resolved string in `symbolValue`, including an empty receiver for functions.
+Both selector and value participate in attribute drift. Existing sources omit
+this field. Missing, mixed, unknown, or non-string metadata states are rejected;
+ordinary line/column movement remains diagnostic-only.
+
+Explicit error-type classification stores `from.errorType` and its string kind.
+It records no runtime error class or message. Changing the selected error result
+creates attribute drift; malformed mixed sources and non-string kinds are rejected.
+
+The optional `stringer` flag freezes explicit method conversion. Toggling it
+creates attribute drift even for an underlying string source. Legacy attributes
+omit the false flag; malformed static/mixed Stringer sources are rejected.
+
+Before hashing:
+
+- sort maps by key;
+- sort targets by canonical symbol;
+- canonicalize order-independent policy rules, exclusions, selector sets, build tags, and attribute keys without mutating caller policy;
+- normalize path separators;
+- do not include absolute local checkout paths;
+- do not include timestamps in digest material.
+
+## Diff classifications
+
+```text
+ADD
+REMOVE
+SIGNATURE
+POLICY
+SPAN_NAME
+CONTEXT
+ERROR_STRATEGY
+ATTRIBUTE
+BACKEND
+SOURCE
+BUILD
+ARTIFACT
+```
+
+## Resolution and build ownership
+
+The CLI lock, check, diff, and validate commands construct resolution state using
+the configured backend version/capabilities. They do not verify its executable
+or generated artifacts. `Backend.Digest` and `Artifacts` are independently-owned
+build identity when populated by an API caller. The full diff API compares them;
+resolution-only CLI comparison excludes them.
+
+Refresh preserves build identity if resolution is unchanged. If resolution
+changes while build identity is present, refresh refuses to write rather than
+erasing or incorrectly retaining it. The owning build phase must regenerate that
+identity. Compile currently publishes a separate verified artifact manifest and
+does not populate the resolution lock. Build never updates it. `build --locked`
+requires valid, current resolution before backend execution; default build mode
+permits an absent lock. Production scripts should use locked builds and may retain
+`lock --check` as an independent gate. The lock must include the same effective
+analysis flags as the build; see [locked-build inputs](CLI.md).
+
+Malformed locks fail check/diff/validate safely. A normal `lock` command can
+regenerate a malformed resolution file. Check and diff never write project files.
 
 ## Automation
 
@@ -100,7 +178,7 @@ Adapt the application target and destination to your project. Review the resulti
 artifact manifest and policy/lock changes. Locked builds enforce resolution
 freshness; default builds and compile do not. Generate the lock with matching
 effective Go flags if adding options such as `-trimpath`; see [build inputs](CLI.md).
-See [resolution/build ownership](09_LOCKFILE_REPRODUCIBILITY.md#resolution-and-build-ownership).
+See [resolution/build ownership](COMPATIBILITY.md#resolution-and-build-ownership).
 
 ## CGO fingerprint correction
 
@@ -198,5 +276,5 @@ format converter.
 
 The [release candidate record](RELEASING.md#candidate-acceptance-record) must verify
 these commitments against independent policy/lock/CLI contracts and real backend
-behavior before stable publication. The [remaining roadmap](13_ROADMAP.md#phase-6--stable-v1)
+behavior before stable publication. The [remaining roadmap](ROADMAP.md#phase-6--stable-v1)
 still requires an actual RC feedback and acceptance cycle.

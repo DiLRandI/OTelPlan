@@ -1,22 +1,81 @@
-# Test Strategy
+# Development and verification
 
-## 1. Test pyramid
+OTelPlan is an implemented, pre-stable Go tool. Start with the
+[documentation index](README.md), [architecture](ARCHITECTURE.md), and
+[roadmap](ROADMAP.md). The [acceptance criteria](14_ACCEPTANCE_CRITERIA.md)
+remain release-blocking. Current command behavior belongs in [CLI.md](CLI.md),
+and verified backend support belongs in [OTELC_BACKEND.md](OTELC_BACKEND.md).
 
-### Unit tests
+## Issues and proposals
 
-Cover:
+Search existing issues before reporting a bug. Include a minimal reproduction,
+the OTelPlan revision, Go and backend versions, command, and expected versus
+actual behavior. Use dummy application data and redact credentials, private
+source, environment values, and telemetry. Report suspected vulnerabilities
+through the [private security process](SECURITY.md).
 
-- glob matching;
-- symbol canonicalization;
-- interface implementation;
-- policy parsing;
-- precedence;
-- template rendering;
-- diagnostics;
-- lock canonicalization;
-- secret/cardinality detection.
+For a feature proposal, explain the concrete problem and why the existing policy
+or CLI does not solve it. Discuss architecture or compatibility changes before
+implementing them. Avoid adding speculative extension points or dependencies.
 
-### Golden tests
+## Development setup
+
+Use Go 1.27.4 or a later 1.27.x patch and Linux, the current support and verification target:
+
+```sh
+go version
+go mod download
+make build
+```
+
+Use golangci-lint v2.14.0. `make lint` verifies its version and fails for missing
+tools or findings. Follow the [real backend and offline setup](#real-pinned-backend) for the pinned
+backend, dependency preparation, offline tests, and vulnerability scanner setup.
+
+## Implementing a change
+
+- Read the owning implementation, existing tests, and relevant specifications.
+  Confirm the reported behavior before changing it.
+- Keep each PR focused on one concern. Add a regression test for a behavior change
+  before fixing it where practical, and cover meaningful failure paths.
+- Preserve the policy → CodeModel → resolver → ResolvedPlan → validation →
+  lockfile → backend boundaries. Keep OTelC syntax inside its adapter.
+- Preserve exact selection, source immutability, isolated builds, explicit capture,
+  deterministic output, stable diagnostic codes, and caller-owned cancellation.
+- Keep policy YAML, locks, and CLI JSON compatibility visible in review. Domain
+  models belong internally; public Go types need a demonstrated SDK consumer.
+- Fix lint findings directly. Obtain explicit maintainer approval before adding a
+  suppression or exclusion, ignoring a finding, or disabling a lint rule.
+- Format changed Go files with `gofmt`. Keep detailed documentation under `docs/`
+  and link to authoritative references instead of duplicating them.
+
+## Verification
+
+From the repository root, run `make check` with the pinned linter. For behavior
+changes, also use the [real backend](#real-pinned-backend) and
+[vulnerability checks](#authoritative-quality-gates). Record skipped backend
+tests explicitly. Prepare offline dependencies in disposable state before
+denying lookup, and keep source snapshot assertions.
+
+For documentation changes, check relative links, run `git diff --check` and
+`go test ./...`, and verify documented behavior against the implementation.
+Record the exact checks run, skipped checks, and any remaining upstream limitation.
+Never describe an unperformed check as passing.
+
+## Pull requests
+
+Use the PR template to explain the problem, resulting behavior, verification,
+compatibility risk, and dependencies. Inspect the final diff for unrelated files
+and sensitive values before publishing.
+
+Split dependent changes into reviewable PRs targeting the preceding branch and
+state the parent PR in each description. Refresh from the latest `main` when the
+parent has merged. Keep each PR's tests and scope independently understandable.
+Implementation or testing agents must not merge PRs without explicit authorization.
+
+Contributions are covered by the repository's [Apache License 2.0](../LICENSE).
+
+## Independent wire contracts
 
 Inspection and explanation wire contracts use checked-in independent JSON:
 
@@ -44,126 +103,7 @@ attribute sources, Stringer/static symbol metadata, source positions, and lossle
 maximum-width integer constants. The expected files are independent of model
 decoding and are never rewritten by the tests.
 
-### Integration tests
-
-Build real fixture applications through the backend.
-
-Verify:
-
-- application source unchanged;
-- instrumented binary builds;
-- expected spans are emitted;
-- parent-child relationships are correct;
-- errors are recorded;
-- no selected attributes leak forbidden values.
-
-Use an in-memory/test exporter where the generated runtime permits it, or an OTLP test receiver.
-
-### Compatibility tests
-
-Matrix:
-
-- supported Go versions;
-- supported `otelc` versions;
-- Linux builds;
-- pointer/value receivers;
-- interfaces;
-- generics;
-- build tags;
-- go.work;
-- vendor mode.
-
-### End-to-end CLI tests
-
-Exercise:
-
-```text
-init
-scan
-inspect
-validate
-lock
-diff
-compile
-build
-```
-
-## 2. Required fixture architectures
-
-Do not test only one project style.
-
-Fixtures:
-
-1. package-oriented:
-
-```text
-internal/service/user.go
-internal/service/order.go
-```
-
-2. feature-oriented:
-
-```text
-internal/user/service.go
-internal/order/service.go
-```
-
-3. clean/hexagonal:
-
-```text
-internal/domain
-internal/application
-internal/ports
-internal/adapters
-```
-
-4. concrete structs with no interfaces;
-
-5. interfaces with multiple implementations;
-
-6. functional style with package functions and few receiver methods;
-
-7. generics-heavy package;
-
-8. no-context legacy functions;
-
-9. generated mocks mixed with real code.
-
-## 3. Source immutability test
-
-Before every end-to-end build:
-
-1. hash tracked source files;
-2. run OTelPlan;
-3. hash again;
-4. assert equality.
-
-## 4. Trace correctness tests
-
-Example expected hierarchy:
-
-```text
-HTTP server span (existing otelc integration)
-└── checkout.Checkout.Submit
-    ├── pricing.Calculator.Calculate
-    └── payment.Processor.Authorize
-```
-
-The test must verify trace ID continuity and parent span IDs.
-
-## 5. Failure tests
-
-- malformed YAML;
-- stale symbol;
-- ambiguous match;
-- duplicate conflicting rule;
-- missing context;
-- secret attribute;
-- unsupported backend capability;
-- backend executable missing;
-- Go compile failure.
-
-## 6. Authoritative quality gates
+## Authoritative quality gates
 
 ```sh
 make test
@@ -174,7 +114,7 @@ make test-gates
 ```
 
 `make check` runs all of these. The required linter version is v2.14.0, verified
-with the export data emitted by Go 1.27.3. Tool absence, version mismatch,
+with Go 1.27.4. Tool absence, version mismatch,
 and real lint failures return nonzero. No broad suppression is an acceptable
 substitute for fixing a finding.
 
@@ -192,8 +132,7 @@ GitHub Actions separates everyday development from release acceptance:
   Its `release-validation` aggregate requires every job and backend shard to
   succeed. There are no publishing permissions or tag/release operations.
 
-After the workflow is merged into the default branch, select the candidate ref
-in Actions, or invoke and inspect it with:
+Select the candidate ref in Actions, or invoke and inspect it with:
 
 ```sh
 gh workflow run release-validation.yml --ref CANDIDATE_BRANCH_OR_TAG
@@ -222,7 +161,7 @@ and version mismatches also fail. Release validation requires this separate gate
 Results depend on the current Go vulnerability database and supplement, rather
 than replace, source review and other security verification.
 
-## 7. Real pinned backend
+## Real pinned backend
 
 Build the exact backend using [these instructions](OTELC_BACKEND.md#build-the-pinned-backend).
 From OTelPlan:
@@ -257,46 +196,6 @@ Matrix failures do not cancel another shard; the aggregate requires all three.
 Quality-gate tests verify arguments, backend requirements, and normal/race failure
 propagation for every shard.
 
-### Hosted timeout investigation and CI measurements
-
-The baseline is [main run 42559538581](https://github.com/DiLRandI/OTelPlan/actions/runs/42559538581)
-on revision `36e5cc2e61fb32d816b2bafe79f7a2fc3b023ab3`, Go 1.27.3,
-Linux GitHub-hosted runners. Its nine jobs took 33m42s from run creation to
-completion. Unit took 2m47s, race 6m18s, and the failing OTelC A-M job 33m33s.
-These are observed wall times, including setup and cleanup, not performance SLOs.
-
-The A-M normal CLI package passed in 738.260s. Its subsequent race run hit Go's
-cumulative 20-minute package timeout. At the alarm, active analysis/inspection
-tests had been running only 2-4 seconds; the architecture test had already
-finished. The stack dump shows Go package loading and subprocess waits, not a
-failed trace assertion or evidence of a stuck architecture build. The serial
-cold-cache architecture workload and later parallel tests shared one package
-budget. Isolating that workload gives each invocation its own unchanged budget.
-No product resource leak is established by this log. Retain further run evidence
-before treating the timeout correction as verified on hosted runners.
-
-The replacement [PR run 43648581990](https://github.com/DiLRandI/OTelPlan/actions/runs/43648581990)
-passed on `1f9af1428f38ab0a491fd1750c12724dcb849f70`. It took 2m57s from
-creation to completion, with one job running for 2m54s on Go 1.27.4. Tests, vet, and CLI build
-all passed. This single hosted sample meets the five-minute development target;
-it excludes the deliberately separate release gates and does not prove their
-success. The local non-backend suite took 65.79s on Go 1.27.3.
-
-Local real-backend verification of the CI slice passed all three shards in both
-normal and race modes with Go 1.27.3, `GOMAXPROCS=4`, and OTelC v1.1.0 built
-from the pinned source. Architecture took 309.44s, A-M 1640.08s, and remaining
-385.82s, each including both modes. The A-M CLI package took 636.046s normally
-and 1001.021s under race, within its unchanged 1200s budget. Other local Go
-checks ran concurrently, so these are compatibility and timeout-budget evidence,
-not hosted duration or benchmark claims. The Go source and runner were unchanged
-by the documentation-only `29d4942` update during this run.
-
-Go 1.27.3 now fails the vulnerability gate; the patched-toolchain baseline and
-separate Go 1.27.4 architecture evidence are in
-[PR #306](https://github.com/DiLRandI/OTelPlan/pull/306). Full hosted manual
-release validation remains unverified until the workflow is available on main.
-
-
 Without `OTELPLAN_OTELC`, backend integration tests skip locally. A configured
 missing or incompatible executable fails. Do not treat skipped tests as trace
 E2E evidence.
@@ -310,7 +209,7 @@ workflow. This covers dependency resolution without depending on a developer's
 cache. It is not an operating-system network sandbox. See the
 [fixture instructions](../internal/cli/testdata/architectures/README.md).
 
-## 8. Documented upstream failures
+## Upstream limitation regressions
 
 Generic receiver shapes affected by the pinned backend's missing type-argument
 inference retain expected failed-build tests with source/output safety assertions.
@@ -318,7 +217,7 @@ Generic context replacement, unsupported variadic types, and main-package target
 have validation regressions. Upstream issue closure does not imply that a fix is
 present in the pinned executable; see [backend limits](OTELC_BACKEND.md).
 
-## 9. Pinned open-source starter regressions
+## Pinned open-source starter regressions
 
 ```sh
 OTELPLAN_OTELC=/absolute/path/to/otelc go test ./internal/cli \
@@ -360,4 +259,44 @@ the original source and manifests. Network access is denied before CLI execution
 no Taskfile, shell task, or Task application code runs. Both OSS regressions use
 the expensive integration profile enabled by `OTELPLAN_OTELC`. They provide
 complementary web/API and CLI workflow evidence; performance measurements belong
-in the [performance report](11_PERFORMANCE.md).
+in the [performance report](PERFORMANCE.md).
+
+## Historical CI timing evidence
+
+The baseline is [main run 42559538581](https://github.com/DiLRandI/OTelPlan/actions/runs/42559538581)
+on revision `36e5cc2e61fb32d816b2bafe79f7a2fc3b023ab3`, Go 1.27.3,
+Linux GitHub-hosted runners. Its nine jobs took 33m42s from run creation to
+completion. Unit took 2m47s, race 6m18s, and the failing OTelC A-M job 33m33s.
+These are observed wall times, including setup and cleanup, not performance SLOs.
+
+The A-M normal CLI package passed in 738.260s. Its subsequent race run hit Go's
+cumulative 20-minute package timeout. At the alarm, active analysis/inspection
+tests had been running only 2-4 seconds; the architecture test had already
+finished. The stack dump shows Go package loading and subprocess waits, not a
+failed trace assertion or evidence of a stuck architecture build. The serial
+cold-cache architecture workload and later parallel tests shared one package
+budget. Isolating that workload gives each invocation its own unchanged budget.
+No product resource leak is established by this log. Retain further run evidence
+before treating the timeout correction as verified on hosted runners.
+
+The replacement [PR run 43648581990](https://github.com/DiLRandI/OTelPlan/actions/runs/43648581990)
+passed on `1f9af1428f38ab0a491fd1750c12724dcb849f70`. It took 2m57s from
+creation to completion, with one job running for 2m54s on Go 1.27.4. Tests, vet, and CLI build
+all passed. This single hosted sample meets the five-minute development target;
+it excludes the deliberately separate release gates and does not prove their
+success. The local non-backend suite took 65.79s on Go 1.27.3.
+
+Local real-backend verification of the CI slice passed all three shards in both
+normal and race modes with Go 1.27.3, `GOMAXPROCS=4`, and OTelC v1.1.0 built
+from the pinned source. Architecture took 309.44s, A-M 1640.08s, and remaining
+385.82s, each including both modes. The A-M CLI package took 636.046s normally
+and 1001.021s under race, within its unchanged 1200s budget. Other local Go
+checks ran concurrently, so these are compatibility and timeout-budget evidence,
+not hosted duration or benchmark claims. The Go source and runner were unchanged
+by the documentation-only `29d4942` update during this run.
+
+Go 1.27.3 now fails the vulnerability gate; the patched-toolchain baseline and
+separate Go 1.27.4 architecture evidence are in
+[PR #306](https://github.com/DiLRandI/OTelPlan/pull/306). The workflow is now available on main; historical evidence does not replace
+combined-tip validation. Exact backend selection was corrected in PR #318;
+see the current [roadmap](ROADMAP.md) for refreshed runs.

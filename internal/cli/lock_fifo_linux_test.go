@@ -87,39 +87,38 @@ func awaitLockFIFOReply(t *testing.T, directory *os.Root, result <-chan lockFIFO
 	case reply := <-result:
 		return reply
 	case <-timer.C:
-		t.Error("lock command blocked on FIFO")
-		releaseLockFIFOReader(t, directory)
+		t.Errorf("lock command did not return within %s", lockFIFOTimeout)
 	}
 
-	timer.Reset(lockFIFOTimeout)
-
-	select {
-	case reply := <-result:
-		return reply
-	case <-timer.C:
-		t.Fatal("lock command did not return after releasing FIFO")
-
-		return lockFIFOReply{exit: 0, stdout: "", stderr: ""}
-	}
+	return finishTimedOutLockFIFO(t, directory, result)
 }
 
-func releaseLockFIFOReader(t *testing.T, directory *os.Root) {
+func finishTimedOutLockFIFO(t *testing.T, directory *os.Root, result <-chan lockFIFOReply) lockFIFOReply {
 	t.Helper()
 
-	deadline := time.Now().Add(lockFIFOTimeout)
+	timer := time.NewTimer(lockFIFOTimeout)
+	defer timer.Stop()
+
+	probe := time.NewTicker(10 * time.Millisecond)
+	defer probe.Stop()
 
 	for {
-		writer, err := directory.OpenFile("otelplan.lock", os.O_WRONLY|syscall.O_NONBLOCK, 0)
-		if err == nil {
-			requireTestSuccess(t, writer.Close(), "release lockfile FIFO")
+		select {
+		case reply := <-result:
+			return reply
+		case <-timer.C:
+			t.Fatal("lock command did not return during FIFO cleanup")
 
-			return
+			return lockFIFOReply{exit: 0, stdout: "", stderr: ""}
+		case <-probe.C:
+			writer, err := directory.OpenFile("otelplan.lock", os.O_WRONLY|syscall.O_NONBLOCK, 0)
+			if errors.Is(err, syscall.ENXIO) {
+				continue
+			}
+
+			requireTestSuccess(t, err, "open lockfile FIFO for cleanup")
+			requireTestSuccess(t, writer.Close(), "release lockfile FIFO reader")
+			t.Log("released a lockfile FIFO reader after the deadline")
 		}
-
-		if !errors.Is(err, syscall.ENXIO) || time.Now().After(deadline) {
-			t.Fatalf("release blocked lockfile reader: %v", err)
-		}
-
-		time.Sleep(10 * time.Millisecond)
 	}
 }

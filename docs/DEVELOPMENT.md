@@ -196,11 +196,13 @@ OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh architectu
 OTELPLAN_OTELC=/absolute/path/to/otelc sh scripts/test-otelc-shard.sh cli-build
 ```
 
-The A–M shard selects top-level tests matching `^Test[A-M]`, except the four
-long pinned CLI build tests and the architecture trace test. The `cli-build`
-and `architecture` shards run those tests. The `remaining` shard keeps every
-other test, example, and fuzz seed. Each shard uses verbose output, disables
-result caching with `-count=1`, and keeps the 20-minute per-package timeout and
+The A–M shard selects top-level tests matching `^Test[A-M]`. It first runs the
+CLI lockfile FIFO test alone, with serial subtests, so parallel package loading
+does not consume its deadline. The `cli-build` and `architecture` shards run
+the four pinned CLI build tests and the architecture trace test, respectively.
+The `remaining` shard keeps every other test, example, and fuzz seed. Each shard
+uses verbose output, disables result caching with `-count=1`, and keeps the
+20-minute per-package timeout and
 45-minute job limit. The release gate requires all four shards to pass.
 
 Without `OTELPLAN_OTELC`, backend integration tests skip locally. A configured
@@ -278,6 +280,11 @@ Memos also passed. At the alarm, the listed deny-pattern tests were only two
 to five seconds into execution. The logs support a cumulative timeout and show
 no failed assertion before the alarm. Unit, race, vet, lint, vulnerability,
 quality gates, architecture, and remaining-backend jobs passed.
+
+In [run 44863170108](https://github.com/DiLRandI/OTelPlan/actions/runs/44863170108)
+on `d8ef94e`, the A–M race suite completed within 20 minutes. Three FIFO cases
+hit their command deadline, and the cleanup probe found no blocked reader.
+The FIFO test now runs by itself in both modes before the rest of A–M.
 
 ## Historical CI timing evidence
 

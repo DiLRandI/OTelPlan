@@ -150,7 +150,7 @@ jobs:
     if: github.repository == 'DiLRandI/OTelPlan' && github.ref == 'refs/heads/main' && inputs.prepare_version != ''
     needs: release-validation
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     permissions:
       contents: read
       id-token: write
@@ -187,6 +187,25 @@ jobs:
           curl -fsSL --retry 3 https://raw.githubusercontent.com/spdx/spdx-spec/6f2cb47d13db19b12c23885573b22ef32ec1ada5/schemas/spdx-schema.json -o spdx-schema.json
           printf '%s  %s\n' 4126dc29f15e92feec92e9622f4939131ad58b125d6f578aa93e980a6e6f3212 spdx-schema.json | sha256sum -c -
           ./jv spdx-schema.json candidate/otelplan_"${RELEASE_VERSION}"_linux_amd64.spdx.json
+      - name: Check out pinned backend for the archive exercise
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: open-telemetry/opentelemetry-go-compile-instrumentation
+          ref: 449ee08a682586adb177e4402845ed404565879f # otelc v1.1.0
+          path: .ci-otelc
+          persist-credentials: false
+      - name: Build exact pinned backend
+        working-directory: .ci-otelc
+        run: |
+          go build -mod=readonly -trimpath -ldflags '-X go.opentelemetry.io/otelc/tool/util.Version=v1.1.0' -o "$RUNNER_TEMP/otelc" ./tool/cmd/otelc
+          go version -m "$RUNNER_TEMP/otelc"
+          sha256sum "$RUNNER_TEMP/otelc"
+      - name: Exercise the extracted CLI across three architectures
+        run: |
+          stem="otelplan_${RELEASE_VERSION}_linux_amd64"
+          mkdir "$RUNNER_TEMP/extracted"
+          tar -xzf "$RUNNER_TEMP/candidate/$stem.tar.gz" -C "$RUNNER_TEMP/extracted"
+          python3 -I scripts/test-packaged-linux.py "$RUNNER_TEMP/extracted/$stem/otelplan" "$RUNNER_TEMP/otelc" "$RELEASE_VERSION"
       - name: Record build inputs
         run: |
           python3 -I scripts/release-provenance.py \

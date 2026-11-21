@@ -102,14 +102,19 @@ the [upgrade procedure](COMPATIBILITY.md#reviewing-an-upgrade).
 - Archives carry the executable, README and license, version/build metadata,
   and the committed third-party notice inventory. Packaging verifies notice
   checksums, Go license and patent text, and linked module versions.
+- Packaging emits an SPDX 2.3 SBOM alongside the archive and checksum list.
+  The hosted candidate workflow can attest these three files after full
+  validation on `main`. The release procedure covers consumer verification
+  and protected publication.
 - Follow the [candidate archive procedure](RELEASING.md) and review the
   [release-blocking acceptance criteria](14_ACCEPTANCE_CRITERIA.md) before any
   publication or tag.
 
 ### Pending before a stable release
 
-- Standardized SBOM and provenance publication remain release-preparation work.
-- Candidate performance review and the remaining acceptance checks are pending.
-- A reviewed release-candidate cycle, maintainer sign-off, and public release
-  procedure are still required. The roadmap tracks this work in
+- The [Linux preflight](release-evidence/v1.0.0-rc.1-preflight.md) records
+  performance, security, and acceptance evidence for the engineering revision.
+- Validate and attest the reviewed `main` revision, configure publishing
+  protection, and complete the release-candidate feedback cycle before
+  requesting stable release approval. See
   [Phase 6, stable v1](ROADMAP.md#phase-6--stable-v1).

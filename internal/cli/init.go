@@ -74,7 +74,7 @@ func initCommand(ctx context.Context, opts options, patterns []string, stdin io.
 	if err != nil {
 		recordFailure(opts, model.CodeUnresolvedSymbol, "analyze starter candidates", err)
 
-		return initFailure(exitAnalysis, model.CodeUnresolvedSymbol, analysisFailureMessage(err))
+		return initFailure(exitAnalysis, model.CodeUnresolvedSymbol, analysisFailureMessage(err, opts.offline))
 	}
 
 	recordBuildContext(opts, code.EffectiveBuild)

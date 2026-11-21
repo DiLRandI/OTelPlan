@@ -1,8 +1,9 @@
-# OTelPlan Policy Specification
+# Policy and safety
 
 File name: `otelplan.yaml`
 
-Schema version: `v1alpha1` during development.
+Supported identity: `otelplan.io/v1alpha1`. CLI releases and format versions are
+separate; see [compatibility](COMPATIBILITY.md).
 
 ## Design principles
 
@@ -52,7 +53,6 @@ backend:
 
 ```yaml
 defaults:
-  spanName: "{{package}}.{{receiver}}.{{method}}"
   context:
     mode: require
   errors:
@@ -62,11 +62,14 @@ defaults:
     results: false
 ```
 
+When `spanName` is omitted, functions use `{{package}}.{{function}}` and methods
+use `{{package}}.{{receiver}}.{{method}}`. An explicit template replaces that default.
+
 Context modes:
 
 - `require`: skip/error if no context is available;
 - `root`: permit a root fallback only when the declaration has no context argument;
-- future modes may be added only with clear backend semantics.
+Multiple context arguments are rejected; there is no ambient continuation mode.
 
 ## Rules
 
@@ -87,24 +90,16 @@ rules:
 
 ### Match fields
 
-All fields in a single `match` block are ANDed unless specified otherwise.
+All specified fields in a single `match` block are ANDed. Lists inside a field
+are ORed. An empty match is invalid.
 
-```yaml
-match:
-  packages: []
-  files: []
-  symbols: []
-  functions: []
-  receivers: []
-  methods: []
-  implements: []
-  exported: true|false
-  hasContext: true|false
-  returnsError: true|false
-  ownership: application|dependency|any
-```
-
-Lists inside one field are ORed.
+| Field | Value |
+| --- | --- |
+| `packages`, `files`, `functions`, `receivers`, `methods` | Lists of glob patterns. |
+| `symbols` | List of exact canonical symbol IDs. |
+| `implements` | List of interface identities. |
+| `exported`, `hasContext`, `returnsError` | Boolean `true` or `false`; omission leaves the constraint unset. |
+| `ownership` | `application`, `dependency`, or `any`. |
 
 Example:
 
@@ -183,7 +178,7 @@ span:
   kind: internal
 ```
 
-Initial release only permits `internal` for business spans unless a rule explicitly represents a protocol semantic convention supported by a future extension.
+Only `internal` is supported for business spans. Protocol span kinds are not inferred.
 
 ## Error configuration
 
@@ -312,24 +307,9 @@ Existing attribute-key, sensitive-name, classification, and acknowledgment
 checks still apply. The lock stores the selector and string kind; runtime error
 values and messages never become lock data.
 
-## Additional sensitive-name patterns
-
-The optional root `denyPatterns` list adds literal name fragments to the built-in
-secret checks. It cannot remove built-in protections:
-
-```yaml
-denyPatterns: [bank_reference, account_number]
-```
-
-Matching ignores case and `.`, `_`, and `-` separators. Entries cannot be empty,
-contain whitespace, or consist only of separators. Matching applies to telemetry
-keys and selected argument/result paths. Order and duplicates are irrelevant to
-lock identity; changing the configured set is a policy change. See
-[safety validation](08_VALIDATION_SAFETY.md#2-secret-detection).
-
 ## Sensitive attribute override
 
-A suspicious key/path should fail validation unless explicitly acknowledged:
+A capture may require explicit acknowledgment. See [sensitive-name validation](#sensitive-name-validation) for secret handling. This example acknowledges a PII field.
 
 ```yaml
 attributes:
@@ -397,3 +377,164 @@ still produces `OTP1002`.
 Not supported in v1.
 
 Policy checked into source control must resolve identically in CI. Runtime OTEL exporter configuration belongs in normal OTEL environment configuration, not in OTelPlan policy.
+
+## Sensitive-name validation
+
+Case-insensitive suspicious names include:
+
+```text
+password
+passwd
+pwd
+secret
+token
+access_token
+refresh_token
+authorization
+cookie
+api_key
+apikey
+private_key
+credential
+session
+```
+
+Search both:
+
+- telemetry key;
+- source field/path.
+
+Policies can add sensitive-name fragments:
+
+```yaml
+denyPatterns:
+  - bank_reference
+  - account_number
+```
+
+These literal fragments supplement built-in patterns. Matching ignores case and
+dot, underscore, and hyphen separators. Validation checks the attribute key,
+selector spelling, and resolved Go declaration and field path. Entries must contain a non-separator character and no whitespace. An omitted
+or empty list leaves every built-in check enabled. Sensitive captures still
+require `safety: {classification: secret, allow: true}` on that attribute; public
+classification cannot bypass the check. Captured constants and deny-pattern
+contents are not echoed in these diagnostics.
+
+Order and duplicate entries do not affect the policy digest. A changed set of
+configured fragments changes policy identity and can make a lock stale. Analysis
+cache reuse does not bypass current policy safety validation.
+
+## PII warnings
+
+Potential PII patterns should warn:
+
+```text
+email
+phone
+address
+name
+user_id
+customer_id
+ip
+device_id
+```
+
+Not all identifiers are prohibited, but users must make deliberate decisions.
+
+## Cardinality warnings
+
+Warn for likely unbounded values:
+
+- raw URL;
+- query string;
+- request/response bodies;
+- UUID-like IDs;
+- order IDs;
+- user IDs;
+- timestamps;
+- arbitrary error messages.
+
+Offer bounded alternatives in diagnostics where possible.
+
+## Target-count limits
+
+Warn or fail when a policy resolves to an unusually broad set.
+
+Default selected-target thresholds:
+
+```text
+> 100 targets: warning
+> 500 targets: strong warning
+> 2000 targets: require explicit --allow-large-plan
+```
+
+Policy commands accept `--warn-targets`, `--strong-warn-targets`, and
+`--max-targets`. Values must be positive integers; the first warning threshold
+cannot exceed the strong-warning threshold. A maximum may be lower than either
+warning threshold when a stricter cap is desired. A boundary is exceeded only
+when the selected count is greater than its configured value.
+
+Without an explicit maximum, `--allow-large-plan` retains its existing behavior:
+it acknowledges exceeding 2,000 targets while keeping warnings. Raising an
+explicit maximum above 2,000 also requires that acknowledgment. An explicit
+maximum remains binding even with `--allow-large-plan`; exceeding it fails
+validation rather than silently bypassing the configured cap.
+
+These flags control validation, not selection or lock identity. They cannot
+bypass context, secret/PII, attribute, or backend checks. Init and scan do not
+accept these policy controls; their existing conservative behavior is unchanged.
+
+## Recursion
+
+Instrumenting recursive functions is allowed but can create deep traces.
+Discovery marks declarations that belong to statically resolved call cycles,
+including mutual recursion through other analyzed declarations. Selecting one
+produces warning `OTP4006` with its policy rule and exact symbol; `--strict`
+treats the warning as a validation failure. A caller that only reaches a cycle
+is not itself marked recursive. No target is automatically excluded.
+
+This check uses typed calls in analyzed bodies without requiring the optional
+SSA call graph. Immediately invoked closures are included; stored or returned
+closure bodies are not attributed to the enclosing declaration. Arbitrary
+function-value calls, interface dispatch, reflection, and cycles through bodies
+outside the analyzed package set are not resolved. A static cycle does not
+prove that the recursive path executes for a particular input. Absence of a
+warning is not proof that recursion is impossible.
+
+## Manual-span overlap
+
+Selecting a declaration with a recognizable OpenTelemetry span-start call
+produces warning `OTP4007`. The check uses Go types: a `Start` method must have
+a receiver implementing `go.opentelemetry.io/otel/trace.Tracer`. It recognizes
+interface calls, aliases, concrete wrappers, promoted methods, and method
+expressions. Unrelated methods named `Start` do not match by name alone.
+
+Immediately invoked closure bodies are included. Stored/returned closures,
+indirect function-value calls, helper-function bodies, and reflection are not
+attributed to the enclosing declaration. The warning does not prove that a
+particular path executes or that spans are duplicates. Absence of a warning is
+not proof that manual instrumentation is absent.
+
+The diagnostic retains the selected symbol and rule without exposing span names
+or attribute values. No target is automatically excluded and no application span
+is suppressed. Review the overlap and use ordinary policy exclusions when
+appropriate. Existing `--strict` semantics treat this warning as a validation
+failure.
+
+## Returned-error messages
+
+When `errors.record` is enabled, generated hooks call OpenTelemetry `RecordError`
+with the application error. Its exception message can include the application's
+error text even though the status description is fixed to `operation failed`.
+This is distinct from CLI diagnostics and explicit argument/result attributes.
+Use `errors.record: false` for targets whose error messages may contain private
+data, or sanitize errors in the application. There is no runtime error-message
+redaction policy in the current schema.
+
+Formatting panics produce the bounded fallback described in
+[error semantics](OTELC_BACKEND.md#returned-errors-and-formatting-panics). The guard does not redact
+normally returned error messages.
+
+Errors stop the operation. Warnings remain visible and fail `--strict`; policy
+commands validate before lock/artifact writes or backend execution. Diagnostic
+codes and process exits are documented in [CLI](CLI.md#json-and-diagnostics).

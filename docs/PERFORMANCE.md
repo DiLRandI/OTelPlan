@@ -1,4 +1,4 @@
-# Performance Requirements
+# Performance and benchmark evidence
 
 ## 1. CLI analysis
 
@@ -159,7 +159,7 @@ exporter benchmark or an application throughput claim. Record raw samples and
 the full environment before comparing revisions. No regression threshold is
 enforced until a stable baseline and an agreed statistical policy exist.
 
-## Initial runtime baseline
+## Historical runtime baseline
 
 Measured on 2026-10-31 at clean revision
 `bc94f3cd84abad178e37a00a0764ed40bea612fe`, based on runtime fix #286.
@@ -196,3 +196,43 @@ Three sequential samples on one developer machine establish an initial workload
 baseline. They do not establish application latency or a regression threshold.
 CPU frequency, scheduling, and background activity can affect comparisons.
 The separate medium-project CLI baseline above measures scan performance.
+
+
+## Linux v1.0 preflight measurements
+
+The preflight measured `13c3867e653c3515675a09aff21b5f40896f045d` with Go 1.27.4,
+the pinned OTelC v1.1.0 backend, and the same Intel i7-11800H and logical CPU 15
+used in the earlier reports. Each command used `GOMAXPROCS=1` and ran separately
+from the other benchmarks and local Go tests. Reruns of the two older source
+revisions used the same Go 1.27.4 toolchain and backend as the preflight.
+See [raw samples](benchmarks/linux-v1-preflight-go1.27.4.txt).
+
+| CLI scan | Reference ms/op | Preflight ms/op | Reference B/op | Preflight B/op | Reference allocs/op | Preflight allocs/op |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Uncached | 512.161 | 513.661 | 194722312 | 194724221 | 1829244 | 1829258 |
+| Cached | 114.956 | 114.822 | 47125645 | 47125920 | 56875 | 56877 |
+
+The historical Go 1.27.3 report measured 48,303 allocations per cached scan.
+The older source also measured about 56,875 after switching to Go 1.27.4.
+The same-toolchain comparison shows essentially the same allocation count on
+both revisions. The cache retains a substantial reduction in scan time and
+allocated bytes on the synthetic 100-package fixture.
+
+| Instrumented case | Reference ns/op | Preflight ns/op | B/op in both | Allocs/op in both |
+| --- | ---: | ---: | ---: | ---: |
+| Nonrecording, zero attributes | 568.5 | 585.2 | 392 | 11 |
+| Nonrecording, two attributes | 603.6 | 620.6 | 440 | 12 |
+| Nonrecording, returned error | 622.9 | 633.8 | 424 | 12 |
+| Recording, zero attributes | 752.1 | 774.3 | 776 | 11 |
+| Recording, two attributes | 1076 | 1112 | 1144 | 16 |
+| Recording, returned error | 1299 | 1338 | 1296 | 17 |
+
+The runtime medians increased by roughly 2–3.5% in the instrumented cases.
+Uninstrumented calls also moved in the same direction, and the runtime hook
+generation logic and allocation counts were unchanged. Three sequential
+samples on one machine are insufficient to attribute these timing changes
+to OTelPlan. The release performance expectations for these workloads are
+to preserve the cached-scan advantage and the measured runtime allocation
+counts, and to run the 2,000-target backend test within its existing package
+timeout. Repeat comparable timing measurements and investigate reproducible
+changes before making latency claims or adding a threshold.

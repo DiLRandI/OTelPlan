@@ -1,0 +1,5 @@
+go BSD-3-Clause
+golang.org/x/mod BSD-3-Clause
+golang.org/x/sync BSD-3-Clause
+golang.org/x/tools BSD-3-Clause
+gopkg.in/yaml.v3 Apache-2.0 AND MIT

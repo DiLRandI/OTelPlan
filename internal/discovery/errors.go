@@ -11,5 +11,7 @@ var (
 	errUnterminatedQuote       = errors.New("unterminated quoted string")
 	errInvalidGoFlags          = errors.New("invalid GOFLAGS")
 	errUnsupportedGoFlag       = errors.New("unsupported GOFLAGS option")
-	errPackageAnalysis         = errors.New("package analysis failed")
 )
+
+// ErrPackageAnalysis identifies failures returned by Go package loading.
+var ErrPackageAnalysis = errors.New("package analysis failed")

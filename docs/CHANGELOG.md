@@ -15,6 +15,12 @@ the [upgrade procedure](COMPATIBILITY.md#reviewing-an-upgrade).
 
 ### Fixes
 
+- Recheck earlier generated output before removing it during `compile --clean`.
+  If the file inventory changed, preserve the earlier output and report the failure.
+
+- Apply capture-name safety checks to the resolved Go declaration and field
+  path. Review existing captures that now require explicit acknowledgment.
+
 - Protect selected policy, lock, alternate manifest, and workspace paths from
   build-output replacement through directory aliases or metadata symlink targets.
   Ordinary output through symlinked directories remains supported.
@@ -36,7 +42,7 @@ the [upgrade procedure](COMPATIBILITY.md#reviewing-an-upgrade).
   Argument-context hooks now skip those invocations instead of creating an
   implicit root span and replacing the argument. Existing generated bundles and
   binaries need explicit regeneration to receive this fix; resolution locks keep
-  their existing meaning. See [runtime context semantics](07_RUNTIME_HOOKS.md#5-parent-context).
+  their existing meaning. See [runtime context semantics](OTELC_BACKEND.md#exact-rules-and-runtime-hooks).
 
 ### Current baseline
 
@@ -60,8 +66,8 @@ the [upgrade procedure](COMPATIBILITY.md#reviewing-an-upgrade).
   resolution lock.
 - Argument and result capture is opt-in. Context and unsupported target failures
   are reported rather than silently creating disconnected spans.
-- See [lockfile reproducibility](09_LOCKFILE_REPRODUCIBILITY.md), the
-  [CLI contracts](CLI.md), and [validation and safety](08_VALIDATION_SAFETY.md).
+- See [lockfile reproducibility](COMPATIBILITY.md), the
+  [CLI contracts](CLI.md), and [validation and safety](POLICY.md).
 
 ### Supported release target
 
@@ -88,7 +94,7 @@ the [upgrade procedure](COMPATIBILITY.md#reviewing-an-upgrade).
 
 ### Verification and candidate archives
 
-- Local development uses the [test strategy](10_TEST_STRATEGY.md), including
+- Local development uses the [test strategy](DEVELOPMENT.md), including
   focused tests, race tests, vet, lint, and real-backend integration when OTelC
   is available.
 - Candidate Linux archives are built from an exact committed `HEAD` with
@@ -106,4 +112,4 @@ the [upgrade procedure](COMPATIBILITY.md#reviewing-an-upgrade).
 - Candidate performance review and the remaining acceptance checks are pending.
 - A reviewed release-candidate cycle, maintainer sign-off, and public release
   procedure are still required. The roadmap tracks this work in
-  [Phase 6, stable v1](13_ROADMAP.md#phase-6--stable-v1).
+  [Phase 6, stable v1](ROADMAP.md#phase-6--stable-v1).

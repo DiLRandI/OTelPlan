@@ -19,6 +19,7 @@ var (
 	errArtifactOutputNotDirectory  = errors.New("artifact output must be a directory")
 	errUnsupportedArtifactManifest = errors.New("unsupported or invalid artifact manifest")
 	errArtifactOutputDiffers       = errors.New("artifact output differs; use --clean to replace verified output")
+	errPreviousArtifactsChanged    = errors.New("previous artifact inventory changed during replacement")
 )
 
 // ReadArtifacts verifies a bundle against its own manifest. This establishes
@@ -140,7 +141,7 @@ func PublishArtifacts(destination string, files []otelc.GeneratedFile, clean boo
 		return previous, nil
 	}
 
-	err = publishStagedArtifacts(destination, staged.Dir, previous.Dir != "", clean)
+	err = publishStagedArtifacts(destination, staged.Dir, previous, clean)
 	if err != nil {
 		return empty, err
 	}
@@ -163,13 +164,13 @@ func existingArtifactOutput(destination string) (model.Artifacts, error) {
 	return ReadArtifacts(destination)
 }
 
-func publishStagedArtifacts(destination, staged string, exists, clean bool) error {
-	if exists {
+func publishStagedArtifacts(destination, staged string, previous model.Artifacts, clean bool) error {
+	if previous.Dir != "" {
 		if !clean {
 			return errArtifactOutputDiffers
 		}
 
-		return replaceArtifactOutput(destination, staged)
+		return replaceArtifactOutput(previous, staged)
 	}
 
 	err := os.Rename(staged, destination)
@@ -180,7 +181,9 @@ func publishStagedArtifacts(destination, staged string, exists, clean bool) erro
 	return nil
 }
 
-func replaceArtifactOutput(destination, staged string) error {
+func replaceArtifactOutput(previous model.Artifacts, staged string) error {
+	destination := previous.Dir
+
 	backup, err := os.MkdirTemp(filepath.Dir(destination), "otelplan-previous-")
 	if err != nil {
 		return fmt.Errorf("create previous artifact backup: %w", err)
@@ -198,28 +201,22 @@ func replaceArtifactOutput(destination, staged string) error {
 		return fmt.Errorf("move previous artifacts to backup: %w", err)
 	}
 
+	current, err := ReadArtifacts(old)
+	if err != nil {
+		return restoreArtifactBackup(destination, backup, fmt.Errorf("verify moved previous artifacts: %w", err))
+	}
+
+	if !slices.Equal(previous.Files, current.Files) {
+		return restoreArtifactBackup(destination, backup, errPreviousArtifactsChanged)
+	}
+
 	return commitArtifactReplacement(destination, staged, backup)
 }
 
 func commitArtifactReplacement(destination, staged, backup string) error {
 	publishErr := os.Rename(staged, destination)
 	if publishErr != nil {
-		old := filepath.Join(backup, "artifacts")
-
-		restoreErr := os.Rename(old, destination)
-		if restoreErr != nil {
-			return fmt.Errorf(
-				"publish failed: %w; restore failed: %w; previous artifacts retained at %s",
-				publishErr, restoreErr, old,
-			)
-		}
-
-		cleanupErr := os.Remove(backup)
-		if cleanupErr != nil {
-			return fmt.Errorf("publish artifact output: %w; remove empty backup: %w", publishErr, cleanupErr)
-		}
-
-		return fmt.Errorf("publish artifact output: %w", publishErr)
+		return restoreArtifactBackup(destination, backup, fmt.Errorf("publish artifact output: %w", publishErr))
 	}
 
 	err := os.RemoveAll(backup)
@@ -228,4 +225,20 @@ func commitArtifactReplacement(destination, staged, backup string) error {
 	}
 
 	return nil
+}
+
+func restoreArtifactBackup(destination, backup string, cause error) error {
+	old := filepath.Join(backup, "artifacts")
+
+	restoreErr := os.Rename(old, destination)
+	if restoreErr != nil {
+		return fmt.Errorf("%w; restore failed: %w; previous artifacts retained at %s", cause, restoreErr, old)
+	}
+
+	cleanupErr := os.Remove(backup)
+	if cleanupErr != nil {
+		return fmt.Errorf("%w; remove empty backup: %w", cause, cleanupErr)
+	}
+
+	return cause
 }

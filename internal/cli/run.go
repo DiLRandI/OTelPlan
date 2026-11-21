@@ -168,7 +168,7 @@ func scanCommand(ctx context.Context, opts options, patterns []string) (any, int
 	if err != nil {
 		recordFailure(opts, model.CodeUnresolvedSymbol, "analyze Go project", err)
 
-		return nil, exitAnalysis, compileDiagnostic(model.CodeUnresolvedSymbol, analysisFailureMessage(err))
+		return nil, exitAnalysis, compileDiagnostic(model.CodeUnresolvedSymbol, analysisFailureMessage(err, opts.offline))
 	}
 
 	recordBuildContext(opts, inventory.EffectiveBuild)

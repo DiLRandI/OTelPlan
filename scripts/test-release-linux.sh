@@ -34,21 +34,23 @@ test -x "$builder" || fail "missing executable $builder"
 
 repo=$test_root/repo
 mkdir -p "$repo/scripts" "$repo/tmp"
-cp "$builder" "$repo/scripts/release-linux.sh"
+cp "$builder" "$script_dir/release-sbom.py" "$repo/scripts/"
 chmod +x "$repo/scripts/release-linux.sh"
 printf 'license\n' > "$repo/LICENSE"
 printf '# test\n' > "$repo/README.md"
 printf 'committed\n' > "$repo/tracked.marker"
-mkdir -p "$repo/third_party/go"
+mkdir -p "$repo/third_party/go" "$repo/third_party/example.invalid/dep"
 printf 'fake go license\n' > "$repo/third_party/go/LICENSE"
 printf 'fake go patents\n' > "$repo/third_party/go/PATENTS"
 printf 'third-party notice\n' > "$repo/third_party/NOTICE"
 printf '%s\n' 'example.invalid/dep v1.2.3' > "$repo/third_party/modules.txt"
-(cd "$repo/third_party" && sha256sum go/LICENSE go/PATENTS NOTICE modules.txt > SHA256SUMS)
+printf 'BSD fixture license\n' > "$repo/third_party/example.invalid/dep/LICENSE"
+printf '%s\n' 'go BSD-3-Clause' 'example.invalid/dep BSD-3-Clause' > "$repo/third_party/spdx-licenses.txt"
+(cd "$repo/third_party" && sha256sum go/LICENSE go/PATENTS NOTICE modules.txt example.invalid/dep/LICENSE spdx-licenses.txt > SHA256SUMS)
 git -C "$repo" init -q
 git -C "$repo" config user.name release-test
 git -C "$repo" config user.email release-test@example.invalid
-git -C "$repo" add LICENSE README.md tracked.marker scripts/release-linux.sh third_party
+git -C "$repo" add LICENSE README.md tracked.marker scripts third_party
 GIT_AUTHOR_DATE='2024-01-02T03:04:05Z' GIT_COMMITTER_DATE='2024-01-02T03:04:05Z' \
 	git -C "$repo" -c commit.gpgsign=false commit -q -m 'release test fixture'
 revision=$(git -C "$repo" rev-parse HEAD)
@@ -201,11 +203,13 @@ RELEASE_TEST_GO_LOG=$test_root/go.log RELEASE_TEST_VERSION=$version \
 
 archive=$output1/otelplan_${version}_linux_amd64.tar.gz
 checksums=$output1/SHA256SUMS
+sbom=$output1/otelplan_${version}_linux_amd64.spdx.json
 require_file "$archive"
 require_file "$checksums"
+require_file "$sbom"
 (cd "$output1" && sha256sum -c SHA256SUMS)
-test "$(find "$output1" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 2
-test "$(tar -tzf "$archive" | sed '/\/$/d' | wc -l)" -eq 11
+test "$(find "$output1" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 3
+test "$(tar -tzf "$archive" | sed '/\/$/d' | wc -l)" -eq 13
 top=otelplan_${version}_linux_amd64
 tar -tzf "$archive" | grep -Fx "$top/otelplan" >/dev/null
 tar -tzf "$archive" | grep -Fx "$top/LICENSE" >/dev/null
@@ -227,6 +231,38 @@ cmp "$repo/third_party/NOTICE" "$test_root/extracted/$top/third_party/NOTICE"
 cmp "$repo/third_party/modules.txt" "$test_root/extracted/$top/third_party/modules.txt"
 cmp "$repo/third_party/SHA256SUMS" "$test_root/extracted/$top/third_party/SHA256SUMS"
 (cd "$test_root/extracted/$top/third_party" && sha256sum --strict -c SHA256SUMS)
+python3 -I - "$sbom" "$archive" "$test_root/extracted/$top/otelplan" "$revision" <<'PYTEST'
+import hashlib
+import json
+from pathlib import Path
+import sys
+
+sbom, archive, binary = map(Path, sys.argv[1:4])
+revision = sys.argv[4]
+document = json.loads(sbom.read_text())
+assert document["spdxVersion"] == "SPDX-2.3"
+assert document["dataLicense"] == "CC0-1.0"
+assert revision in document["creationInfo"]["creators"][0]
+assert document["creationInfo"]["created"] == "2024-01-02T03:04:05Z"
+packages = {item["SPDXID"]: item for item in document["packages"]}
+assert len(packages) == len(document["packages"]) == 4
+for identifier, path in (("SPDXRef-Archive", archive), ("SPDXRef-Executable", binary)):
+    assert packages[identifier]["checksums"] == [{
+        "algorithm": "SHA256", "checksumValue": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }]
+assert packages["SPDXRef-GoStdlib"]["versionInfo"] == "go1.27.3"
+dependency = packages["SPDXRef-GoModule-1"]
+assert (dependency["name"], dependency["versionInfo"], dependency["licenseDeclared"]) == (
+    "example.invalid/dep", "v1.2.3", "BSD-3-Clause",
+)
+assert {(entry["spdxElementId"], entry["relationshipType"], entry["relatedSpdxElement"])
+        for entry in document["relationships"]} == {
+    ("SPDXRef-DOCUMENT", "DESCRIBES", "SPDXRef-Archive"),
+    ("SPDXRef-Archive", "CONTAINS", "SPDXRef-Executable"),
+    ("SPDXRef-Executable", "STATIC_LINK", "SPDXRef-GoStdlib"),
+    ("SPDXRef-Executable", "STATIC_LINK", "SPDXRef-GoModule-1"),
+}
+PYTEST
 grep -F '"version":"'$version'"' "$test_root/extracted/$top/version.json" >/dev/null
 tr -d '[:space:]' < "$test_root/extracted/$top/release.json" > "$test_root/release.normalized.json"
 grep -F '"version":"'$version'"' "$test_root/release.normalized.json" >/dev/null
@@ -242,6 +278,7 @@ RELEASE_TEST_GO_LOG=$test_root/go2.log RELEASE_TEST_VERSION=$version \
 	"$repo/scripts/release-linux.sh" "$version" "$output2"
 cmp "$archive" "$output2/otelplan_${version}_linux_amd64.tar.gz"
 cmp "$checksums" "$output2/SHA256SUMS"
+cmp "$sbom" "$output2/$(basename -- "$sbom")"
 
 output3=$test_root/output-hostile-ambient
 TAR_OPTIONS='--exclude=tracked.marker' GIT_DIR=/definitely/missing/git \
@@ -252,12 +289,12 @@ require_file "$output3/otelplan_${version}_linux_amd64.tar.gz"
 (cd "$output3" && sha256sum -c SHA256SUMS)
 
 printf '%s\n' 'example.invalid/dep v1.2.3 => example.invalid/replacement v1.2.3' > "$repo/third_party/modules.txt"
-(cd "$repo/third_party" && sha256sum go/LICENSE go/PATENTS NOTICE modules.txt > SHA256SUMS)
+(cd "$repo/third_party" && sha256sum go/LICENSE go/PATENTS NOTICE modules.txt example.invalid/dep/LICENSE spdx-licenses.txt > SHA256SUMS)
 commit_third_party_change
 expect_release_failure 'release dependencies must not use replacements' "$test_root/replacement-output"
 
 printf '%s\n' 'example.invalid/dep v1.2.4' > "$repo/third_party/modules.txt"
-(cd "$repo/third_party" && sha256sum go/LICENSE go/PATENTS NOTICE modules.txt > SHA256SUMS)
+(cd "$repo/third_party" && sha256sum go/LICENSE go/PATENTS NOTICE modules.txt example.invalid/dep/LICENSE spdx-licenses.txt > SHA256SUMS)
 commit_third_party_change
 expect_release_failure 'linked dependencies differ; review third-party notices' "$test_root/dependency-mismatch-output"
 
@@ -276,7 +313,15 @@ expect_release_failure 'third-party notices must be regular files' "$test_root/s
 
 rm "$repo/third_party/NOTICE"
 printf 'third-party notice\n' > "$repo/third_party/NOTICE"
-(cd "$repo/third_party" && sha256sum go/LICENSE go/PATENTS NOTICE modules.txt > SHA256SUMS)
+(cd "$repo/third_party" && sha256sum go/LICENSE go/PATENTS NOTICE modules.txt example.invalid/dep/LICENSE spdx-licenses.txt > SHA256SUMS)
+commit_third_party_change
+
+printf '%s\n' 'go BSD-3-Clause' > "$repo/third_party/spdx-licenses.txt"
+(cd "$repo/third_party" && sha256sum go/LICENSE go/PATENTS NOTICE modules.txt example.invalid/dep/LICENSE spdx-licenses.txt > SHA256SUMS)
+commit_third_party_change
+expect_release_failure 'SPDX licenses must cover Go and exactly the linked modules' "$test_root/missing-license-mapping-output"
+printf '%s\n' 'go BSD-3-Clause' 'example.invalid/dep BSD-3-Clause' > "$repo/third_party/spdx-licenses.txt"
+(cd "$repo/third_party" && sha256sum go/LICENSE go/PATENTS NOTICE modules.txt example.invalid/dep/LICENSE spdx-licenses.txt > SHA256SUMS)
 commit_third_party_change
 
 printf 'mismatched go license\n' > "$fakegoroot/LICENSE"

@@ -82,16 +82,19 @@ export FAKE_GO_LOG
 OTELPLAN_OTELC=fake sh scripts/test-otelc-shard.sh a-m
 OTELPLAN_OTELC=fake sh scripts/test-otelc-shard.sh remaining
 OTELPLAN_OTELC=fake sh scripts/test-otelc-shard.sh architecture
+OTELPLAN_OTELC=fake sh scripts/test-otelc-shard.sh cli-build
 cat > "$scratch/expected.calls" <<'CALLS'
-test -v -count=1 -timeout=20m -run ^Test[A-M] -skip ^TestArchitectureTracesWithPinnedBackend$ ./...
-test -race -v -count=1 -timeout=20m -run ^Test[A-M] -skip ^TestArchitectureTracesWithPinnedBackend$ ./...
+test -v -count=1 -timeout=20m -run ^Test[A-M] -skip ^TestArchitectureTracesWithPinnedBackend$|^TestBuildCLI(WithPinnedBackend|LockedWithPinnedBackend|LibraryWithoutOutput|FromWorkspaceRoot)$ ./...
+test -race -v -count=1 -timeout=20m -run ^Test[A-M] -skip ^TestArchitectureTracesWithPinnedBackend$|^TestBuildCLI(WithPinnedBackend|LockedWithPinnedBackend|LibraryWithoutOutput|FromWorkspaceRoot)$ ./...
 test -v -count=1 -timeout=20m -skip ^Test[A-M] ./...
 test -race -v -count=1 -timeout=20m -skip ^Test[A-M] ./...
 test -v -count=1 -timeout=20m -run ^TestArchitectureTracesWithPinnedBackend$ ./internal/cli
 test -race -v -count=1 -timeout=20m -run ^TestArchitectureTracesWithPinnedBackend$ ./internal/cli
+test -v -count=1 -timeout=20m -run ^TestBuildCLI(WithPinnedBackend|LockedWithPinnedBackend|LibraryWithoutOutput|FromWorkspaceRoot)$ ./internal/cli
+test -race -v -count=1 -timeout=20m -run ^TestBuildCLI(WithPinnedBackend|LockedWithPinnedBackend|LibraryWithoutOutput|FromWorkspaceRoot)$ ./internal/cli
 CALLS
 cmp "$scratch/go.calls" "$scratch/expected.calls"
-for shard in a-m remaining architecture; do
+for shard in a-m remaining architecture cli-build; do
   for failure in all race; do
     if OTELPLAN_OTELC=fake FAKE_GO_FAIL="$failure" sh scripts/test-otelc-shard.sh "$shard" > "$scratch/output" 2>&1; then
       echo 'OTelC shard swallowed a test failure' >&2

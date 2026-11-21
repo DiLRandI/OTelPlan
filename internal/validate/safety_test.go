@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -140,6 +141,78 @@ func TestSafetySecretsAndAcknowledgment(t *testing.T) {
 
 	if !validate.Safety(code, plan, options).HasErrors() {
 		t.Fatal("custom deny pattern ignored")
+	}
+}
+
+func TestSafetyUsesDeclaredAttributePath(t *testing.T) {
+	t.Parallel()
+
+	for _, check := range []struct {
+		name       string
+		source     model.AttributeSource
+		patterns   []string
+		diagnostic model.Code
+	}{
+		{
+			name:     "indexed argument",
+			source:   model.AttributeSource{Argument: "0.Kind", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
+			patterns: []string{"request"}, diagnostic: model.CodeSecretAttribute,
+		},
+		{
+			name:     "indexed result",
+			source:   model.AttributeSource{Argument: "", Result: "0", Constant: nil, Symbol: "", ErrorType: ""},
+			patterns: []string{"result"}, diagnostic: model.CodeSecretAttribute,
+		},
+		{
+			name:     "promoted field",
+			source:   model.AttributeSource{Argument: "request.Kind", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
+			patterns: []string{"details"}, diagnostic: model.CodeSecretAttribute,
+		},
+		{
+			name:     "unrestricted scalar",
+			source:   model.AttributeSource{Argument: "request.Count", Result: "", Constant: nil, Symbol: "", ErrorType: ""},
+			patterns: nil, diagnostic: "",
+		},
+	} {
+		t.Run(check.name, func(t *testing.T) {
+			t.Parallel()
+
+			code, symbol := attributeFixture(t)
+			attribute := sourceAttribute(check.source)
+			target := safetyTarget(symbol.ID, []model.AttributePlan{attribute})
+			plan := model.ResolvedPlan{APIVersion: "", Targets: []model.ResolvedTarget{target}, Skipped: nil}
+
+			var options validate.Options
+
+			options.DenyPatterns = check.patterns
+
+			diags := validate.Safety(code, plan, options)
+			assertPathDiagnostic(t, diags, check.diagnostic)
+
+			if check.diagnostic == model.CodeSecretAttribute {
+				plan.Targets[0].Attributes[0].Classification = model.ClassificationSecret
+				plan.Targets[0].Attributes[0].Allow = true
+				assertPathDiagnostic(t, validate.Safety(code, plan, options), "")
+			}
+		})
+	}
+}
+
+func assertPathDiagnostic(t *testing.T, diags model.DiagnosticErrorList, want model.Code) {
+	t.Helper()
+
+	if want == "" {
+		if len(diags) != 0 {
+			t.Fatalf("unrestricted or acknowledged source: %+v", diags)
+		}
+
+		return
+	}
+
+	if len(diags) != 1 || !slices.ContainsFunc(diags, func(item model.DiagnosticError) bool {
+		return item.Code == want && item.Severity == model.SeverityError
+	}) {
+		t.Fatalf("expected one %s error, got %+v", want, diags)
 	}
 }
 

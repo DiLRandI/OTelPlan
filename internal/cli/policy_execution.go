@@ -117,7 +117,7 @@ func loadPolicyInventory(ctx context.Context, command string, opts options, load
 	if err != nil {
 		recordFailure(opts, model.CodeUnresolvedSymbol, "analyze policy packages", err)
 
-		return nil, compileDiagnostic(model.CodeUnresolvedSymbol, analysisFailureMessage(err))
+		return nil, compileDiagnostic(model.CodeUnresolvedSymbol, analysisFailureMessage(err, opts.offline))
 	}
 
 	recordBuildContext(opts, inventory.EffectiveBuild)

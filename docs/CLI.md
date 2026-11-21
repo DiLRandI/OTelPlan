@@ -295,6 +295,11 @@ invalid flag values are not echoed. Text usage errors go to stderr. Failures to
 write output return 1 and may prevent emitting an envelope. A stale `diff --check`
 includes both diff data and an explanatory diagnostic.
 
+Package loading errors report a stable analysis diagnostic without including raw
+Go compiler messages. Offline dependency failures explain how to prepare the
+dependency cache. Run Go tooling directly in a private terminal to inspect its
+full diagnostics.
+
 Verbose details withhold raw underlying error text, subprocess logs, error paths,
 free-form environment values, and captured attribute values. Unknown causes are
 reported as redacted. Inspect redacts constant values. Scan JSON replaces nonempty

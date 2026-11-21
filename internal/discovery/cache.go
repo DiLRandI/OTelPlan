@@ -17,7 +17,7 @@ func loadCacheInputs(ctx context.Context, opts Options, cfg *packages.Config) (s
 
 	pkgs, err := packages.Load(&metadata, opts.Patterns...)
 	if err != nil {
-		return "", fmt.Errorf("load cache package metadata: %w", err)
+		return "", fmt.Errorf("%w: load cache package metadata: %w", ErrPackageAnalysis, err)
 	}
 
 	err = reportErrors(pkgs)

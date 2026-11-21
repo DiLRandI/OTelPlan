@@ -93,7 +93,7 @@ type preparedAnalysis struct {
 func loadPreparedModel(ctx context.Context, opts Options, cfg *packages.Config) (preparedAnalysis, error) {
 	pkgs, err := packages.Load(cfg, opts.Patterns...)
 	if err != nil {
-		return preparedAnalysis{}, fmt.Errorf("load packages: %w", err)
+		return preparedAnalysis{}, fmt.Errorf("%w: load packages: %w", ErrPackageAnalysis, err)
 	}
 
 	err = reportErrors(pkgs)
@@ -177,7 +177,7 @@ func reportErrors(pkgs []*packages.Package) error {
 	sort.Strings(errs)
 
 	if len(errs) > 0 {
-		return fmt.Errorf("%w: %s", errPackageAnalysis, strings.Join(errs, "; "))
+		return fmt.Errorf("%w: %s", ErrPackageAnalysis, strings.Join(errs, "; "))
 	}
 
 	return nil

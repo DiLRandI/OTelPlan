@@ -158,6 +158,15 @@ used by the CLI without filtering by reachability. Text mode returns nonzero for
 findings; JSON mode is not used as a pass/fail gate. Missing tools, scanner errors,
 and version mismatches also fail. Release validation requires this separate gate.
 `make check` keeps its existing local checks without adding a vulnerability-database lookup.
+The hosted gate also scans the separately installed OTelC command's module and
+a generated hook module compiled from a disposable fixture. These graphs have
+dependencies outside the CLI inventory. To run those checks with the installed
+scanner and a clean checkout of the exact backend pin:
+
+```sh
+GOVULNCHECK=/path/to/govulncheck sh scripts/check-pinned-release-dependencies.sh /path/to/otelc-source
+```
+
 Results depend on the current Go vulnerability database and supplement, rather
 than replace, source review and other security verification.
 

@@ -65,7 +65,7 @@ func TestPackageAnalysisErrorsRemainSorted(t *testing.T) {
 		t.Fatalf("analysis errors=%v; want %q", err, want)
 	}
 
-	if !errors.Is(err, errPackageAnalysis) {
+	if !errors.Is(err, ErrPackageAnalysis) {
 		t.Fatalf("analysis errors lost their stable cause: %v", err)
 	}
 }

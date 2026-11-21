@@ -413,8 +413,8 @@ denyPatterns:
 ```
 
 These literal fragments supplement built-in patterns. Matching ignores case and
-dot, underscore, and hyphen separators, using the attribute key and argument/result
-path. Entries must contain a non-separator character and no whitespace. An omitted
+dot, underscore, and hyphen separators. Validation checks the attribute key,
+selector spelling, and resolved Go declaration and field path. Entries must contain a non-separator character and no whitespace. An omitted
 or empty list leaves every built-in check enabled. Sensitive captures still
 require `safety: {classification: secret, allow: true}` on that attribute; public
 classification cannot bypass the check. Captured constants and deny-pattern

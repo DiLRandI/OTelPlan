@@ -15,6 +15,9 @@ the [upgrade procedure](COMPATIBILITY.md#reviewing-an-upgrade).
 
 ### Fixes
 
+- Apply capture-name safety checks to the resolved Go declaration and field
+  path. Review existing captures that now require explicit acknowledgment.
+
 - Protect selected policy, lock, alternate manifest, and workspace paths from
   build-output replacement through directory aliases or metadata symlink targets.
   Ordinary output through symlinked directories remains supported.

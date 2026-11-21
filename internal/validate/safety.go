@@ -171,12 +171,16 @@ func attributeSafety(
 ) model.DiagnosticErrorList {
 	var diags model.DiagnosticErrorList
 
-	_, err := AttributeAccessor(code, symbol, attr)
+	access, err := AttributeAccessor(code, symbol, attr)
 	if err != nil {
 		diags = append(diags, safetyDiagnostic(model.SeverityError, model.CodeCaptureNotAllowed, err.Error()))
 	}
 
 	source := attr.Key + " " + attr.From.Argument + " " + attr.From.Result + " " + attr.From.ErrorType
+	if err == nil {
+		source += " " + declaredAttributePath(symbol, access)
+	}
+
 	if matchesAny(source, secrets) || attr.Classification == model.ClassificationSecret {
 		if !attr.Allow || attr.Classification != model.ClassificationSecret {
 			diags = append(diags, safetyDiagnostic(
@@ -200,6 +204,21 @@ func attributeSafety(
 	}
 
 	return diags
+}
+
+func declaredAttributePath(symbol model.Symbol, access Accessor) string {
+	var name string
+
+	switch access.Source {
+	case "argument":
+		name = symbol.Parameters[access.Index].Name
+	case "result":
+		name = symbol.Results[access.Index].Name
+	default:
+		return ""
+	}
+
+	return strings.Join(append([]string{name}, access.Fields...), ".")
 }
 
 func matchesAny(value string, patterns []string) bool {

@@ -203,6 +203,22 @@ the [upgrade review and explicit refresh procedure](#reviewing-an-upgrade).
 The policy/lock/JSON identifiers stay unchanged; do not edit the stored digest
 by hand or bypass `lock --check`.
 
+## v1.0 release scope
+
+The v1.0 candidate supports the Linux Go workflow from policy discovery through
+instrumented builds. Candidate acceptance covers these interfaces:
+
+| Surface | v1.0 contract |
+| --- | --- |
+| Commands | `init`, `scan`, `inspect`, `explain`, `validate`, `lock`, `diff`, `compile`, `build`, and `version` with the documented CLI flags, exit codes, and JSON envelope. |
+| Policy | Exact functions and methods selected by names, packages, files, globs, and structural interfaces. Exclusions, rule provenance, advisory discovery, and explicit capture follow the policy reference. |
+| Build | Go 1.27.4 or a later 1.27.x patch on Linux. The distributed archive is Linux/amd64. Build isolation covers modules, workspaces, local replacements, and verified vendoring. |
+| Backend | Exact OTelC v1.1.0. Context, errors, capture, generics, variadics, and panic handling have the limits in the [backend support matrix](OTELC_BACKEND.md#support-matrix). Applications provide their own SDK and exporter. |
+| Reproducibility | Deterministic resolution locks and generated bundles. Check and diff are read-only. Locked builds compare the recorded resolution before running the backend. |
+
+The policy, lock, diagnostic, and CLI JSON identities below are the supported
+integration boundaries. See [CLI behavior](CLI.md) and [policy](POLICY.md).
+
 ## Stable-line commitments
 
 The following policy takes effect with the first stable CLI release and applies

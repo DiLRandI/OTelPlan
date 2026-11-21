@@ -1,0 +1,158 @@
+Linux/amd64, logical CPU 15, GOMAXPROCS=1, Go 1.27.4.
+CLI: taskset -c 15 go test ./internal/cli -run ^$ -bench ^BenchmarkCLIStaticAnalysis$ -benchtime=3x -count=3 -benchmem
+Runtime: taskset -c 15 sh scripts/benchmark-runtime.sh 3 with the pinned OTelC SHA-256 below.
+
+# Candidate CLI first run
+
+revision: 13c3867e653c3515675a09aff21b5f40896f045d
+go version go1.27.4 linux/amd64
+Model name:                              11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
+command: GOMAXPROCS=1 taskset -c 15 go test ./internal/cli -run ^$ -bench ^BenchmarkCLIStaticAnalysis$ -benchtime=3x -count=3 -benchmem
+goos: linux
+goarch: amd64
+pkg: github.com/DiLRandI/OTelPlan/internal/cli
+cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
+BenchmarkCLIStaticAnalysis/uncached         	       3	 522534554 ns/op	194731973 B/op	 1829268 allocs/op
+BenchmarkCLIStaticAnalysis/uncached         	       3	 520642923 ns/op	194757368 B/op	 1829278 allocs/op
+BenchmarkCLIStaticAnalysis/uncached         	       3	 512466869 ns/op	194716490 B/op	 1829255 allocs/op
+BenchmarkCLIStaticAnalysis/cached           	       3	 117617895 ns/op	46823730 B/op	   56879 allocs/op
+BenchmarkCLIStaticAnalysis/cached           	       3	 115838392 ns/op	46823714 B/op	   56879 allocs/op
+BenchmarkCLIStaticAnalysis/cached           	       3	 117259868 ns/op	46823738 B/op	   56879 allocs/op
+PASS
+ok  	github.com/DiLRandI/OTelPlan/internal/cli	19.410s
+
+# CLI reference
+
+e37eccfb4cc6580379d4ba614c1526b029e20dcf
+go version go1.27.4 linux/amd64
+goos: linux
+goarch: amd64
+pkg: github.com/DiLRandI/OTelPlan/internal/cli
+cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
+BenchmarkCLIStaticAnalysis/uncached         	       3	 527561553 ns/op	194722312 B/op	 1829241 allocs/op
+BenchmarkCLIStaticAnalysis/uncached         	       3	 490591144 ns/op	194742194 B/op	 1829244 allocs/op
+BenchmarkCLIStaticAnalysis/uncached         	       3	 512161114 ns/op	194691032 B/op	 1829245 allocs/op
+BenchmarkCLIStaticAnalysis/cached           	       3	 119958261 ns/op	44770330 B/op	   56832 allocs/op
+BenchmarkCLIStaticAnalysis/cached           	       3	 114955531 ns/op	47125709 B/op	   56876 allocs/op
+BenchmarkCLIStaticAnalysis/cached           	       3	 114698387 ns/op	47125645 B/op	   56875 allocs/op
+PASS
+ok  	github.com/DiLRandI/OTelPlan/internal/cli	19.356s
+
+# Candidate CLI confirmation
+
+13c3867e653c3515675a09aff21b5f40896f045d
+go version go1.27.4 linux/amd64
+goos: linux
+goarch: amd64
+pkg: github.com/DiLRandI/OTelPlan/internal/cli
+cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
+BenchmarkCLIStaticAnalysis/uncached         	       3	 514969781 ns/op	194731493 B/op	 1829258 allocs/op
+BenchmarkCLIStaticAnalysis/uncached         	       3	 507353690 ns/op	194724221 B/op	 1829257 allocs/op
+BenchmarkCLIStaticAnalysis/uncached         	       3	 513660776 ns/op	194722858 B/op	 1829266 allocs/op
+BenchmarkCLIStaticAnalysis/cached           	       3	 108789276 ns/op	41536077 B/op	   56817 allocs/op
+BenchmarkCLIStaticAnalysis/cached           	       3	 115070062 ns/op	47125954 B/op	   56878 allocs/op
+BenchmarkCLIStaticAnalysis/cached           	       3	 114822102 ns/op	47125920 B/op	   56877 allocs/op
+PASS
+ok  	github.com/DiLRandI/OTelPlan/internal/cli	18.999s
+
+# Candidate runtime
+
+# revision: 13c3867e653c3515675a09aff21b5f40896f045d (clean worktree)
+go version go1.27.4 linux/amd64
+# platform: Linux x86_64
+# CPU: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
+# samples per case: 3
+# backend version: otelc version v1.1.0
+# backend SHA256: 83df41b52796aea04a1f80f546ef1c7a1e2efe6df1f8b05be28c724d4ed40491
+ok  	example.com/runtimebench/cmd/bench	1.008s
+ok  	example.com/runtimebench/internal/operation	1.006s
+/tmp/otelplan-runtime-bench.r43ftKBS/app/otelplan.lock targets=3 changed=true dry-run=false
+/tmp/otelplan-runtime-bench.r43ftKBS/bundle artifacts=8
+built /tmp/otelplan-runtime-bench.r43ftKBS/instrumented sha256:978cd3a2eaa22990ae68d7d5e02ff1c77159f1b2dd180028feb7cf80a7703026
+BenchmarkBusinessSpan/baseline/nonrecording/zero-1 251407138	         4.762 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/zero-1 252674643	         4.746 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/zero-1 253398702	         4.743 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/two-1 257514816	         4.677 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/two-1 246917979	         4.878 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/two-1 255210990	         4.722 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/error-1 143580555	         8.361 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/error-1 147376144	         8.140 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/error-1 144333826	         8.323 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/zero-1 254111470	         4.721 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/zero-1 253751596	         4.729 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/zero-1 253900069	         4.725 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/two-1 247531966	         4.850 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/two-1 257442007	         4.652 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/two-1 244491459	         4.886 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/error-1 146187801	         8.194 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/error-1 144240294	         8.317 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/error-1 147262737	         9.632 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/zero-1  1605177	       684.2 ns/op      392 B/op	      11 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/zero-1  2065346	       581.8 ns/op      392 B/op	      11 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/zero-1  2044640	       585.2 ns/op      392 B/op	      11 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/two-1  1929260	       620.6 ns/op      440 B/op	      12 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/two-1  1943025	       620.8 ns/op      440 B/op	      12 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/two-1  1945498	       616.4 ns/op      440 B/op	      12 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/error-1  1902808	       636.5 ns/op      424 B/op	      12 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/error-1  1902916	       631.0 ns/op      424 B/op	      12 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/error-1  1893342	       633.8 ns/op      424 B/op	      12 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/zero-1  1550718	       774.3 ns/op      776 B/op	      11 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/zero-1  1545829	       775.8 ns/op      776 B/op	      11 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/zero-1  1552808	       772.7 ns/op      776 B/op	      11 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/two-1  1000000	      1116 ns/op     1144 B/op	      16 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/two-1  1000000	      1112 ns/op     1144 B/op	      16 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/two-1  1000000	      1107 ns/op     1144 B/op	      16 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/error-1   891092	      1343 ns/op     1296 B/op	      17 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/error-1   909812	      1338 ns/op     1296 B/op	      17 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/error-1   886282	      1336 ns/op     1296 B/op	      17 allocs/op
+
+# Runtime reference
+
+# revision: bc94f3cd84abad178e37a00a0764ed40bea612fe (clean worktree)
+go version go1.27.4 linux/amd64
+# platform: Linux x86_64
+# CPU: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
+# samples per case: 3
+# backend version: otelc version v1.1.0
+# backend SHA256: 83df41b52796aea04a1f80f546ef1c7a1e2efe6df1f8b05be28c724d4ed40491
+ok  	example.com/runtimebench/cmd/bench	1.008s
+ok  	example.com/runtimebench/internal/operation	1.006s
+/tmp/otelplan-runtime-bench.aBhfY6LA/app/otelplan.lock targets=3 changed=true dry-run=false
+/tmp/otelplan-runtime-bench.aBhfY6LA/bundle artifacts=8
+built /tmp/otelplan-runtime-bench.aBhfY6LA/instrumented sha256:27b1df32f8a51d40c5434e15b7735af69da7d6d8125df0e0755e723fd395d04f
+BenchmarkBusinessSpan/baseline/nonrecording/zero-1 255488668	         4.655 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/zero-1 259160851	         4.640 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/zero-1 258710821	         4.634 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/two-1 261858787	         4.582 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/two-1 252285424	         4.773 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/two-1 262106035	         4.587 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/error-1 147238388	         8.145 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/error-1 149521959	         8.005 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/nonrecording/error-1 147538149	         8.131 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/zero-1 257310801	         4.642 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/zero-1 256041213	         4.648 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/zero-1 259555105	         4.620 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/two-1 247588149	         4.793 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/two-1 262199702	         4.590 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/two-1 251811092	         4.774 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/error-1 149625366	         7.996 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/error-1 147738049	         8.164 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/baseline/recording/error-1 150680187	         7.961 ns/op        0 B/op	       0 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/zero-1  2118988	       566.6 ns/op      392 B/op	      11 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/zero-1  2114444	       568.5 ns/op      392 B/op	      11 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/zero-1  2109540	       570.3 ns/op      392 B/op	      11 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/two-1  1977922	       605.1 ns/op      440 B/op	      12 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/two-1  1988106	       603.6 ns/op      440 B/op	      12 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/two-1  1999837	       601.3 ns/op      440 B/op	      12 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/error-1  1928582	       621.7 ns/op      424 B/op	      12 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/error-1  1923694	       624.6 ns/op      424 B/op	      12 allocs/op
+BenchmarkBusinessSpan/instrumented/nonrecording/error-1  1929506	       622.9 ns/op      424 B/op	      12 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/zero-1  1602184	       749.0 ns/op      776 B/op	      11 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/zero-1  1596841	       752.2 ns/op      776 B/op	      11 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/zero-1  1596571	       752.1 ns/op      776 B/op	      11 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/two-1  1000000	      1080 ns/op     1144 B/op	      16 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/two-1  1000000	      1074 ns/op     1144 B/op	      16 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/two-1  1000000	      1076 ns/op     1144 B/op	      16 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/error-1   954372	      1299 ns/op     1296 B/op	      17 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/error-1   923505	      1296 ns/op     1296 B/op	      17 allocs/op
+BenchmarkBusinessSpan/instrumented/recording/error-1   897562	      1303 ns/op     1296 B/op	      17 allocs/op

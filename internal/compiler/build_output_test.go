@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/DiLRandI/OTelPlan/internal/backend/otelc"
 )
 
 func backendArtifactFixture(t *testing.T) *os.Root {
@@ -174,5 +176,58 @@ func TestReadOpenedArtifactRejectsNonregularHandle(t *testing.T) {
 
 	if !errors.Is(err, errNonregularStagedArtifact) {
 		t.Fatalf("non-regular handle error = %v; want %v", err, errNonregularStagedArtifact)
+	}
+}
+
+func TestArtifactReplacementPreservesUnverifiedFiles(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+
+	previous, err := StageArtifacts(parent, []otelc.GeneratedFile{
+		{Path: "hooks.go", Data: []byte("package hooks")},
+		{Path: "manifest.json", Data: []byte(`{
+			"apiVersion": "otelplan.io/artifacts/v1alpha1",
+			"files": [{"path": "hooks.go", "digest": "` + artifactDigest([]byte("package hooks")) + `"}]
+		}`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	previous, err = ReadArtifacts(previous.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	root, err := os.OpenRoot(previous.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	closeOnCleanup(t, root)
+
+	const note = "keep this unrelated file"
+
+	err = root.WriteFile("notes.txt", []byte(note), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	staged := t.TempDir()
+
+	err = replaceArtifactOutput(previous, staged)
+	if !errors.Is(err, errUnexpectedStagedArtifact) {
+		t.Fatalf("replacement error = %v, want unexpected artifact error", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(previous.Dir, "notes.txt"))
+	if err != nil || string(data) != note {
+		t.Fatalf("previous output was not restored intact: %v, %q", err, data)
+	}
+
+	_, err = os.Stat(staged)
+	if err != nil {
+		t.Fatalf("replacement was committed despite failed verification: %v", err)
 	}
 }

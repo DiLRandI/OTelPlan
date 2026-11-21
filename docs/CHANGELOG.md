@@ -15,6 +15,9 @@ the [upgrade procedure](COMPATIBILITY.md#reviewing-an-upgrade).
 
 ### Fixes
 
+- Recheck earlier generated output before removing it during `compile --clean`.
+  If the file inventory changed, preserve the earlier output and report the failure.
+
 - Apply capture-name safety checks to the resolved Go declaration and field
   path. Review existing captures that now require explicit acknowledgment.
 

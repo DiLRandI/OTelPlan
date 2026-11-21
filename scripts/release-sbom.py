@@ -31,6 +31,8 @@ def linked_modules(payload, go_version):
         if fields and fields[0] == "dep":
             if len(fields) != 4 or fields[1] in modules:
                 raise ValueError("invalid linked module build information")
+            if not fields[3].startswith("h1:"):
+                raise ValueError("linked module checksum is missing")
             modules[fields[1]] = fields[2]
     expected = [f"{name} {version}" for name, version in sorted(modules.items())]
     notices = payload / "third_party"

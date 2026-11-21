@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -85,7 +86,7 @@ func backendChildRunning(t *testing.T, pid int, executable string) bool {
 	defer closeBackendChildState(t, directory)
 
 	actual, err := directory.Readlink("exe")
-	if errors.Is(err, os.ErrNotExist) {
+	if backendChildExited(err) {
 		return false
 	}
 
@@ -98,7 +99,7 @@ func backendChildRunning(t *testing.T, pid int, executable string) bool {
 	}
 
 	data, err := directory.ReadFile("stat")
-	if errors.Is(err, os.ErrNotExist) {
+	if backendChildExited(err) {
 		return false
 	}
 
@@ -110,6 +111,11 @@ func backendChildRunning(t *testing.T, pid int, executable string) bool {
 	state := strings.Fields(string(data[closing+1:]))
 
 	return len(state) > 0 && state[0] != "Z" && state[0] != "X"
+}
+
+func backendChildExited(err error) bool {
+	// The process can exit while its /proc directory is open.
+	return errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ESRCH)
 }
 
 func readBackendChildPID(t *testing.T, marker string) int {

@@ -137,7 +137,7 @@ STUB
     test "${GOSUMDB-}" = off
     printf 'otelplan: go1.27.3\n'
     printf 'build info deterministic\n'
-    printf '\tdep example.invalid/dep v1.2.3 h1:fake\n'
+    printf '\tdep example.invalid/dep v1.2.3 %s\n' "${RELEASE_TEST_MODULE_CHECKSUM-h1:fake}"
     if test "${RELEASE_TEST_REPLACEMENT-}" = 1; then
       printf '\t=> example.invalid/replacement v1.2.3 h1:fake\n'
     fi
@@ -287,6 +287,9 @@ TAR_OPTIONS='--exclude=tracked.marker' GIT_DIR=/definitely/missing/git \
   "$repo/scripts/release-linux.sh" "$version" "$output3"
 require_file "$output3/otelplan_${version}_linux_amd64.tar.gz"
 (cd "$output3" && sha256sum -c SHA256SUMS)
+
+RELEASE_TEST_MODULE_CHECKSUM=invalid \
+  expect_release_failure 'linked module checksum is missing' "$test_root/missing-checksum-output"
 
 printf '%s\n' 'example.invalid/dep v1.2.3 => example.invalid/replacement v1.2.3' > "$repo/third_party/modules.txt"
 (cd "$repo/third_party" && sha256sum go/LICENSE go/PATENTS NOTICE modules.txt example.invalid/dep/LICENSE spdx-licenses.txt > SHA256SUMS)

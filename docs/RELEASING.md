@@ -235,18 +235,18 @@ sh scripts/verify-release-provenance.sh /absolute/path/to/candidate \
 The signed payload uses the [SLSA v1 provenance format](https://slsa.dev/spec/v1.1/provenance).
 The workflow artifact is for candidate review. Use the separate publishing workflow after candidate review and maintainer approval.
 
-### Linux release build type
+### Signed build metadata
 
-The workflow dispatch accepts `prepare_version` and runs on the selected
-`refs/heads/main` commit. These inputs and the repository and workflow path are
-recorded in `externalParameters`. The archive recipe is
+The pinned [GitHub attestation action](https://github.com/actions/attest/tree/1e69f48acb82d1966a394da916b4c1698aa569d6)
+generates SLSA provenance for the GitHub Actions workflow. GitHub OIDC and
+Sigstore authenticate the signing workflow and build source. The run ID and
+attempt identify the build invocation.
+
+The signed archive contains `release.json` with the requested version, source
+commit, target, and Go toolchain. Its `build-info.txt` records the linked modules
+and their Go `h1:` checksums. Compare these files with the reviewed commit and
+the signed SBOM when reviewing the candidate. The build recipe is
 `scripts/release-linux.sh VERSION OUTPUT_DIRECTORY` at that commit.
-`internalParameters` records the entry point, target and selected Go version.
-`resolvedDependencies` records the Git commit, Go toolchain version, and linked
-modules with Go's normalized `h1:` checksums. The archive ships `release.json`
-and `build-info.txt` alongside the binary for independent comparison. The
-attestation authenticates the workflow and subjects with GitHub OIDC and
-Sigstore. The run ID and attempt identify the build invocation.
 
 ## Publish a reviewed Linux release
 
